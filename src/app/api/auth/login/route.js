@@ -1,0 +1,90 @@
+import { NextResponse } from 'next/server';
+import sql from 'mssql';
+import bcrypt from 'bcryptjs';
+import { connectToCentralDB } from '@/lib/db';
+import { signToken, COOKIE_NAME } from '@/lib/auth';
+
+export async function POST(request) {
+    try {
+        const { username, password } = await request.json();
+
+        if (!username || !password) {
+            return NextResponse.json(
+                { success: false, message: 'กรุณากรอก Username และ Password' },
+                { status: 400 }
+            );
+        }
+
+        const pool = await connectToCentralDB();
+
+        const result = await pool.request()
+            .input('Username', sql.NVarChar(50), username)
+            .query(`
+                SELECT u.UserId, u.Username, u.PasswordHash, u.FullName, u.CompanyId, u.RoleId, u.IsActive, r.RoleName
+                FROM Users u
+                LEFT JOIN Roles r ON u.RoleId = r.RoleId
+                WHERE u.Username = @Username
+            `);
+
+        if (result.recordset.length === 0) {
+            return NextResponse.json(
+                { success: false, message: 'ไม่พบผู้ใช้งานนี้ในระบบ' },
+                { status: 401 }
+            );
+        }
+
+        const user = result.recordset[0];
+
+        if (!user.IsActive) {
+            return NextResponse.json(
+                { success: false, message: 'บัญชีนี้ถูกระงับการใช้งาน' },
+                { status: 403 }
+            );
+        }
+
+        // Compare password with bcrypt hash
+        const isValid = await bcrypt.compare(password, user.PasswordHash);
+        if (!isValid) {
+            return NextResponse.json(
+                { success: false, message: 'Username หรือ Password ไม่ถูกต้อง' },
+                { status: 401 }
+            );
+        }
+
+        // Create JWT token
+        const tokenPayload = {
+            userId: user.UserId,
+            username: user.Username,
+            fullName: user.FullName,
+            roleId: user.RoleId,
+            roleName: user.RoleName,
+            companyId: user.CompanyId,
+        };
+
+        const token = await signToken(tokenPayload);
+
+        // Set cookie
+        const response = NextResponse.json({
+            success: true,
+            message: 'เข้าสู่ระบบสำเร็จ',
+            user: tokenPayload,
+        });
+
+        response.cookies.set(COOKIE_NAME, token, {
+            httpOnly: true,
+            secure: process.env.NODE_ENV === 'production',
+            sameSite: 'lax',
+            path: '/',
+            maxAge: 60 * 60 * 8, // 8 hours
+        });
+
+        return response;
+
+    } catch (error) {
+        console.error('Login error:', error);
+        return NextResponse.json(
+            { success: false, message: 'เกิดข้อผิดพลาดภายในเซิร์ฟเวอร์' },
+            { status: 500 }
+        );
+    }
+}

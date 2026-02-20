@@ -1,0 +1,358 @@
+"use client";
+
+import { Search, Filter, Copy, LayoutTemplate, ChevronDown, CheckCircle2, RefreshCw, Loader2, AlertCircle } from "lucide-react";
+import { useState, useEffect } from "react";
+
+export default function TemplateReportPage() {
+    const [copiedId, setCopiedId] = useState<number | null>(null);
+
+    const [reports, setReports] = useState<any[]>([]);
+    const [selectedReportId, setSelectedReportId] = useState<string>('');
+    const [parameters, setParameters] = useState<any[]>([]);
+    const [isLoadingReports, setIsLoadingReports] = useState(true);
+    const [isLoadingParams, setIsLoadingParams] = useState(false);
+
+    // Form parameter values
+    const [paramValues, setParamValues] = useState<Record<string, string>>({});
+    const [selectedCompany, setSelectedCompany] = useState('1');
+
+    // Data execution state
+    const [isExecuting, setIsExecuting] = useState(false);
+    const [reportData, setReportData] = useState<any[] | null>(null);
+    const [executionError, setExecutionError] = useState<string | null>(null);
+    const [templateText, setTemplateText] = useState<string>('');
+
+
+    // Fetch available template reports
+    useEffect(() => {
+        const fetchReports = async () => {
+            setIsLoadingReports(true);
+            try {
+                const res = await fetch('/api/reports/available');
+                const data = await res.json();
+                if (data.success) {
+                    // Filter only template reports (ReportType === 2)
+                    setReports(data.reports.filter((r: any) => r.ReportType === 2));
+                }
+            } catch (error) {
+                console.error("Failed to fetch reports:", error);
+            } finally {
+                setIsLoadingReports(false);
+            }
+        };
+        fetchReports();
+    }, []);
+
+    // Fetch parameters when report changes
+    useEffect(() => {
+        if (!selectedReportId) {
+            setParameters([]);
+            setParamValues({});
+            setReportData(null);
+            setExecutionError(null);
+            setTemplateText('');
+            return;
+        }
+
+        const fetchParams = async () => {
+            setIsLoadingParams(true);
+            try {
+                const res = await fetch(`/api/reports/parameters?reportId=${selectedReportId}`);
+                const data = await res.json();
+                if (data.success) {
+                    setParameters(data.parameters);
+                    // Initialize paramValues
+                    const initialVals: Record<string, string> = {};
+                    data.parameters.forEach((p: any) => {
+                        initialVals[p.ParameterName] = '';
+                    });
+                    setParamValues(initialVals);
+                }
+
+                // Set the template text based on the selected report
+                const report = reports.find(r => r.ReportId.toString() === selectedReportId);
+                if (report) {
+                    setTemplateText(report.EmailTemplate || 'ยังไม่มีการตั้งค่า Template');
+                }
+
+            } catch (error) {
+                console.error("Failed to fetch parameters:", error);
+            } finally {
+                setIsLoadingParams(false);
+            }
+        };
+        fetchParams();
+    }, [selectedReportId, reports]);
+
+    const handleParamChange = (paramName: string, value: string) => {
+        setParamValues(prev => ({ ...prev, [paramName]: value }));
+    };
+
+    const handleExecuteReport = async () => {
+        if (!selectedReportId) {
+            alert("กรุณาเลือกรายงานก่อนดึงข้อมูล");
+            return;
+        }
+
+        setIsExecuting(true);
+        setExecutionError(null);
+        setReportData(null);
+
+        try {
+            const res = await fetch('/api/reports/execute', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    reportId: selectedReportId,
+                    companyId: selectedCompany,
+                    parameters: paramValues
+                })
+            });
+
+            const data = await res.json();
+
+            if (data.success) {
+                // For template reports, we add a mock ID for react mapping if none exists
+                const dataWithIds = data.data.map((row: any, index: number) => ({
+                    _rowId: index,
+                    ...row
+                }));
+                setReportData(dataWithIds);
+            } else {
+                setExecutionError(data.message || 'เกิดข้อผิดพลาดในการดึงข้อมูล');
+            }
+        } catch (error: any) {
+            setExecutionError('ไม่สามารถเชื่อมต่อกับเซิร์ฟเวอร์ได้: ' + error.message);
+        } finally {
+            setIsExecuting(false);
+        }
+    };
+
+
+    const generateMessage = (dataRow: any) => {
+        let msg = templateText;
+        Object.keys(dataRow).forEach(key => {
+            // ignore _rowId
+            if (key === '_rowId') return;
+            const regex = new RegExp(`{{${key}}}`, 'g');
+            // Check if value is null to avoid placing text "null" in the string easily 
+            const value = dataRow[key] !== null && dataRow[key] !== undefined ? dataRow[key] : '';
+            msg = msg.replace(regex, value.toString());
+        });
+        return msg;
+    };
+
+    const handleCopy = async (id: number, dataRow: any) => {
+        const text = generateMessage(dataRow);
+        await navigator.clipboard.writeText(text);
+        setCopiedId(id);
+        setTimeout(() => setCopiedId(null), 2000);
+    };
+
+    // Calculate dynamic columns based on the first row of return data
+    const getColumns = () => {
+        if (!reportData || reportData.length === 0) return [];
+        return Object.keys(reportData[0]).filter(k => k !== '_rowId');
+    };
+
+    const columns = getColumns();
+
+    return (
+        <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500 min-h-full flex flex-col">
+
+            {/* Header / Report Selector */}
+            <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
+                <div className="flex flex-col md:flex-row md:items-end gap-6 justify-between">
+                    <div className="w-full max-w-sm">
+                        <label className="text-sm font-semibold text-slate-700 mb-2 flex items-center gap-2">
+                            <LayoutTemplate className="w-4 h-4 text-purple-500" />
+                            เลือกรายงานส่งอีเมล (Template)
+                            {isLoadingReports && <RefreshCw className="w-3 h-3 animate-spin text-slate-400" />}
+                        </label>
+                        <div className="relative">
+                            <select
+                                value={selectedReportId}
+                                onChange={e => setSelectedReportId(e.target.value)}
+                                disabled={isLoadingReports || isExecuting}
+                                className="appearance-none w-full bg-slate-50 border border-slate-200 text-slate-900 py-2.5 pl-4 pr-10 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 font-medium disabled:opacity-60"
+                            >
+                                <option value="">-- กรุณาเลือกรายงานเทมเพลต --</option>
+                                {reports.map(r => (
+                                    <option key={r.ReportId} value={r.ReportId}>{r.ReportName} {r.Description ? `(${r.Description})` : ''}</option>
+                                ))}
+                            </select>
+                            <ChevronDown className="w-5 h-5 absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                        </div>
+                    </div>
+                </div>
+
+                {/* Dynamic Filters Area */}
+                <div className="mt-6 pt-6 border-t border-slate-100 min-h-[140px]">
+                    <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-4 flex items-center gap-2">
+                        <Filter className="w-4 h-4" /> ตัวกรองข้อมูล (Filters)
+                    </h3>
+
+                    {!selectedReportId ? (
+                        <div className="text-center text-sm text-slate-400 py-6">กรุณาเลือกรายงานเพื่อแสดงตัวกรองข้อมูล</div>
+                    ) : isLoadingParams ? (
+                        <div className="flex items-center justify-center py-6 text-slate-500 text-sm gap-2">
+                            <Loader2 className="w-4 h-4 animate-spin text-purple-500" /> กำลังโหลดตัวกรอง...
+                        </div>
+                    ) : (
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 items-end">
+                            <div>
+                                <label className="block text-xs font-medium text-slate-500 mb-1">สาขา / บริษัท <span className="text-red-500">*</span></label>
+                                <select
+                                    value={selectedCompany}
+                                    onChange={e => setSelectedCompany(e.target.value)}
+                                    className="w-full bg-white border border-slate-200 text-sm py-2 px-3 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 transition-colors"
+                                >
+                                    <option value="1">1. sonic interfreight (SNI)</option>
+                                    <option value="2">2. grandlink logistics(GRL)</option>
+                                    <option value="3">3. sonic autologis(SALOG)</option>
+                                </select>
+                            </div>
+
+                            {/* Dynamic Database Parameters */}
+                            {parameters.map((param) => (
+                                <div key={param.ParameterId}>
+                                    <label className="block text-xs font-medium text-slate-500 mb-1">
+                                        {param.DisplayLabel || param.ParameterName}
+                                    </label>
+                                    {param.InputType === 'date' ? (
+                                        <input
+                                            type="date"
+                                            value={paramValues[param.ParameterName] || ''}
+                                            onChange={e => handleParamChange(param.ParameterName, e.target.value)}
+                                            className="w-full bg-white border border-slate-200 text-sm py-2 px-3 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 transition-colors"
+                                        />
+                                    ) : param.InputType === 'number' ? (
+                                        <input
+                                            type="number"
+                                            value={paramValues[param.ParameterName] || ''}
+                                            onChange={e => handleParamChange(param.ParameterName, e.target.value)}
+                                            className="w-full bg-white border border-slate-200 text-sm py-2 px-3 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 transition-colors"
+                                        />
+                                    ) : (
+                                        <input
+                                            type="text"
+                                            value={paramValues[param.ParameterName] || ''}
+                                            onChange={e => handleParamChange(param.ParameterName, e.target.value)}
+                                            className="w-full bg-white border border-slate-200 text-sm py-2 px-3 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 transition-colors"
+                                        />
+                                    )}
+                                </div>
+                            ))}
+
+                            <div className="flex items-end mt-2 lg:mt-0">
+                                <button
+                                    onClick={handleExecuteReport}
+                                    disabled={isExecuting}
+                                    className="w-full bg-slate-900 hover:bg-slate-800 text-white py-2 px-4 rounded-lg flex items-center justify-center gap-2 font-medium transition-colors shadow-sm active:scale-95 disabled:opacity-70 disabled:active:scale-100"
+                                >
+                                    {isExecuting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
+                                    {isExecuting ? 'กำลังประมวลผล...' : 'ดึงข้อมูล'}
+                                </button>
+                            </div>
+                        </div>
+                    )}
+                </div>
+            </div>
+
+            {/* Error Message */}
+            {executionError && (
+                <div className="bg-red-50 text-red-600 p-4 rounded-xl flex items-start gap-3 border border-red-100">
+                    <AlertCircle className="w-5 h-5 flex-shrink-0 mt-0.5" />
+                    <div>
+                        <h4 className="font-semibold text-sm">เกิดข้อผิดพลาดในการดึงข้อมูล</h4>
+                        <p className="text-sm opacity-90">{executionError}</p>
+                    </div>
+                </div>
+            )}
+
+            {/* Template Preview Box */}
+            {selectedReportId && templateText && (
+                <div className="bg-purple-50 border border-purple-100 p-4 rounded-xl flex items-start gap-3">
+                    <div className="p-2 bg-purple-100 text-purple-600 rounded-lg mt-0.5">
+                        <LayoutTemplate className="w-5 h-5" />
+                    </div>
+                    <div>
+                        <h4 className="font-semibold text-purple-900 text-sm">รูปแบบข้อความ (Template) ที่ตั้งค่าไว้</h4>
+                        <p className="text-sm text-purple-800/80 mt-1 whitespace-pre-wrap font-mono">
+                            {templateText}
+                        </p>
+                    </div>
+                </div>
+            )}
+
+            {/* Data Grid Area with Copy Button */}
+            <div className="flex-1 bg-white rounded-2xl shadow-sm border border-slate-200 flex flex-col overflow-hidden relative">
+
+                <div className="p-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
+                    <p className="text-sm font-medium text-slate-600">
+                        {reportData ? (
+                            <>พบข้อมูล <span className="text-purple-600 font-bold">{reportData.length}</span> รายการ {reportData.length > 100 && <span className="text-slate-400 font-normal ml-2">(แสดงผลบนหน้าจอ 100 รายการแรก)</span>}</>
+                        ) : (
+                            'รอการดึงข้อมูล...'
+                        )}
+                    </p>
+                </div>
+
+                <div className="flex-1 overflow-auto">
+                    {isExecuting ? (
+                        <div className="h-full flex flex-col items-center justify-center p-12 text-slate-500">
+                            <RefreshCw className="w-8 h-8 animate-spin text-purple-500 mb-4" />
+                            <p>กำลังรันคำสั่งฐานข้อมูล โปรดรอสักครู่...</p>
+                        </div>
+                    ) : !reportData ? (
+                        <div className="h-full flex items-center justify-center p-12 text-slate-400">
+                            กรุณาเลือกรายงานและกดปุ่ม 'ดึงข้อมูล' เพื่อแสดงผล
+                        </div>
+                    ) : reportData.length === 0 ? (
+                        <div className="h-full flex items-center justify-center p-12 text-slate-500">
+                            ไม่พบข้อมูลตามเงื่อนไขที่ระบุ
+                        </div>
+                    ) : (
+                        <table className="w-full text-left text-sm whitespace-nowrap">
+                            <thead className="bg-slate-50 text-slate-600 font-semibold border-b border-slate-200 sticky top-0 shadow-sm z-10">
+                                <tr>
+                                    {columns.map((col) => (
+                                        <th key={col} className="px-6 py-3">{col}</th>
+                                    ))}
+                                    <th className="px-6 py-3 text-center bg-purple-50/50 sticky right-0 shadow-sm border-l border-purple-100">คัดลอกข้อความ</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-100 text-slate-700">
+                                {reportData.slice(0, 100).map((row) => (
+                                    <tr key={row._rowId} className="hover:bg-purple-50/50 transition-colors group">
+                                        {columns.map((col) => (
+                                            <td key={col} className={`px-6 py-4 ${typeof row[col] === 'number' ? 'text-right font-medium' : ''}`}>
+                                                {row[col] === null ? <span className="text-slate-300 italic">null</span> : row[col]}
+                                            </td>
+                                        ))}
+                                        <td className="px-6 py-4 text-center bg-purple-50/30 group-hover:bg-purple-100/50 transition-colors sticky right-0 border-l border-purple-100">
+                                            <button
+                                                onClick={() => handleCopy(row._rowId, row)}
+                                                className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all active:scale-95 shadow-sm
+                                                    ${copiedId === row._rowId
+                                                        ? 'bg-emerald-500 text-white shadow-emerald-500/30'
+                                                        : 'bg-purple-600 hover:bg-purple-700 text-white shadow-purple-500/30'
+                                                    }`}
+                                            >
+                                                {copiedId === row._rowId ? (
+                                                    <><CheckCircle2 className="w-4 h-4" /> คัดลอกแล้ว</>
+                                                ) : (
+                                                    <><Copy className="w-4 h-4" /> Copy Message</>
+                                                )}
+                                            </button>
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    )}
+                </div>
+            </div>
+        </div>
+    );
+}
