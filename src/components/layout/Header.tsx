@@ -1,6 +1,6 @@
 "use client";
 
-import { Bell, X, Check, CheckCheck } from 'lucide-react';
+import { Bell, X, Check, CheckCheck, Moon, Sun } from 'lucide-react';
 import { useState, useEffect, useRef } from 'react';
 
 interface Notification {
@@ -16,7 +16,24 @@ export default function Header() {
     const [notifications, setNotifications] = useState<Notification[]>([]);
     const [unreadCount, setUnreadCount] = useState(0);
     const [showPanel, setShowPanel] = useState(false);
+    const [darkMode, setDarkMode] = useState(false);
     const panelRef = useRef<HTMLDivElement>(null);
+
+    // Dark mode init
+    useEffect(() => {
+        const saved = localStorage.getItem('rc_dark_mode');
+        if (saved === 'true') {
+            setDarkMode(true);
+            document.documentElement.classList.add('dark');
+        }
+    }, []);
+
+    const toggleDarkMode = () => {
+        const next = !darkMode;
+        setDarkMode(next);
+        document.documentElement.classList.toggle('dark', next);
+        localStorage.setItem('rc_dark_mode', next.toString());
+    };
 
     const fetchNotifications = async () => {
         try {
@@ -71,7 +88,17 @@ export default function Header() {
 
     return (
         <header className="h-16 bg-white/80 dark:bg-slate-800/80 backdrop-blur-md border-b border-slate-200 dark:border-slate-700 sticky top-0 z-20 flex items-center justify-end px-6 shadow-sm">
-            <div className="flex items-center gap-4" ref={panelRef}>
+            <div className="flex items-center gap-2" ref={panelRef}>
+                {/* Dark Mode Toggle */}
+                <button
+                    onClick={toggleDarkMode}
+                    className="p-2 rounded-full hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-white"
+                    title={darkMode ? 'โหมดสว่าง' : 'โหมดมืด'}
+                >
+                    {darkMode ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
+                </button>
+
+                {/* Notification Bell */}
                 <div className="relative">
                     <button
                         onClick={() => setShowPanel(!showPanel)}

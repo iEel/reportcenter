@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { Home, FileText, Database, Settings, LayoutTemplate, Users, LogOut, Lock, Menu, X, Moon, Sun } from 'lucide-react';
+import { Home, FileText, Database, Settings, LayoutTemplate, Users, LogOut, Lock, Menu, X } from 'lucide-react';
 import { useAuth } from '@/components/providers/AuthProvider';
 import { useState, useEffect } from 'react';
 
@@ -23,7 +23,6 @@ export default function Sidebar() {
     const router = useRouter();
     const { user } = useAuth();
     const [mobileOpen, setMobileOpen] = useState(false);
-    const [darkMode, setDarkMode] = useState(false);
 
     const isAdmin = user?.roleName?.toLowerCase() === 'admin';
 
@@ -31,22 +30,6 @@ export default function Sidebar() {
     useEffect(() => {
         setMobileOpen(false);
     }, [pathname]);
-
-    // Dark mode toggle
-    useEffect(() => {
-        const saved = localStorage.getItem('rc_dark_mode');
-        if (saved === 'true') {
-            setDarkMode(true);
-            document.documentElement.classList.add('dark');
-        }
-    }, []);
-
-    const toggleDarkMode = () => {
-        const next = !darkMode;
-        setDarkMode(next);
-        document.documentElement.classList.toggle('dark', next);
-        localStorage.setItem('rc_dark_mode', next.toString());
-    };
 
     const handleLogout = async () => {
         try {
@@ -104,15 +87,6 @@ export default function Sidebar() {
             </div>
 
             <div className="p-4 border-t border-slate-800 space-y-2">
-                {/* Dark Mode Toggle */}
-                <button
-                    onClick={toggleDarkMode}
-                    className="flex items-center gap-3 px-3 py-2 rounded-lg transition-all duration-200 text-sm w-full hover:bg-slate-800 text-slate-400 hover:text-white"
-                >
-                    {darkMode ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
-                    <span className="font-medium">{darkMode ? 'โหมดสว่าง' : 'โหมดมืด'}</span>
-                </button>
-
                 <Link href="/change-password" className={`flex items-center gap-3 px-3 py-2 rounded-lg transition-all duration-200 group text-sm ${pathname === '/change-password' ? 'bg-blue-600/10 text-blue-400' : 'hover:bg-slate-800 text-slate-400 hover:text-white'
                     }`}>
                     <Lock className="w-4 h-4" />
