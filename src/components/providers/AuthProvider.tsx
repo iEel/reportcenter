@@ -9,6 +9,7 @@ interface UserInfo {
     roleId: number;
     roleName: string;
     companyId: number;
+    allowedCompanies: number[];
 }
 
 interface AuthContextType {

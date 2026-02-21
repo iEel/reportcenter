@@ -21,6 +21,7 @@ export async function GET(request) {
                 roleId: session.roleId,
                 roleName: session.roleName,
                 companyId: session.companyId,
+                allowedCompanies: session.allowedCompanies || [],
             }
         });
 

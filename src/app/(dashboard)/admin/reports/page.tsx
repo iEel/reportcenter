@@ -1,12 +1,17 @@
 "use client"
 
 import Link from "next/link";
-import { Plus, Search, Edit, Trash2, FileText, Database, Shield, RefreshCw } from "lucide-react";
+import { Plus, Search, Edit, Trash2, FileText, Database, Shield, RefreshCw, Star } from "lucide-react";
 import { useEffect, useState } from "react";
+import { useToast } from "@/components/providers/ToastProvider";
+import { useConfirm } from "@/components/providers/ConfirmProvider";
 
 export default function AdminReportsPage() {
+    const { toast } = useToast();
+    const { confirm } = useConfirm();
     const [reports, setReports] = useState<any[]>([]);
     const [isLoading, setIsLoading] = useState(true);
+    const [searchQuery, setSearchQuery] = useState('');
 
     const fetchReports = async () => {
         setIsLoading(true);
@@ -22,24 +27,33 @@ export default function AdminReportsPage() {
     }
 
     const handleDelete = async (id: number, name: string) => {
-        if (!window.confirm(`คุณแน่ใจหรือไม่ว่าต้องการลบรายงาน "${name}"?`)) {
-            return;
-        }
+        const ok = await confirm({
+            title: 'ลบรายงาน',
+            message: `คุณแน่ใจหรือไม่ว่าต้องการลบรายงาน "${name}"?`,
+            confirmLabel: 'ลบ',
+            variant: 'danger',
+        });
+        if (!ok) return;
 
         try {
             const res = await fetch(`/api/admin/reports/${id}`, { method: 'DELETE' });
             const data = await res.json();
             if (data.success) {
-                alert("ลบข้อมูลสำเร็จ");
+                toast('ลบรายงานสำเร็จ', 'success');
                 fetchReports();
             } else {
-                alert("เกิดข้อผิดพลาดในการลบ: " + data.message);
+                toast('เกิดข้อผิดพลาดในการลบ: ' + data.message, 'error');
             }
         } catch (error) {
             console.error("Delete error:", error);
-            alert("ไม่สามารถเชื่อมต่อกับเซิร์ฟเวอร์ได้");
+            toast('ไม่สามารถเชื่อมต่อกับเซิร์ฟเวอร์ได้', 'error');
         }
     };
+
+    const filteredReports = reports.filter(r =>
+        r.ReportName?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        r.Description?.toLowerCase().includes(searchQuery.toLowerCase())
+    );
 
     useEffect(() => {
         fetchReports();
@@ -73,6 +87,8 @@ export default function AdminReportsPage() {
                         <input
                             type="text"
                             placeholder="ค้นหาชื่อรายงาน..."
+                            value={searchQuery}
+                            onChange={e => setSearchQuery(e.target.value)}
                             className="w-full pl-9 pr-4 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors bg-white font-medium"
                         />
                     </div>
@@ -100,11 +116,11 @@ export default function AdminReportsPage() {
                                         </div>
                                     </td>
                                 </tr>
-                            ) : reports.length === 0 ? (
+                            ) : filteredReports.length === 0 ? (
                                 <tr>
-                                    <td colSpan={6} className="px-6 py-8 text-center text-slate-500">ไม่พบข้อมูลรายงานในระบบ</td>
+                                    <td colSpan={6} className="px-6 py-8 text-center text-slate-500">{searchQuery ? 'ไม่พบรายงานที่ค้นหา' : 'ไม่พบข้อมูลรายงานในระบบ'}</td>
                                 </tr>
-                            ) : reports.map((report) => (
+                            ) : filteredReports.map((report) => (
                                 <tr key={report.ReportId} className="hover:bg-slate-50/80 transition-colors group">
                                     <td className="px-6 py-4 font-mono text-slate-500">RID-{report.ReportId.toString().padStart(4, '0')}</td>
                                     <td className="px-6 py-4">

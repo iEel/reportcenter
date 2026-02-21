@@ -76,6 +76,47 @@
     background-color: rgb(15 23 42 / 0.7);
     border-color: rgb(51 65 85 / 0.5);
   }
+
+  /* Dark mode overrides */
+  .dark body {
+    background-color: #0f172a;
+    color: #e2e8f0;
+  }
+
+  .dark .bg-white {
+    background-color: #1e293b;
+  }
+
+  .dark .bg-slate-50,
+  .dark .bg-slate-50\/50 {
+    background-color: #1e293b;
+  }
+
+  .dark .text-slate-900 {
+    color: #f1f5f9;
+  }
+
+  .dark .text-slate-700 {
+    color: #cbd5e1;
+  }
+
+  .dark .text-slate-600 {
+    color: #94a3b8;
+  }
+
+  .dark .text-slate-500 {
+    color: #64748b;
+  }
+
+  .dark .border-slate-200,
+  .dark .border-slate-100 {
+    border-color: #334155;
+  }
+
+  .dark .shadow-sm,
+  .dark .shadow-md {
+    box-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.3);
+  }
 }
 
 /* Print Styles for PDF export */

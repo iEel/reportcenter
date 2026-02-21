@@ -1,6 +1,6 @@
 # ReportCenter — Developer Handoff
 
-> **Version:** 1.0  
+> **Version:** 2.0  
 > **Last Updated:** 2026-02-21  
 > **Tech Stack:** Next.js 16.1.6 + React 19 + Tailwind CSS 4 + MSSQL (mssql driver)
 
@@ -33,48 +33,57 @@ npm run build && npm start
 
 ```
 reportcenter/
+├── .env.local                           # Environment variables (DB creds, JWT secret)
 ├── src/
 │   ├── app/
 │   │   ├── layout.tsx                    # Root layout (HTML/Body only)
-│   │   ├── globals.css                   # Global CSS + Print styles
+│   │   ├── globals.css                   # Global CSS + Dark mode + Print styles
 │   │   ├── login/
 │   │   │   └── page.tsx                  # Login page (fullscreen, no sidebar)
 │   │   ├── (dashboard)/                  # Route Group — wrapped with AppLayout
-│   │   │   ├── layout.tsx                # Dashboard layout (Sidebar + Header + ErrorBoundary)
+│   │   │   ├── layout.tsx                # Dashboard layout (Sidebar + Header + Toast + Confirm + ErrorBoundary)
 │   │   │   ├── page.tsx                  # Home Dashboard (stats + activity feed)
+│   │   │   ├── change-password/page.tsx  # Change password page (all users)
 │   │   │   ├── admin/
 │   │   │   │   ├── reports/
-│   │   │   │   │   ├── page.tsx          # Manage Reports list
+│   │   │   │   │   ├── page.tsx          # Manage Reports list (search/filter)
 │   │   │   │   │   ├── new/page.tsx      # Create new report
 │   │   │   │   │   └── [id]/edit/page.tsx # Edit existing report
-│   │   │   │   ├── users/page.tsx        # Manage Users & Roles
+│   │   │   │   ├── users/page.tsx        # Manage Users & Roles (search/filter)
+│   │   │   │   ├── audit-logs/page.tsx   # Audit Log Viewer (paginated)
 │   │   │   │   └── settings/page.tsx     # System Settings
 │   │   │   └── reports/
-│   │   │       ├── standard/page.tsx     # Standard report viewer
+│   │   │       ├── standard/page.tsx     # Standard report viewer (paginated)
 │   │   │       └── templates/page.tsx    # Email template report viewer
 │   │   └── api/                          # API Routes (all .js)
 │   │       ├── auth/
-│   │       │   ├── login/route.js        # POST: login with bcrypt
+│   │       │   ├── login/route.js        # POST: login with bcrypt + allowedCompanies
 │   │       │   ├── logout/route.js       # POST: clear cookie
-│   │       │   └── me/route.js           # GET: current user from JWT
+│   │       │   ├── me/route.js           # GET: current user from JWT
+│   │       │   └── change-password/route.js # PUT: change password (bcrypt verify + update)
 │   │       ├── dashboard/route.js        # GET: stats + activity logs
+│   │       ├── notifications/route.js    # GET: user notifications, PUT: mark read
 │   │       ├── admin/
 │   │       │   ├── reports/
 │   │       │   │   ├── route.js          # GET: list, POST: create
 │   │       │   │   └── [id]/route.js     # GET/PUT/DELETE single report
-│   │       │   ├── users/route.js        # GET/POST/PUT users & roles
+│   │       │   ├── users/route.js        # GET/POST/PUT users & roles + company mappings
+│   │       │   ├── audit-logs/route.js   # GET: paginated audit logs
 │   │       │   └── settings/route.js     # GET/PUT system settings
 │   │       └── reports/
 │   │           ├── available/route.js    # GET: reports user can access
 │   │           ├── execute/route.js      # POST: run T-SQL on company DB
-│   │           └── parameters/route.js   # GET: report parameters
+│   │           ├── parameters/route.js   # GET: report parameters
+│   │           └── favorites/route.js    # GET/POST: toggle favorite reports
 │   ├── components/
 │   │   ├── layout/
 │   │   │   ├── AppLayout.tsx             # Sidebar + Header wrapper + AuthProvider
-│   │   │   ├── Sidebar.tsx               # Navigation, role-based menus, logout
-│   │   │   └── Header.tsx                # Top header bar
+│   │   │   ├── Sidebar.tsx               # Mobile responsive + dark mode toggle + role menus
+│   │   │   └── Header.tsx                # Notification bell + dropdown panel
 │   │   ├── providers/
-│   │   │   └── AuthProvider.tsx          # React Context for user session
+│   │   │   ├── AuthProvider.tsx          # React Context for user session + allowedCompanies
+│   │   │   ├── ToastProvider.tsx         # Toast notification system (success/error/info)
+│   │   │   └── ConfirmProvider.tsx       # Custom confirm dialog (danger/warning/default)
 │   │   ├── ErrorBoundary.tsx             # Global error boundary
 │   │   └── Skeletons.tsx                 # Reusable loading skeletons
 │   ├── lib/
@@ -100,13 +109,24 @@ reportcenter/
 ```
 User → /login → POST /api/auth/login
                     ↓ bcrypt compare
-                    ↓ signToken(jose) → Set cookie "rc_token" (httpOnly, 8h)
+                    ↓ signToken(jose) → payload: { userId, username, roleId, roleName, allowedCompanies }
+                    ↓ Set cookie "rc_token" (httpOnly, 8h)
                     ↓ redirect to /
 
 Every request → middleware.ts
                     ↓ Read cookie → jwtVerify
                     ↓ Valid? → NextResponse.next()
                     ↓ Invalid/Missing? → redirect /login
+```
+
+### Multi-Company Access Control
+
+```
+UserCompanyMapping (UserId, CompanyId)
+    ↓ Login → JWT payload includes allowedCompanies: [1, 2, 3]
+    ↓ /api/auth/me → returns allowedCompanies
+    ↓ Report pages → company dropdown filtered by allowedCompanies
+    ↓ Admin users page → checkboxes to assign companies per user
 ```
 
 ### Database Architecture
@@ -121,7 +141,10 @@ Every request → middleware.ts
 │  - Reports       │     │                  │
 │  - ReportParams  │     │  (T-SQL executed │
 │  - ReportRoleMap │     │   dynamically)   │
+│  - UserCompanyMap│     │                  │
 │  - ActivityLogs  │     │                  │
+│  - UserFavorites │     │                  │
+│  - Notifications │     │                  │
 │  - SystemSettings│     │                  │
 └──────────────────┘     └──────────────────┘
 ```
@@ -130,15 +153,18 @@ Every request → middleware.ts
 
 ## 4. Database Schema (ReportCenterDB)
 
-| Table              | Purpose                                      |
-|--------------------|----------------------------------------------|
-| `Roles`            | Role definitions (Admin, Sales, Accountant)  |
-| `Users`            | User accounts with PasswordHash, RoleId      |
-| `Reports`          | Report definitions with T-SQL query          |
-| `ReportParameters` | Dynamic parameters (date, text, number)      |
-| `ReportRoleMapping`| Many-to-many: which roles can see which report |
-| `ActivityLogs`     | Audit trail: who ran which report, when      |
-| `SystemSettings`   | Key-value config (company names, app settings)|
+| Table                | Purpose                                      |
+|----------------------|----------------------------------------------|
+| `Roles`              | Role definitions (Admin, Sales, Accountant)  |
+| `Users`              | User accounts with PasswordHash, RoleId      |
+| `Reports`            | Report definitions with T-SQL query          |
+| `ReportParameters`   | Dynamic parameters (date, text, number)      |
+| `ReportRoleMapping`  | Many-to-many: which roles can see which report |
+| `UserCompanyMapping` | Many-to-many: which users can access which company DBs |
+| `ActivityLogs`       | Audit trail: who ran which report, when      |
+| `UserFavorites`      | User's pinned/favorite reports (auto-created) |
+| `Notifications`      | In-app notification messages (auto-created)  |
+| `SystemSettings`     | Key-value config (company names, app settings)|
 
 ### Key Columns
 
@@ -152,9 +178,15 @@ ReportId INT PK, ReportName NVARCHAR(200), Description NVARCHAR(500),
 ReportType INT (1=Standard, 2=Template), TSqlQuery NVARCHAR(MAX),
 EmailTemplateContent NVARCHAR(MAX), IsPublic BIT, IsActive BIT
 
--- ReportParameters
-ParameterId INT PK, ReportId INT FK, ParameterName NVARCHAR(50),
-DisplayLabel NVARCHAR(100), InputType NVARCHAR(20), OrderIndex INT
+-- UserCompanyMapping
+UserId INT, CompanyId INT, PRIMARY KEY (UserId, CompanyId)
+
+-- UserFavorites (auto-created on first API call)
+UserId INT, ReportId INT, CreatedAt DATETIME, PRIMARY KEY (UserId, ReportId)
+
+-- Notifications (auto-created on first API call)
+NotificationId INT PK IDENTITY, UserId INT NULL (NULL = broadcast),
+Title NVARCHAR(200), Message NVARCHAR(500), Type NVARCHAR(20), IsRead BIT
 ```
 
 ---
@@ -163,34 +195,45 @@ DisplayLabel NVARCHAR(100), InputType NVARCHAR(20), OrderIndex INT
 
 ### Auth
 
-| Method | Path              | Description       |
-|--------|-------------------|--------------------|
-| POST   | `/api/auth/login` | Login, returns JWT cookie |
-| POST   | `/api/auth/logout`| Clear JWT cookie   |
-| GET    | `/api/auth/me`    | Get current user   |
+| Method | Path                        | Description                          |
+|--------|-----------------------------|--------------------------------------|
+| POST   | `/api/auth/login`           | Login, returns JWT cookie with allowedCompanies |
+| POST   | `/api/auth/logout`          | Clear JWT cookie                     |
+| GET    | `/api/auth/me`              | Get current user + allowedCompanies  |
+| PUT    | `/api/auth/change-password` | Change password (verify current first) |
 
 ### Reports (User-facing)
 
-| Method | Path                     | Description                       |
-|--------|--------------------------|-----------------------------------|
-| GET    | `/api/reports/available` | List reports user can access      |
-| GET    | `/api/reports/parameters`| Get parameters for a report       |
-| POST   | `/api/reports/execute`   | Execute T-SQL on company DB       |
+| Method | Path                        | Description                       |
+|--------|-----------------------------|-----------------------------------|
+| GET    | `/api/reports/available`    | List reports user can access      |
+| GET    | `/api/reports/parameters`   | Get parameters for a report       |
+| POST   | `/api/reports/execute`      | Execute T-SQL on company DB       |
+| GET    | `/api/reports/favorites`    | Get user's favorite reports       |
+| POST   | `/api/reports/favorites`    | Toggle favorite (add/remove)      |
 
 ### Admin
 
-| Method | Path                         | Description               |
-|--------|------------------------------|---------------------------|
-| GET    | `/api/admin/reports`         | List all reports          |
-| POST   | `/api/admin/reports`         | Create report + params    |
-| GET    | `/api/admin/reports/[id]`    | Get single report + roles |
-| PUT    | `/api/admin/reports/[id]`    | Update report + roles     |
-| DELETE | `/api/admin/reports/[id]`    | Soft-delete (IsActive=0)  |
-| GET    | `/api/admin/users`           | List users + roles        |
-| POST   | `/api/admin/users`           | Create user               |
-| PUT    | `/api/admin/users`           | Update user               |
-| GET    | `/api/admin/settings`        | Get all settings          |
-| PUT    | `/api/admin/settings`        | Update settings           |
+| Method | Path                         | Description                       |
+|--------|------------------------------|-----------------------------------|
+| GET    | `/api/admin/reports`         | List all reports                  |
+| POST   | `/api/admin/reports`         | Create report + params            |
+| GET    | `/api/admin/reports/[id]`    | Get single report + roles         |
+| PUT    | `/api/admin/reports/[id]`    | Update report + roles             |
+| DELETE | `/api/admin/reports/[id]`    | Soft-delete (IsActive=0)          |
+| GET    | `/api/admin/users`           | List users + roles + allowedCompanies |
+| POST   | `/api/admin/users`           | Create user (bcrypt hash) + company mappings |
+| PUT    | `/api/admin/users`           | Update user + company mappings    |
+| GET    | `/api/admin/audit-logs`      | Paginated audit logs (?page=&limit=) |
+| GET    | `/api/admin/settings`        | Get all settings                  |
+| PUT    | `/api/admin/settings`        | Update settings                   |
+
+### Notifications
+
+| Method | Path                  | Description                              |
+|--------|-----------------------|------------------------------------------|
+| GET    | `/api/notifications`  | Get user notifications + unread count    |
+| PUT    | `/api/notifications`  | Mark as read (single or all)             |
 
 ### Dashboard
 
@@ -202,12 +245,15 @@ DisplayLabel NVARCHAR(100), InputType NVARCHAR(20), OrderIndex INT
 
 ## 6. Environment Variables
 
+ไฟล์ `.env.local` ถูกสร้างไว้แล้วในโปรเจค:
+
 ```env
 # Central ReportCenter Database
 DB_USER=sa
 DB_PASSWORD=Sonic@rama3
 DB_SERVER=192.168.110.106
 DB_DATABASE=ReportCenterDB
+DB_INSTANCE=alpha
 
 # Company 1 (Sonic Interfreight)
 C1_DB_USER=smf
@@ -228,10 +274,10 @@ C3_DB_SERVER=192.168.110.200
 C3_DB_DATABASE=SMF-AUTOLOGIS
 
 # JWT Secret (change in production!)
-JWT_SECRET=rc-super-secret-key-2026
+JWT_SECRET=rc-super-secret-key-2026-change-me
 ```
 
-> ⚠️ ปัจจุบันค่า default ถูก hardcode อยู่ใน `src/lib/db.js` — สำหรับ production ควรใช้ `.env.local`
+> ⚠️ ไฟล์ `.env.local` ถูก `.gitignore` อยู่แล้ว — ค่า default ยังมี fallback ใน `db.js` สำหรับ dev environment
 
 ---
 
@@ -250,7 +296,33 @@ JWT_SECRET=rc-super-secret-key-2026
 
 ---
 
-## 8. Important Notes for Developers
+## 8. UX Components & Providers
+
+### ToastProvider (`src/components/providers/ToastProvider.tsx`)
+- ใช้แทน `alert()` ทุกจุดในระบบ
+- รองรับ 3 ประเภท: `success`, `error`, `info`
+- Auto-dismiss หลัง 3.5 วินาที พร้อม slide-in animation
+- ใช้งาน: `const { toast } = useToast(); toast('message', 'success');`
+
+### ConfirmProvider (`src/components/providers/ConfirmProvider.tsx`)
+- ใช้แทน `window.confirm()` — Promise-based return `true`/`false`
+- รองรับ variant: `danger`, `warning`, `default`
+- ใช้งาน: `const { confirm } = useConfirm(); const ok = await confirm({ title, message, variant: 'danger' });`
+
+### Notification Center (Header bell)
+- กระดิ่งแจ้งเตือนบน Header พร้อม badge แสดงจำนวนยังไม่อ่าน
+- Dropdown panel แสดงรายการ notification
+- Auto-poll ทุก 30 วินาที
+- รองรับ mark as read (ทีละรายการ หรือทั้งหมด)
+
+### Sidebar (Mobile + Dark Mode)
+- **Mobile**: Hamburger menu button + slide-in sidebar + overlay backdrop
+- **Dark Mode**: Toggle button ที่ Sidebar footer + จำค่าใน `localStorage`
+- Auto-close sidebar เมื่อเปลี่ยน route
+
+---
+
+## 9. Important Notes for Developers
 
 ### Next.js 16 Breaking Changes
 - **`params` is a Promise**: ในทุก API route ที่ใช้ dynamic segment `[id]`, ต้อง `await props.params` ก่อนเข้าถึง `id`
@@ -258,22 +330,30 @@ JWT_SECRET=rc-super-secret-key-2026
 
 ### Route Groups
 - หน้า Login อยู่ที่ `src/app/login/` (ไม่มี Sidebar/Header)
-- หน้าอื่นๆ ทั้งหมดอยู่ใน `src/app/(dashboard)/` ซึ่งครอบด้วย `AppLayout`
+- หน้าอื่นๆ ทั้งหมดอยู่ใน `src/app/(dashboard)/` ซึ่งครอบด้วย `AppLayout` + `ToastProvider` + `ConfirmProvider`
 
 ### Security
 - JWT cookie: `httpOnly`, `sameSite: lax`, `maxAge: 8 ชั่วโมง`
-- Password: bcrypt hash (salt rounds = 10)
+- Password: bcrypt hash (salt rounds = 10) — hash ตอนสร้าง user ใหม่ด้วย
+- Password change: ต้องยืนยัน password เดิมก่อนเปลี่ยน (bcrypt compare)
 - SQL: ใช้ parameterized queries ทุกจุดเพื่อป้องกัน SQL Injection
 - Role-based access: Admin เมนูซ่อนจาก non-admin users ใน Sidebar
+- Multi-company: user เห็นเฉพาะ company ที่ถูก assign ใน `UserCompanyMapping`
 
 ### Database
 - Connection pooling ผ่าน `src/lib/db.js` — สร้าง pool ครั้งเดียว reuse ตลอด
 - รองรับ 3 บริษัท (3 company databases) + 1 central DB
-- `SystemSettings` table ถูกสร้างอัตโนมัติครั้งแรกที่เข้าหน้า Settings
+- `SystemSettings`, `UserFavorites`, `Notifications` ถูกสร้างอัตโนมัติครั้งแรกที่เข้าถึง API
+
+### Auto-Created Tables
+ตารางเหล่านี้จะถูกสร้างอัตโนมัติเมื่อเข้าถึง API ครั้งแรก:
+- `UserFavorites` — เมื่อเรียก `/api/reports/favorites`
+- `Notifications` — เมื่อเรียก `/api/notifications`
+- `SystemSettings` — เมื่อเรียก `/api/admin/settings`
 
 ---
 
-## 9. Scripts Reference
+## 10. Scripts Reference
 
 ```bash
 # Hash a password for DB insertion
@@ -288,11 +368,11 @@ node scripts/create-activity-logs.js
 
 ---
 
-## 10. Feature Roadmap (Future)
+## 11. Feature Roadmap (Future)
 
-- [ ] Mobile responsive sidebar (hamburger menu)
-- [ ] Dark mode toggle
-- [ ] Report scheduling (auto-generate at intervals)
-- [ ] Email notification integration
-- [ ] Audit log viewer page for admins
-- [ ] User self-service password change
+- [ ] Report scheduling (auto-generate at intervals via cron/background job)
+- [ ] Email notification integration (SMTP for report delivery)
+- [ ] Advanced search with filters (date range, type, status) on admin pages
+- [ ] Backend-driven server-side pagination for report tables (currently client-side)
+- [ ] Password complexity rules enforcement
+- [ ] Two-factor authentication (2FA)

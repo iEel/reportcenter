@@ -2,11 +2,14 @@
 
 import { useState, useEffect } from "react";
 import { Plus, Search, Edit, Trash2, Shield, User, Building, RefreshCw, X, Save, Loader2 } from "lucide-react";
+import { useToast } from "@/components/providers/ToastProvider";
 
 export default function AdminUsersPage() {
+    const { toast } = useToast();
     const [users, setUsers] = useState<any[]>([]);
     const [roles, setRoles] = useState<any[]>([]);
     const [isLoading, setIsLoading] = useState(true);
+    const [searchQuery, setSearchQuery] = useState('');
 
     // Modal State
     const [isModalOpen, setIsModalOpen] = useState(false);
@@ -21,7 +24,8 @@ export default function AdminUsersPage() {
         FullName: '',
         CompanyId: '',
         RoleId: '',
-        IsActive: true
+        IsActive: true,
+        allowedCompanies: [1, 2, 3] as number[]
     });
 
     const fetchUsersAndRoles = async () => {
@@ -53,7 +57,8 @@ export default function AdminUsersPage() {
             FullName: '',
             CompanyId: '',
             RoleId: '',
-            IsActive: true
+            IsActive: true,
+            allowedCompanies: [1, 2, 3]
         });
         setIsModalOpen(true);
     };
@@ -63,13 +68,23 @@ export default function AdminUsersPage() {
         setFormData({
             UserId: user.UserId,
             Username: user.Username,
-            PasswordHash: '', // Keep empty unless changing
+            PasswordHash: '',
             FullName: user.FullName,
             CompanyId: user.CompanyId ? user.CompanyId.toString() : '',
             RoleId: user.RoleId ? user.RoleId.toString() : '',
-            IsActive: user.IsActive
+            IsActive: user.IsActive,
+            allowedCompanies: user.allowedCompanies || []
         });
         setIsModalOpen(true);
+    };
+
+    const toggleCompany = (cid: number) => {
+        setFormData(prev => ({
+            ...prev,
+            allowedCompanies: prev.allowedCompanies.includes(cid)
+                ? prev.allowedCompanies.filter(c => c !== cid)
+                : [...prev.allowedCompanies, cid].sort((a, b) => a - b)
+        }));
     };
 
     const handleCloseModal = () => {
@@ -96,15 +111,15 @@ export default function AdminUsersPage() {
             const data = await res.json();
 
             if (data.success) {
-                alert(editMode ? "อัปเดตข้อมูลผู้ใช้สำเร็จ" : "เพิ่มผู้ใช้ใหม่สำเร็จ");
+                toast(editMode ? 'อัปเดตข้อมูลผู้ใช้สำเร็จ' : 'เพิ่มผู้ใช้ใหม่สำเร็จ', 'success');
                 setIsModalOpen(false);
                 fetchUsersAndRoles();
             } else {
-                alert("เกิดข้อผิดพลาด: " + data.message);
+                toast('เกิดข้อผิดพลาด: ' + data.message, 'error');
             }
         } catch (error) {
             console.error("Error saving user:", error);
-            alert("ไม่สามารถเชื่อมต่อกับเซิร์ฟเวอร์ได้");
+            toast('ไม่สามารถเชื่อมต่อกับเซิร์ฟเวอร์ได้', 'error');
         } finally {
             setIsSaving(false);
         }
@@ -118,6 +133,11 @@ export default function AdminUsersPage() {
             default: return "ไม่ระบุ";
         }
     };
+
+    const filteredUsers = users.filter(u =>
+        u.Username?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        u.FullName?.toLowerCase().includes(searchQuery.toLowerCase())
+    );
 
     return (
         <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
@@ -150,6 +170,8 @@ export default function AdminUsersPage() {
                         <input
                             type="text"
                             placeholder="ค้นหาชื่อผู้ใช้..."
+                            value={searchQuery}
+                            onChange={e => setSearchQuery(e.target.value)}
                             className="w-full pl-9 pr-4 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors bg-white font-medium"
                         />
                     </div>
@@ -177,11 +199,11 @@ export default function AdminUsersPage() {
                                         </div>
                                     </td>
                                 </tr>
-                            ) : users.length === 0 ? (
+                            ) : filteredUsers.length === 0 ? (
                                 <tr>
-                                    <td colSpan={6} className="px-6 py-8 text-center text-slate-500">ไม่พบข้อมูลผู้ใช้ในระบบ</td>
+                                    <td colSpan={6} className="px-6 py-8 text-center text-slate-500">{searchQuery ? 'ไม่พบผู้ใช้ที่ค้นหา' : 'ไม่พบข้อมูลผู้ใช้ในระบบ'}</td>
                                 </tr>
-                            ) : users.map((user) => (
+                            ) : filteredUsers.map((user) => (
                                 <tr key={user.UserId} className="hover:bg-slate-50/80 transition-colors group">
                                     <td className="px-6 py-4 font-mono font-medium text-slate-900 group-hover:text-blue-600 transition-colors">
                                         {user.Username}
@@ -193,9 +215,17 @@ export default function AdminUsersPage() {
                                         {user.FullName}
                                     </td>
                                     <td className="px-6 py-4">
-                                        <div className="flex items-center gap-2 text-slate-600">
-                                            <Building className="w-4 h-4 text-slate-400" />
-                                            {getCompanyName(user.CompanyId)}
+                                        <div className="flex flex-wrap gap-1">
+                                            {(user.allowedCompanies || []).length > 0 ? (
+                                                user.allowedCompanies.map((cid: number) => (
+                                                    <span key={cid} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-50 text-emerald-700 border border-emerald-200">
+                                                        <Building className="w-3 h-3" />
+                                                        {cid}
+                                                    </span>
+                                                ))
+                                            ) : (
+                                                <span className="text-slate-400 italic text-xs">ไม่มีสิทธิ์</span>
+                                            )}
                                         </div>
                                     </td>
                                     <td className="px-6 py-4">
@@ -231,7 +261,8 @@ export default function AdminUsersPage() {
                                         </button>
                                     </td>
                                 </tr>
-                            ))}
+                            ))
+                            }
                         </tbody>
                     </table>
                 </div>
@@ -289,17 +320,27 @@ export default function AdminUsersPage() {
                             )}
 
                             <div>
-                                <label className="block text-sm font-medium text-slate-700 mb-1">เชื่อมต่อกับสาขา/บริษัท</label>
-                                <select
-                                    value={formData.CompanyId}
-                                    onChange={e => setFormData({ ...formData, CompanyId: e.target.value })}
-                                    className="w-full px-3 py-2 border border-slate-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
-                                >
-                                    <option value="">-- ไม่ระบุ --</option>
-                                    <option value="1">1. Sonic Interfreight (SNI)</option>
-                                    <option value="2">2. Grandlink Logistics (GRL)</option>
-                                    <option value="3">3. Sonic Autologis (SALOG)</option>
-                                </select>
+                                <label className="block text-sm font-medium text-slate-700 mb-2">สิทธิ์เข้าถึงบริษัท (เลือกได้มากกว่า 1)</label>
+                                <div className="space-y-2">
+                                    {[
+                                        { id: 1, name: 'Sonic Interfreight (SNI)' },
+                                        { id: 2, name: 'Grandlink Logistics (GRL)' },
+                                        { id: 3, name: 'Sonic Autologis (SALOG)' },
+                                    ].map(company => (
+                                        <label key={company.id} className="flex items-center gap-3 cursor-pointer border border-slate-200 p-3 rounded-lg bg-slate-50/50 hover:bg-slate-50 transition-colors">
+                                            <input
+                                                type="checkbox"
+                                                checked={formData.allowedCompanies.includes(company.id)}
+                                                onChange={() => toggleCompany(company.id)}
+                                                className="w-4 h-4 text-blue-600 rounded border-slate-300 focus:ring-blue-500"
+                                            />
+                                            <div className="flex items-center gap-2">
+                                                <Building className="w-4 h-4 text-emerald-500" />
+                                                <span className="text-sm font-medium text-slate-700">{company.id}. {company.name}</span>
+                                            </div>
+                                        </label>
+                                    ))}
+                                </div>
                             </div>
 
                             <div>

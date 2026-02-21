@@ -1,10 +1,14 @@
 "use client"
 
-import { Search, Filter, Download, FileText, ChevronDown, RefreshCw, Loader2, AlertCircle } from "lucide-react";
+import { Search, Filter, Download, FileText, ChevronDown, ChevronLeft, ChevronRight, RefreshCw, Loader2, AlertCircle, Star } from "lucide-react";
 import { useState, useEffect } from "react";
 import * as xlsx from 'xlsx';
+import { useAuth } from "@/components/providers/AuthProvider";
+import { useToast } from "@/components/providers/ToastProvider";
 
 export default function StandardReportPage() {
+    const { user } = useAuth();
+    const { toast } = useToast();
     const [reports, setReports] = useState<any[]>([]);
     const [selectedReportId, setSelectedReportId] = useState<string>('');
     const [parameters, setParameters] = useState<any[]>([]);
@@ -13,12 +17,34 @@ export default function StandardReportPage() {
 
     // Form parameter values
     const [paramValues, setParamValues] = useState<Record<string, string>>({});
-    const [selectedCompany, setSelectedCompany] = useState('1');
+    const [selectedCompany, setSelectedCompany] = useState('');
 
     // Data execution state
     const [isExecuting, setIsExecuting] = useState(false);
     const [reportData, setReportData] = useState<any[] | null>(null);
     const [executionError, setExecutionError] = useState<string | null>(null);
+
+    // Pagination state
+    const [currentPage, setCurrentPage] = useState(1);
+    const [pageSize, setPageSize] = useState(50);
+
+    // Favorites
+    const [favoriteIds, setFavoriteIds] = useState<number[]>([]);
+
+    const companyNames: Record<number, string> = {
+        1: 'Sonic Interfreight (SNI)',
+        2: 'Grandlink Logistics (GRL)',
+        3: 'Sonic Autologis (SALOG)',
+    };
+
+    const allowedCompanies = user?.allowedCompanies || [];
+
+    // Set default selected company when user loads
+    useEffect(() => {
+        if (allowedCompanies.length > 0 && !selectedCompany) {
+            setSelectedCompany(allowedCompanies[0].toString());
+        }
+    }, [allowedCompanies, selectedCompany]);
 
 
     // Fetch available standard reports
@@ -80,7 +106,7 @@ export default function StandardReportPage() {
 
     const handleExecuteReport = async () => {
         if (!selectedReportId) {
-            alert("กรุณาเลือกรายงานก่อนดึงข้อมูล");
+            toast('กรุณาเลือกรายงานก่อนดึงข้อมูล', 'info');
             return;
         }
 
@@ -201,9 +227,9 @@ export default function StandardReportPage() {
                                     onChange={e => setSelectedCompany(e.target.value)}
                                     className="w-full bg-white border border-slate-200 text-sm py-2 px-3 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors"
                                 >
-                                    <option value="1">1. sonic interfreight (SNI)</option>
-                                    <option value="2">2. grandlink logistics(GRL)</option>
-                                    <option value="3">3. sonic autologis(SALOG)</option>
+                                    {allowedCompanies.map(cid => (
+                                        <option key={cid} value={cid}>{cid}. {companyNames[cid] || `Company ${cid}`}</option>
+                                    ))}
                                 </select>
                             </div>
 
@@ -271,7 +297,7 @@ export default function StandardReportPage() {
                 <div className="p-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
                     <p className="text-sm font-medium text-slate-600">
                         {reportData ? (
-                            <>พบข้อมูล <span className="text-blue-600 font-bold">{reportData.length}</span> รายการ {reportData.length > 100 && <span className="text-slate-400 font-normal ml-2">(แสดงผลบนหน้าจอ 100 รายการแรก)</span>}</>
+                            <>พบข้อมูล <span className="text-blue-600 font-bold">{reportData.length}</span> รายการ (หน้า {currentPage}/{Math.ceil(reportData.length / pageSize) || 1})</>
                         ) : (
                             'รอการดึงข้อมูล...'
                         )}
@@ -321,10 +347,10 @@ export default function StandardReportPage() {
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-slate-100 text-slate-700">
-                                {reportData.slice(0, 100).map((row, rowIndex) => (
+                                {reportData.slice((currentPage - 1) * pageSize, currentPage * pageSize).map((row, rowIndex) => (
                                     <tr key={rowIndex} className="hover:bg-blue-50/50 transition-colors">
                                         <td className="px-6 py-4 text-center font-mono text-xs text-slate-400 bg-slate-50/30">
-                                            {rowIndex + 1}
+                                            {(currentPage - 1) * pageSize + rowIndex + 1}
                                         </td>
                                         {columns.map((col, colIndex) => {
                                             const val = row[col];
@@ -345,6 +371,30 @@ export default function StandardReportPage() {
                         </table>
                     )}
                 </div>
+
+                {/* Pagination Controls */}
+                {reportData && reportData.length > pageSize && (
+                    <div className="px-6 py-3 border-t border-slate-100 flex items-center justify-between bg-slate-50/50">
+                        <div className="flex items-center gap-2 text-sm text-slate-500">
+                            <span>แสดง</span>
+                            <select value={pageSize} onChange={e => { setPageSize(Number(e.target.value)); setCurrentPage(1); }} className="border border-slate-200 rounded px-2 py-1 text-sm bg-white">
+                                <option value={25}>25</option>
+                                <option value={50}>50</option>
+                                <option value={100}>100</option>
+                            </select>
+                            <span>รายการ/หน้า</span>
+                        </div>
+                        <div className="flex items-center gap-1">
+                            <button onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage <= 1} className="p-1.5 rounded border border-slate-200 hover:bg-slate-100 disabled:opacity-40">
+                                <ChevronLeft className="w-4 h-4" />
+                            </button>
+                            <span className="px-3 text-sm font-medium">{currentPage} / {Math.ceil(reportData.length / pageSize)}</span>
+                            <button onClick={() => setCurrentPage(p => Math.min(Math.ceil((reportData?.length || 0) / pageSize), p + 1))} disabled={currentPage >= Math.ceil(reportData.length / pageSize)} className="p-1.5 rounded border border-slate-200 hover:bg-slate-100 disabled:opacity-40">
+                                <ChevronRight className="w-4 h-4" />
+                            </button>
+                        </div>
+                    </div>
+                )}
             </div>
         </div>
     );

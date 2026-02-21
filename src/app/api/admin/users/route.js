@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import sql from 'mssql';
+import bcrypt from 'bcryptjs';
 import { connectToCentralDB } from '@/lib/db';
 
 export async function GET(request) {
@@ -7,21 +8,37 @@ export async function GET(request) {
         const pool = await connectToCentralDB();
 
         // Fetch Users
-        const usersQuery = `
+        const usersResult = await pool.request().query(`
             SELECT u.UserId, u.Username, u.FullName, u.CompanyId, u.RoleId, r.RoleName, u.IsActive
             FROM Users u
             LEFT JOIN Roles r ON u.RoleId = r.RoleId
             ORDER BY u.UserId DESC
-        `;
-        const usersResult = await pool.request().query(usersQuery);
+        `);
 
         // Fetch Roles
-        const rolesQuery = `SELECT RoleId, RoleName FROM Roles ORDER BY RoleId`;
-        const rolesResult = await pool.request().query(rolesQuery);
+        const rolesResult = await pool.request().query(`SELECT RoleId, RoleName FROM Roles ORDER BY RoleId`);
+
+        // Fetch Company Mappings for all users
+        let companyMappings = [];
+        try {
+            const mappingResult = await pool.request().query(`SELECT UserId, CompanyId FROM UserCompanyMapping`);
+            companyMappings = mappingResult.recordset;
+        } catch (e) {
+            // Table may not exist yet
+        }
+
+        // Attach allowedCompanies array to each user
+        const users = usersResult.recordset.map(user => ({
+            ...user,
+            allowedCompanies: companyMappings
+                .filter(m => m.UserId === user.UserId)
+                .map(m => m.CompanyId)
+                .sort((a, b) => a - b),
+        }));
 
         return NextResponse.json({
             success: true,
-            users: usersResult.recordset,
+            users,
             roles: rolesResult.recordset
         });
 
@@ -34,7 +51,7 @@ export async function GET(request) {
 export async function POST(request) {
     try {
         const body = await request.json();
-        const { Username, PasswordHash, FullName, CompanyId, RoleId, IsActive } = body;
+        const { Username, PasswordHash, FullName, CompanyId, RoleId, IsActive, allowedCompanies } = body;
 
         if (!Username || !FullName) {
             return NextResponse.json({ success: false, message: "Username and FullName are required" }, { status: 400 });
@@ -42,7 +59,7 @@ export async function POST(request) {
 
         const pool = await connectToCentralDB();
 
-        // Basic check if user exists
+        // Check if user exists
         const checkResult = await pool.request()
             .input('Username', sql.NVarChar(50), Username)
             .query('SELECT UserId FROM Users WHERE Username = @Username');
@@ -51,19 +68,35 @@ export async function POST(request) {
             return NextResponse.json({ success: false, message: "Username already exists" }, { status: 400 });
         }
 
-        const insertQuery = `
-            INSERT INTO Users (Username, PasswordHash, FullName, CompanyId, RoleId, IsActive)
-            VALUES (@Username, @PasswordHash, @FullName, @CompanyId, @RoleId, @IsActive)
-        `;
+        // Hash the password with bcrypt before storing
+        const rawPassword = PasswordHash || 'P@ssw0rd123';
+        const hashedPassword = await bcrypt.hash(rawPassword, 10);
 
-        await pool.request()
+        // Insert user
+        const insertResult = await pool.request()
             .input('Username', sql.NVarChar(50), Username)
-            .input('PasswordHash', sql.NVarChar(255), PasswordHash || 'default_password')
+            .input('PasswordHash', sql.NVarChar(255), hashedPassword)
             .input('FullName', sql.NVarChar(150), FullName)
             .input('CompanyId', sql.Int, CompanyId ? parseInt(CompanyId) : null)
             .input('RoleId', sql.Int, RoleId ? parseInt(RoleId) : null)
             .input('IsActive', sql.Bit, IsActive ? 1 : 0)
-            .query(insertQuery);
+            .query(`
+                INSERT INTO Users (Username, PasswordHash, FullName, CompanyId, RoleId, IsActive)
+                OUTPUT INSERTED.UserId
+                VALUES (@Username, @PasswordHash, @FullName, @CompanyId, @RoleId, @IsActive)
+            `);
+
+        const newUserId = insertResult.recordset[0].UserId;
+
+        // Insert company mappings
+        if (allowedCompanies && allowedCompanies.length > 0) {
+            for (const cid of allowedCompanies) {
+                await pool.request()
+                    .input('UserId', sql.Int, newUserId)
+                    .input('CompanyId', sql.Int, parseInt(cid))
+                    .query('INSERT INTO UserCompanyMapping (UserId, CompanyId) VALUES (@UserId, @CompanyId)');
+            }
+        }
 
         return NextResponse.json({ success: true, message: "User created successfully" });
 
@@ -76,7 +109,7 @@ export async function POST(request) {
 export async function PUT(request) {
     try {
         const body = await request.json();
-        const { UserId, FullName, CompanyId, RoleId, IsActive } = body;
+        const { UserId, FullName, CompanyId, RoleId, IsActive, allowedCompanies } = body;
 
         if (!UserId || !FullName) {
             return NextResponse.json({ success: false, message: "UserId and FullName are required" }, { status: 400 });
@@ -84,22 +117,32 @@ export async function PUT(request) {
 
         const pool = await connectToCentralDB();
 
-        const updateQuery = `
-            UPDATE Users
-            SET FullName = @FullName,
-                CompanyId = @CompanyId,
-                RoleId = @RoleId,
-                IsActive = @IsActive
-            WHERE UserId = @UserId
-        `;
-
+        // Update user
         await pool.request()
             .input('UserId', sql.Int, parseInt(UserId))
             .input('FullName', sql.NVarChar(150), FullName)
             .input('CompanyId', sql.Int, CompanyId ? parseInt(CompanyId) : null)
             .input('RoleId', sql.Int, RoleId ? parseInt(RoleId) : null)
             .input('IsActive', sql.Bit, IsActive ? 1 : 0)
-            .query(updateQuery);
+            .query(`
+                UPDATE Users
+                SET FullName = @FullName, CompanyId = @CompanyId, RoleId = @RoleId, IsActive = @IsActive
+                WHERE UserId = @UserId
+            `);
+
+        // Update company mappings (delete + re-insert)
+        if (allowedCompanies) {
+            await pool.request()
+                .input('UserId', sql.Int, parseInt(UserId))
+                .query('DELETE FROM UserCompanyMapping WHERE UserId = @UserId');
+
+            for (const cid of allowedCompanies) {
+                await pool.request()
+                    .input('UserId', sql.Int, parseInt(UserId))
+                    .input('CompanyId', sql.Int, parseInt(cid))
+                    .query('INSERT INTO UserCompanyMapping (UserId, CompanyId) VALUES (@UserId, @CompanyId)');
+            }
+        }
 
         return NextResponse.json({ success: true, message: "User updated successfully" });
 

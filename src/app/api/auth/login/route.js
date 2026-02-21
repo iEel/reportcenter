@@ -51,6 +51,12 @@ export async function POST(request) {
             );
         }
 
+        // Fetch allowed companies
+        const companyResult = await pool.request()
+            .input('UserId', sql.Int, user.UserId)
+            .query('SELECT CompanyId FROM UserCompanyMapping WHERE UserId = @UserId ORDER BY CompanyId');
+        const allowedCompanies = companyResult.recordset.map(r => r.CompanyId);
+
         // Create JWT token
         const tokenPayload = {
             userId: user.UserId,
@@ -59,6 +65,7 @@ export async function POST(request) {
             roleId: user.RoleId,
             roleName: user.RoleName,
             companyId: user.CompanyId,
+            allowedCompanies: allowedCompanies,
         };
 
         const token = await signToken(tokenPayload);

@@ -2,8 +2,10 @@
 
 import { Search, Filter, Copy, LayoutTemplate, ChevronDown, CheckCircle2, RefreshCw, Loader2, AlertCircle } from "lucide-react";
 import { useState, useEffect } from "react";
+import { useAuth } from "@/components/providers/AuthProvider";
 
 export default function TemplateReportPage() {
+    const { user } = useAuth();
     const [copiedId, setCopiedId] = useState<number | null>(null);
 
     const [reports, setReports] = useState<any[]>([]);
@@ -14,13 +16,26 @@ export default function TemplateReportPage() {
 
     // Form parameter values
     const [paramValues, setParamValues] = useState<Record<string, string>>({});
-    const [selectedCompany, setSelectedCompany] = useState('1');
+    const [selectedCompany, setSelectedCompany] = useState('');
 
     // Data execution state
     const [isExecuting, setIsExecuting] = useState(false);
     const [reportData, setReportData] = useState<any[] | null>(null);
     const [executionError, setExecutionError] = useState<string | null>(null);
     const [templateText, setTemplateText] = useState<string>('');
+
+    const companyNames: Record<number, string> = {
+        1: 'Sonic Interfreight (SNI)',
+        2: 'Grandlink Logistics (GRL)',
+        3: 'Sonic Autologis (SALOG)',
+    };
+    const allowedCompanies = user?.allowedCompanies || [];
+
+    useEffect(() => {
+        if (allowedCompanies.length > 0 && !selectedCompany) {
+            setSelectedCompany(allowedCompanies[0].toString());
+        }
+    }, [allowedCompanies, selectedCompany]);
 
 
     // Fetch available template reports
@@ -207,9 +222,9 @@ export default function TemplateReportPage() {
                                     onChange={e => setSelectedCompany(e.target.value)}
                                     className="w-full bg-white border border-slate-200 text-sm py-2 px-3 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 transition-colors"
                                 >
-                                    <option value="1">1. sonic interfreight (SNI)</option>
-                                    <option value="2">2. grandlink logistics(GRL)</option>
-                                    <option value="3">3. sonic autologis(SALOG)</option>
+                                    {allowedCompanies.map(cid => (
+                                        <option key={cid} value={cid}>{cid}. {companyNames[cid] || `Company ${cid}`}</option>
+                                    ))}
                                 </select>
                             </div>
 
