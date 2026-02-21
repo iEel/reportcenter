@@ -181,7 +181,7 @@ export default function TemplateReportPage() {
                     <div className="w-full max-w-sm">
                         <label className="text-sm font-semibold text-slate-700 mb-2 flex items-center gap-2">
                             <LayoutTemplate className="w-4 h-4 text-purple-500" />
-                            เลือกรายงานส่งอีเมล (Template)
+                            เลือกรายงาน Template
                             {isLoadingReports && <RefreshCw className="w-3 h-3 animate-spin text-slate-400" />}
                         </label>
                         <div className="relative">

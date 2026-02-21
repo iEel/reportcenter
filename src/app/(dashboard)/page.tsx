@@ -157,8 +157,8 @@ export default function Home() {
                 <Database className="w-6 h-6 text-purple-600 group-hover:text-white transition-colors" />
               </div>
               <div className="flex-1">
-                <h3 className="font-semibold text-slate-800">รายงานส่งอีเมล</h3>
-                <p className="text-xs text-slate-500">Template ข้อความ Copy ไปวางได้เลย</p>
+                <h3 className="font-semibold text-slate-800">รายงาน Template</h3>
+                <p className="text-xs text-slate-500">สร้างข้อความจาก Template คัดลอกไปใช้ได้เลย</p>
               </div>
               <ArrowRight className="w-5 h-5 text-slate-300 group-hover:text-purple-500 group-hover:translate-x-1 transition-all" />
             </div>

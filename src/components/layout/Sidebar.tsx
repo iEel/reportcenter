@@ -9,7 +9,7 @@ import { useState, useEffect } from 'react';
 const menus = [
     { title: 'หน้าหลัก', path: '/', icon: Home, role: 'all' },
     { title: 'รายงานมาตรฐาน', path: '/reports/standard', icon: FileText, role: 'all' },
-    { title: 'รายงานส่งอีเมล', path: '/reports/templates', icon: LayoutTemplate, role: 'all' },
+    { title: 'รายงาน Template', path: '/reports/templates', icon: LayoutTemplate, role: 'all' },
 
     // Admin Only
     { title: 'จัดการรายงาน', path: '/admin/reports', icon: Database, role: 'admin' },
