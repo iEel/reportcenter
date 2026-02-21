@@ -1,6 +1,6 @@
 # ReportCenter — Developer Handoff
 
-> **Version:** 2.0  
+> **Version:** 2.1  
 > **Last Updated:** 2026-02-21  
 > **Tech Stack:** Next.js 16.1.6 + React 19 + Tailwind CSS 4 + MSSQL (mssql driver)
 
@@ -49,7 +49,8 @@ reportcenter/
 │   │   │   │   │   ├── page.tsx          # Manage Reports list (search/filter)
 │   │   │   │   │   ├── new/page.tsx      # Create new report
 │   │   │   │   │   └── [id]/edit/page.tsx # Edit existing report
-│   │   │   │   ├── users/page.tsx        # Manage Users & Roles (search/filter)
+│   │   │   │   ├── users/page.tsx        # Manage Users (search/filter/stats)
+│   │   │   │   ├── roles/page.tsx        # Manage Roles + Report access assignment
 │   │   │   │   ├── audit-logs/page.tsx   # Audit Log Viewer (paginated)
 │   │   │   │   └── settings/page.tsx     # System Settings
 │   │   │   └── reports/
@@ -68,6 +69,7 @@ reportcenter/
 │   │       │   │   ├── route.js          # GET: list, POST: create
 │   │       │   │   └── [id]/route.js     # GET/PUT/DELETE single report
 │   │       │   ├── users/route.js        # GET/POST/PUT users & roles + company mappings
+│   │       │   ├── roles/route.js        # GET/POST/PUT/DELETE roles + ReportRoleMapping
 │   │       │   ├── audit-logs/route.js   # GET: paginated audit logs
 │   │       │   └── settings/route.js     # GET/PUT system settings
 │   │       └── reports/
@@ -78,8 +80,8 @@ reportcenter/
 │   ├── components/
 │   │   ├── layout/
 │   │   │   ├── AppLayout.tsx             # Sidebar + Header wrapper + AuthProvider
-│   │   │   ├── Sidebar.tsx               # Mobile responsive + dark mode toggle + role menus
-│   │   │   └── Header.tsx                # Notification bell + dropdown panel
+│   │   │   ├── Sidebar.tsx               # Mobile responsive + role menus
+│   │   │   └── Header.tsx                # Dark mode toggle + Notification bell + dropdown
 │   │   ├── providers/
 │   │   │   ├── AuthProvider.tsx          # React Context for user session + allowedCompanies
 │   │   │   ├── ToastProvider.tsx         # Toast notification system (success/error/info)
@@ -88,7 +90,8 @@ reportcenter/
 │   │   └── Skeletons.tsx                 # Reusable loading skeletons
 │   ├── lib/
 │   │   ├── auth.js                       # JWT sign/verify (jose)
-│   │   └── db.js                         # MSSQL connection pool manager
+│   │   ├── db.js                         # MSSQL connection pool manager
+│   │   └── dateUtils.ts                  # Date/time utilities (Asia/Bangkok, 24h)
 │   └── middleware.ts                     # Route protection (JWT check)
 ├── scripts/
 │   ├── init_database.sql                 # Initial DB schema
@@ -225,6 +228,10 @@ Title NVARCHAR(200), Message NVARCHAR(500), Type NVARCHAR(20), IsRead BIT
 | POST   | `/api/admin/users`           | Create user (bcrypt hash) + company mappings |
 | PUT    | `/api/admin/users`           | Update user + company mappings    |
 | GET    | `/api/admin/audit-logs`      | Paginated audit logs (?page=&limit=) |
+| GET    | `/api/admin/roles`           | List roles + user count + assigned reports |
+| POST   | `/api/admin/roles`           | Create role + report mappings    |
+| PUT    | `/api/admin/roles`           | Update role name + report mappings |
+| DELETE | `/api/admin/roles?roleId=`   | Delete role (blocked if users assigned) |
 | GET    | `/api/admin/settings`        | Get all settings                  |
 | PUT    | `/api/admin/settings`        | Update settings                   |
 
@@ -315,10 +322,21 @@ JWT_SECRET=rc-super-secret-key-2026-change-me
 - Auto-poll ทุก 30 วินาที
 - รองรับ mark as read (ทีละรายการ หรือทั้งหมด)
 
-### Sidebar (Mobile + Dark Mode)
+### Sidebar (Mobile)
 - **Mobile**: Hamburger menu button + slide-in sidebar + overlay backdrop
-- **Dark Mode**: Toggle button ที่ Sidebar footer + จำค่าใน `localStorage`
 - Auto-close sidebar เมื่อเปลี่ยน route
+
+### Header (Dark Mode + Notifications)
+- **Dark Mode**: Moon/Sun icon button ข้างกระดิ่ง + จำค่าใน `localStorage`
+- **Notification bell**: Badge แสดง unread count + dropdown panel + auto-poll 30 วินาที
+
+### Date/Time Utilities (`src/lib/dateUtils.ts`)
+- **Timezone**: Asia/Bangkok (UTC+7), **Format**: 24 ชั่วโมง
+- `formatDateTime()` → `21/02/2569 14:30`
+- `formatDate()` → `21/02/2569`
+- `formatTime()` → `14:30`
+- `timeAgo()` → `5 นาทีที่แล้ว` / fallback เป็น formatDateTime
+- **MSSQL Fix**: strip trailing `Z` จาก DATETIME เพื่อป้องกัน double +7h offset
 
 ---
 
