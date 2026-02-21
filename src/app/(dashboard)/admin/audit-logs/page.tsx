@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { FileText, RefreshCw, ChevronLeft, ChevronRight, Clock, User } from "lucide-react";
+import { formatDateTime } from '@/lib/dateUtils';
 
 interface AuditLog {
     LogId: number;
@@ -43,10 +44,7 @@ export default function AuditLogsPage() {
 
     useEffect(() => { fetchLogs(); }, []);
 
-    const formatDate = (dateStr: string) => {
-        const d = new Date(dateStr);
-        return d.toLocaleString('th-TH', { dateStyle: 'short', timeStyle: 'short' });
-    };
+
 
     return (
         <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
@@ -126,7 +124,7 @@ export default function AuditLogsPage() {
                                     <td className="px-6 py-4">
                                         <div className="flex items-center gap-1 text-xs text-slate-500 dark:text-slate-400">
                                             <Clock className="w-3 h-3" />
-                                            {formatDate(log.CreatedAt)}
+                                            {formatDateTime(log.CreatedAt)}
                                         </div>
                                     </td>
                                 </tr>
@@ -165,8 +163,8 @@ export default function AuditLogsPage() {
                                         key={pageNum}
                                         onClick={() => fetchLogs(pageNum)}
                                         className={`w-9 h-9 rounded-lg text-sm font-medium transition-colors ${pageNum === pagination.page
-                                                ? 'bg-blue-600 text-white shadow-sm'
-                                                : 'border border-slate-200 dark:border-slate-600 hover:bg-slate-100 dark:hover:bg-slate-700'
+                                            ? 'bg-blue-600 text-white shadow-sm'
+                                            : 'border border-slate-200 dark:border-slate-600 hover:bg-slate-100 dark:hover:bg-slate-700'
                                             }`}
                                     >
                                         {pageNum}

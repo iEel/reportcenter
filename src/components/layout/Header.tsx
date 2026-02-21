@@ -2,6 +2,7 @@
 
 import { Bell, X, Check, CheckCheck, Moon, Sun } from 'lucide-react';
 import { useState, useEffect, useRef } from 'react';
+import { timeAgo } from '@/lib/dateUtils';
 
 interface Notification {
     NotificationId: number;
@@ -74,17 +75,7 @@ export default function Header() {
         fetchNotifications();
     };
 
-    const formatDate = (dateStr: string) => {
-        const d = new Date(dateStr);
-        const now = new Date();
-        const diffMs = now.getTime() - d.getTime();
-        const diffMin = Math.floor(diffMs / 60000);
-        if (diffMin < 1) return 'เมื่อสักครู่';
-        if (diffMin < 60) return `${diffMin} นาทีที่แล้ว`;
-        const diffHr = Math.floor(diffMin / 60);
-        if (diffHr < 24) return `${diffHr} ชั่วโมงที่แล้ว`;
-        return d.toLocaleDateString('th-TH', { day: 'numeric', month: 'short' });
-    };
+
 
     return (
         <header className="h-16 bg-white/80 dark:bg-slate-800/80 backdrop-blur-md border-b border-slate-200 dark:border-slate-700 sticky top-0 z-20 flex items-center justify-end px-6 shadow-sm">
@@ -137,7 +128,7 @@ export default function Header() {
                                             <div className="flex-1 min-w-0">
                                                 <p className="text-sm font-medium text-slate-900 dark:text-white">{n.Title}</p>
                                                 <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">{n.Message}</p>
-                                                <p className="text-xs text-slate-400 mt-1">{formatDate(n.CreatedAt)}</p>
+                                                <p className="text-xs text-slate-400 mt-1">{timeAgo(n.CreatedAt)}</p>
                                             </div>
                                         </div>
                                     </div>

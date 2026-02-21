@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { ArrowRight, BarChart3, FileText, Database, Users, Shield, Clock, Activity, RefreshCw } from "lucide-react";
 import { useAuth } from "@/components/providers/AuthProvider";
+import { timeAgo } from '@/lib/dateUtils';
 
 interface DashboardStats {
   totalReports: number;
@@ -47,18 +48,7 @@ export default function Home() {
 
   useEffect(() => { fetchDashboard(); }, []);
 
-  const formatTime = (dateStr: string) => {
-    const d = new Date(dateStr);
-    const now = new Date();
-    const diff = now.getTime() - d.getTime();
-    const mins = Math.floor(diff / 60000);
-    if (mins < 1) return 'เมื่อสักครู่';
-    if (mins < 60) return `${mins} นาทีที่แล้ว`;
-    const hours = Math.floor(mins / 60);
-    if (hours < 24) return `${hours} ชั่วโมงที่แล้ว`;
-    const days = Math.floor(hours / 24);
-    return `${days} วันที่แล้ว`;
-  };
+
 
   return (
     <div className="space-y-8 animate-in fade-in slide-in-from-bottom-8 duration-700">
@@ -217,7 +207,7 @@ export default function Home() {
                         {' '}
                         <span className="text-slate-500">{log.Details}</span>
                       </p>
-                      <p className="text-xs text-slate-400 mt-0.5">{formatTime(log.CreatedAt)}</p>
+                      <p className="text-xs text-slate-400 mt-0.5">{timeAgo(log.CreatedAt)}</p>
                     </div>
                   </div>
                 ))}

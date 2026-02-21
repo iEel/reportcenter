@@ -5,6 +5,7 @@ import { useState, useEffect } from "react";
 import * as xlsx from 'xlsx';
 import { useAuth } from "@/components/providers/AuthProvider";
 import { useToast } from "@/components/providers/ToastProvider";
+import { formatDate } from '@/lib/dateUtils';
 
 export default function StandardReportPage() {
     const { user } = useAuth();
@@ -356,7 +357,7 @@ export default function StandardReportPage() {
                                             const val = row[col];
                                             const isDate = val instanceof Date || (typeof val === 'string' && val.match(/^\d{4}-\d{2}-\d{2}T/));
                                             const displayVal = isDate
-                                                ? new Date(val).toLocaleDateString('th-TH')
+                                                ? formatDate(val)
                                                 : val === null ? '-' : String(val);
 
                                             return (
