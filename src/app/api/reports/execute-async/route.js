@@ -35,7 +35,7 @@ export async function POST(request) {
                 FilePath NVARCHAR(500) NULL,
                 FileName NVARCHAR(200) NULL,
                 ErrorMessage NVARCHAR(500) NULL,
-                RowCount INT NULL,
+                [RowCount] INT NULL,
                 CreatedAt DATETIME DEFAULT GETDATE()
             );
         `);
