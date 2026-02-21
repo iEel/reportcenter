@@ -13,7 +13,8 @@ const menus = [
 
     // Admin Only
     { title: 'จัดการรายงาน', path: '/admin/reports', icon: Database, role: 'admin' },
-    { title: 'จัดการผู้ใช้ & สิทธิ์', path: '/admin/users', icon: Users, role: 'admin' },
+    { title: 'จัดการผู้ใช้', path: '/admin/users', icon: Users, role: 'admin' },
+    { title: 'จัดการสิทธิ์ (Roles)', path: '/admin/roles', icon: Settings, role: 'admin' },
     { title: 'ดูประวัติการใช้งาน', path: '/admin/audit-logs', icon: FileText, role: 'admin' },
     { title: 'ตั้งค่าระบบ', path: '/admin/settings', icon: Settings, role: 'admin' },
 ];
