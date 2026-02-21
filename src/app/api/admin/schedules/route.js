@@ -3,6 +3,7 @@ import sql from 'mssql';
 import { connectToCentralDB } from '@/lib/db';
 import { verifyToken } from '@/lib/auth';
 import { cookies } from 'next/headers';
+import { createMailTransporter } from '@/lib/email';
 
 // Auto-create ReportSchedules table with email fields
 async function ensureTable(pool) {
@@ -254,7 +255,6 @@ export async function PATCH(request) {
 
         // Import dependencies dynamically
         const { connectToCompanyDB } = await import('@/lib/db');
-        const nodemailer = (await import('nodemailer')).default;
         const xlsx = await import('xlsx');
 
         // Execute SQL on company DB
@@ -303,13 +303,8 @@ export async function PATCH(request) {
         xlsx.utils.book_append_sheet(workbook, worksheet, 'Report Data');
         const buffer = xlsx.write(workbook, { bookType: 'xlsx', type: 'buffer' });
 
-        // Send email
-        const transporter = nodemailer.createTransport({
-            host: process.env.SMTP_HOST || 'smtp.office365.com',
-            port: parseInt(process.env.SMTP_PORT || '587'),
-            secure: false,
-            auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS },
-        });
+        // Send email via shared OAuth2 utility
+        const transporter = await createMailTransporter();
 
         const dateStr = new Date().toISOString().split('T')[0];
         const subject = sched.EmailSubject || `[ReportCenter] ${sched.ReportName} - ${dateStr}`;

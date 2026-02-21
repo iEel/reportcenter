@@ -1,24 +1,11 @@
 import { NextResponse } from 'next/server';
 import sql from 'mssql';
 import { connectToCentralDB, connectToCompanyDB } from '@/lib/db';
-import nodemailer from 'nodemailer';
+import { createMailTransporter } from '@/lib/email';
 import * as xlsx from 'xlsx';
 
 // Secret key to protect the cron endpoint from unauthorized access
 const CRON_SECRET = process.env.CRON_SECRET || 'rc-cron-secret-2026';
-
-// SMTP transporter (Outlook 365)
-function createTransporter() {
-    return nodemailer.createTransport({
-        host: process.env.SMTP_HOST || 'smtp.office365.com',
-        port: parseInt(process.env.SMTP_PORT || '587'),
-        secure: false,
-        auth: {
-            user: process.env.SMTP_USER,
-            pass: process.env.SMTP_PASS,
-        },
-    });
-}
 
 // Resolve relative date presets to actual dates
 function resolveRelativeDate(preset) {
@@ -65,7 +52,7 @@ export async function GET(request) {
             return NextResponse.json({ success: true, message: 'No schedules due', executed: 0 });
         }
 
-        const transporter = createTransporter();
+        const transporter = await createMailTransporter();
         const results = [];
 
 
