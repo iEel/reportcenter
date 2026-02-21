@@ -71,7 +71,8 @@ export async function PUT(request, props) {
                     TSqlQuery = @TSqlQuery, 
                     EmailTemplateContent = @EmailTemplateContent, 
                     IsPublic = @IsPublic, 
-                    IsActive = @IsActive
+                    IsActive = @IsActive,
+                    IsHeavy = @IsHeavy
                 WHERE ReportId = @ReportId;
             `;
 
@@ -84,6 +85,7 @@ export async function PUT(request, props) {
                 .input('EmailTemplateContent', sql.NVarChar(sql.MAX), report.EmailTemplateContent || null)
                 .input('IsPublic', sql.Bit, report.IsPublic ? 1 : 0)
                 .input('IsActive', sql.Bit, report.IsActive !== undefined ? (report.IsActive ? 1 : 0) : 1)
+                .input('IsHeavy', sql.Bit, report.IsHeavy ? 1 : 0)
                 .query(reportQuery);
 
             // 2. Delete Old Parameters

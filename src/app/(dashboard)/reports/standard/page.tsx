@@ -36,6 +36,9 @@ export default function StandardReportPage() {
     // Search
     const [searchQuery, setSearchQuery] = useState('');
 
+    // Background Job state
+    const [activeJob, setActiveJob] = useState<{ jobId: number; status: string; rowCount?: number; fileName?: string; error?: string } | null>(null);
+
     const companyNames: Record<number, string> = {
         1: 'Sonic Interfreight (SNI)',
         2: 'Grandlink Logistics (GRL)',
@@ -204,8 +207,49 @@ export default function StandardReportPage() {
         const reportName = report ? report.ReportName : 'Report';
         const dateStr = new Date().toISOString().split('T')[0];
 
+        // IsHeavy → background job
+        if (report?.IsHeavy) {
+            try {
+                const res = await fetch('/api/reports/execute-async', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        reportId: selectedReportId,
+                        companyId: selectedCompany,
+                        parameters: paramValues,
+                    }),
+                });
+                const data = await res.json();
+                if (data.success) {
+                    setActiveJob({ jobId: data.jobId, status: 'running' });
+                    toast('กำลังสร้างรายงานในพื้นหลัง...', 'info');
+                    const poll = setInterval(async () => {
+                        try {
+                            const jr = await fetch(`/api/reports/jobs/${data.jobId}`);
+                            const jd = await jr.json();
+                            if (jd.success) {
+                                setActiveJob(jd.job);
+                                if (jd.job.status === 'done') {
+                                    clearInterval(poll);
+                                    toast(`รายงานพร้อมดาวน์โหลด (${jd.job.rowCount} แถว)`, 'success');
+                                } else if (jd.job.status === 'failed') {
+                                    clearInterval(poll);
+                                    toast(`สร้างรายงานไม่สำเร็จ: ${jd.job.error}`, 'error');
+                                }
+                            }
+                        } catch { clearInterval(poll); }
+                    }, 3000);
+                } else {
+                    toast(data.message || 'ไม่สามารถสร้าง Job ได้', 'error');
+                }
+            } catch {
+                toast('เกิดข้อผิดพลาด', 'error');
+            }
+            return;
+        }
+
+        // Normal export
         try {
-            // Fetch ALL data for export (no pagination)
             const res = await fetch('/api/reports/execute', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },

@@ -34,6 +34,9 @@ export default function TemplateReportPage() {
     // Search
     const [searchQuery, setSearchQuery] = useState('');
 
+    // Background Job state
+    const [activeJob, setActiveJob] = useState<{ jobId: number; status: string; rowCount?: number; fileName?: string; error?: string } | null>(null);
+
     const companyNames: Record<number, string> = {
         1: 'Sonic Interfreight (SNI)',
         2: 'Grandlink Logistics (GRL)',
@@ -211,12 +214,57 @@ export default function TemplateReportPage() {
 
     const columns = getColumns();
 
-    const handleExportExcel = () => {
+    const handleExportExcel = async () => {
         if (!reportData || reportData.length === 0) return;
         const report = reports.find(r => r.ReportId.toString() === selectedReportId);
         const reportName = report ? report.ReportName : 'Report';
         const dateStr = new Date().toISOString().split('T')[0];
-        // Export raw data (without _rowId)
+
+        // IsHeavy → use background job
+        if (report?.IsHeavy) {
+            try {
+                const res = await fetch('/api/reports/execute-async', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        reportId: selectedReportId,
+                        companyId: selectedCompany,
+                        parameters: Object.fromEntries(
+                            Object.entries(paramValues).filter(([, v]) => v !== '')
+                        ),
+                    }),
+                });
+                const data = await res.json();
+                if (data.success) {
+                    setActiveJob({ jobId: data.jobId, status: 'running' });
+                    toast('กำลังสร้างรายงานในพื้นหลัง...', 'info');
+                    // Start polling
+                    const poll = setInterval(async () => {
+                        try {
+                            const jr = await fetch(`/api/reports/jobs/${data.jobId}`);
+                            const jd = await jr.json();
+                            if (jd.success) {
+                                setActiveJob(jd.job);
+                                if (jd.job.status === 'done') {
+                                    clearInterval(poll);
+                                    toast(`รายงานพร้อมดาวน์โหลด (${jd.job.rowCount} แถว)`, 'success');
+                                } else if (jd.job.status === 'failed') {
+                                    clearInterval(poll);
+                                    toast(`สร้างรายงานไม่สำเร็จ: ${jd.job.error}`, 'error');
+                                }
+                            }
+                        } catch { clearInterval(poll); }
+                    }, 3000);
+                } else {
+                    toast(data.message || 'ไม่สามารถสร้าง Job ได้', 'error');
+                }
+            } catch {
+                toast('เกิดข้อผิดพลาด', 'error');
+            }
+            return;
+        }
+
+        // Normal export (client-side)
         const exportData = reportData.map(row => {
             const { _rowId, ...rest } = row;
             return rest;

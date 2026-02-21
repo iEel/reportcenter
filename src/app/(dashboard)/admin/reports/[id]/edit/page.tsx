@@ -23,6 +23,7 @@ export default function EditReportPage() {
     const [isActive, setIsActive] = useState(true);
     const [tSqlQuery, setTSqlQuery] = useState('');
     const [emailTemplateContent, setEmailTemplateContent] = useState('');
+    const [isHeavy, setIsHeavy] = useState(false);
 
     // Roles State
     const [roles, setRoles] = useState<any[]>([]);
@@ -62,6 +63,7 @@ export default function EditReportPage() {
                     setIsActive(r.IsActive);
                     setTSqlQuery(r.TSqlQuery || '');
                     setEmailTemplateContent(r.EmailTemplateContent || '');
+                    setIsHeavy(!!r.IsHeavy);
                     setParameters(data.parameters || []);
                     if (r.Roles) setSelectedRoles(r.Roles);
                 } else {
@@ -125,6 +127,7 @@ export default function EditReportPage() {
                         EmailTemplateContent: parseInt(reportType) === 2 ? emailTemplateContent : null,
                         IsPublic: isPublic === 'public',
                         IsActive: isActive,
+                        IsHeavy: isHeavy,
                         Roles: selectedRoles
                     },
                     parameters: parameters
@@ -271,6 +274,21 @@ export default function EditReportPage() {
                                             </div>
                                         </div>
                                     )}
+                                    {/* Heavy Report Toggle */}
+                                    <div className="mt-4 pt-4 border-t border-slate-100">
+                                        <label className="flex items-center gap-3 cursor-pointer">
+                                            <input
+                                                type="checkbox"
+                                                checked={isHeavy}
+                                                onChange={e => setIsHeavy(e.target.checked)}
+                                                className="w-4 h-4 text-orange-600 rounded border-slate-300 focus:ring-orange-500"
+                                            />
+                                            <div>
+                                                <span className="text-sm font-medium text-slate-700">🕐 รายงานขนาดใหญ่ (Background Job)</span>
+                                                <p className="text-xs text-slate-500 mt-0.5">ถ้า query ใช้เวลานาน ให้สร้างไฟล์ในพื้นหลังแทนการดาวน์โหลดทันที</p>
+                                            </div>
+                                        </label>
+                                    </div>
                                 </div>
                             </div>
                         )}
