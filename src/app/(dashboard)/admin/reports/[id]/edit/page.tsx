@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { ArrowLeft, Database, Save, Code, Sliders, Type, Loader2 } from "lucide-react";
 import Link from "next/link";
+import TemplateEditor from "@/components/TemplateEditor";
 import { useRouter, useParams } from "next/navigation";
 
 export default function EditReportPage() {
@@ -292,21 +293,11 @@ export default function EditReportPage() {
 
                         {/* Tab 3: Template Editor */}
                         {activeTab === 'template' && reportType === '2' && (
-                            <div className="flex flex-col h-full min-h-[500px] animate-in fade-in duration-300">
-                                <div className="p-4 border-b border-slate-100 flex items-center justify-between bg-slate-50">
-                                    <div className="flex flex-col gap-1">
-                                        <div className="flex items-center gap-2 text-blue-600 font-medium text-sm">
-                                            <Code className="w-4 h-4" /> Email Template Editor <span className="text-red-500">*</span>
-                                        </div>
-                                        <span className="text-xs text-slate-500">
-                                            พิมพ์ <span className="text-emerald-600 bg-emerald-50 px-1 py-0.5 rounded font-mono pr-2">{"{{ColumnName}}"}</span> เพื่ออ้างอิงฟิลด์จาก SQL
-                                        </span>
-                                    </div>
-                                </div>
-                                <div className="flex-1 bg-white p-4 font-mono text-sm text-slate-800 leading-relaxed max-h-[500px]">
-                                    <textarea value={emailTemplateContent} onChange={e => setEmailTemplateContent(e.target.value)} className="w-full h-full min-h-[440px] bg-transparent border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 focus:outline-none p-4 resize-none" placeholder={"เรียนคุณลูกค้า {{CustomerName}}, \n\nทางเราขอแจ้งเตือนรายการ... "} spellCheck={false} />
-                                </div>
-                            </div>
+                            <TemplateEditor
+                                value={emailTemplateContent}
+                                onChange={setEmailTemplateContent}
+                                sqlQuery={tSqlQuery}
+                            />
                         )}
 
                         {/* Tab 4: Parameters */}
