@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import sql from 'mssql';
 import { connectToCentralDB } from '@/lib/db';
+import { getSession } from '@/lib/auth';
 
 export async function GET(request, props) {
     try {
@@ -146,6 +147,20 @@ export async function PUT(request, props) {
             }
 
             await transaction.commit();
+
+            // Log activity
+            try {
+                const session = await getSession(request);
+                if (session) {
+                    await pool.request()
+                        .input('UserId', sql.Int, session.userId)
+                        .input('ReportId', sql.Int, parseInt(id))
+                        .input('ActionType', sql.NVarChar(50), 'UPDATE_REPORT')
+                        .input('Details', sql.NVarChar(500), `แก้ไขรายงาน "${report.ReportName}"`)
+                        .query(`INSERT INTO ActivityLogs (UserId, ReportId, ActionType, Details) VALUES (@UserId, @ReportId, @ActionType, @Details)`);
+                }
+            } catch { }
+
             return NextResponse.json({ success: true, message: "Report updated successfully" });
 
         } catch (dbError) {

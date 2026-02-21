@@ -75,6 +75,7 @@ export default function ScheduledReportsPage() {
     const [showModal, setShowModal] = useState(false);
     const [editSchedule, setEditSchedule] = useState<Schedule | null>(null);
     const [isSaving, setIsSaving] = useState(false);
+    const [triggeringId, setTriggeringId] = useState<number | null>(null);
 
     const [form, setForm] = useState({
         reportId: '',
@@ -255,6 +256,28 @@ export default function ScheduledReportsPage() {
         return s.Frequency;
     };
 
+    const handleTrigger = async (scheduleId: number) => {
+        setTriggeringId(scheduleId);
+        try {
+            const res = await fetch('/api/admin/schedules', {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ scheduleId }),
+            });
+            const data = await res.json();
+            if (data.success) {
+                toast(data.message || 'รันเรียบร้อย!', 'success');
+                fetchSchedules();
+            } else {
+                toast(data.message || 'ไม่สามารถรันได้', 'error');
+            }
+        } catch {
+            toast('เกิดข้อผิดพลาดในการรัน', 'error');
+        } finally {
+            setTriggeringId(null);
+        }
+    };
+
     const activeCount = schedules.filter(s => s.IsActive).length;
     const pausedCount = schedules.length - activeCount;
     const successCount = schedules.filter(s => s.LastRunStatus === 'success').length;
@@ -334,9 +357,9 @@ export default function ScheduledReportsPage() {
                             <div className="flex">
                                 {/* Left accent */}
                                 <div className={`w-1.5 shrink-0 ${!s.IsActive ? 'bg-slate-200' :
-                                        s.LastRunStatus === 'failed' ? 'bg-red-400' :
-                                            s.LastRunStatus === 'success' ? 'bg-emerald-400' :
-                                                'bg-blue-400'
+                                    s.LastRunStatus === 'failed' ? 'bg-red-400' :
+                                        s.LastRunStatus === 'success' ? 'bg-emerald-400' :
+                                            'bg-blue-400'
                                     }`} />
 
                                 <div className={`flex-1 p-5 ${!s.IsActive ? 'opacity-50' : ''}`}>
@@ -397,6 +420,17 @@ export default function ScheduledReportsPage() {
 
                                         {/* Actions */}
                                         <div className="flex items-center gap-0.5 shrink-0 opacity-70 group-hover:opacity-100 transition-opacity">
+                                            <button
+                                                onClick={() => handleTrigger(s.ScheduleId)}
+                                                disabled={triggeringId === s.ScheduleId}
+                                                className="p-2 rounded-xl hover:bg-cyan-50 text-cyan-500 transition-all disabled:opacity-50"
+                                                title="รันเดี๋ยวนี้"
+                                            >
+                                                {triggeringId === s.ScheduleId
+                                                    ? <RefreshCw className="w-4 h-4 animate-spin" />
+                                                    : <Zap className="w-4 h-4" />
+                                                }
+                                            </button>
                                             <button onClick={() => toggleActive(s)} className={`p-2 rounded-xl transition-all ${s.IsActive ? 'hover:bg-amber-50 text-amber-500' : 'hover:bg-green-50 text-green-500'}`} title={s.IsActive ? 'หยุดชั่วคราว' : 'เปิดใช้งาน'}>
                                                 {s.IsActive ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}
                                             </button>
@@ -535,8 +569,8 @@ export default function ScheduledReportsPage() {
                                                         type="button"
                                                         onClick={() => setForm({ ...form, dayOfWeek: i })}
                                                         className={`flex-1 py-2 rounded-lg text-xs font-medium transition-all ${form.dayOfWeek === i
-                                                                ? 'bg-violet-600 text-white shadow-sm'
-                                                                : 'bg-slate-100 dark:bg-slate-700 text-slate-500 hover:bg-slate-200'
+                                                            ? 'bg-violet-600 text-white shadow-sm'
+                                                            : 'bg-slate-100 dark:bg-slate-700 text-slate-500 hover:bg-slate-200'
                                                             }`}
                                                     >
                                                         {d.substring(0, 2)}
@@ -555,8 +589,8 @@ export default function ScheduledReportsPage() {
                                                         type="button"
                                                         onClick={() => setForm({ ...form, dayOfMonth: i + 1 })}
                                                         className={`py-2 rounded-lg text-xs font-medium transition-all ${form.dayOfMonth === i + 1
-                                                                ? 'bg-teal-600 text-white shadow-sm'
-                                                                : 'bg-slate-100 dark:bg-slate-700 text-slate-500 hover:bg-slate-200'
+                                                            ? 'bg-teal-600 text-white shadow-sm'
+                                                            : 'bg-slate-100 dark:bg-slate-700 text-slate-500 hover:bg-slate-200'
                                                             }`}
                                                     >
                                                         {i + 1}

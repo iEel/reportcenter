@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import sql from 'mssql';
 import { connectToCentralDB } from '@/lib/db';
+import { getSession } from '@/lib/auth';
 
 export async function POST(request) {
     let pool;
@@ -91,6 +92,19 @@ export async function POST(request) {
 
             // Commit the transaction since everything succeeded
             await transaction.commit();
+
+            // Log activity (non-blocking)
+            try {
+                const session = await getSession(request);
+                if (session) {
+                    await pool.request()
+                        .input('UserId', sql.Int, session.userId)
+                        .input('ReportId', sql.Int, newReportId)
+                        .input('ActionType', sql.NVarChar(50), 'CREATE_REPORT')
+                        .input('Details', sql.NVarChar(500), `สร้างรายงาน "${report.ReportName}"`)
+                        .query(`INSERT INTO ActivityLogs (UserId, ReportId, ActionType, Details) VALUES (@UserId, @ReportId, @ActionType, @Details)`);
+                }
+            } catch { }
 
             return NextResponse.json({
                 success: true,

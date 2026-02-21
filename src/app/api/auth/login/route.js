@@ -70,6 +70,15 @@ export async function POST(request) {
 
         const token = await signToken(tokenPayload);
 
+        // Log login activity
+        try {
+            await pool.request()
+                .input('UserId', sql.Int, user.UserId)
+                .input('ActionType', sql.NVarChar(50), 'LOGIN')
+                .input('Details', sql.NVarChar(500), `${user.FullName} เข้าสู่ระบบ`)
+                .query(`INSERT INTO ActivityLogs (UserId, ActionType, Details) VALUES (@UserId, @ActionType, @Details)`);
+        } catch { }
+
         // Set cookie
         const response = NextResponse.json({
             success: true,

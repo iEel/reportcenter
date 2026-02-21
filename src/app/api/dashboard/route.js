@@ -125,10 +125,33 @@ export async function GET() {
                 totalRoles,
             },
             recentLogs: recentLogs,
+            scheduleStats: isAdmin ? await getScheduleStats(pool) : null,
         });
 
     } catch (error) {
         console.error('Dashboard stats error:', error);
         return NextResponse.json({ success: false, message: 'Internal Server Error' }, { status: 500 });
+    }
+}
+
+async function getScheduleStats(pool) {
+    try {
+        const result = await pool.request().query(`
+            SELECT 
+                COUNT(*) AS total,
+                SUM(CASE WHEN IsActive = 1 THEN 1 ELSE 0 END) AS active,
+                SUM(CASE WHEN LastStatus = 'FAILED' AND IsActive = 1 THEN 1 ELSE 0 END) AS failed,
+                MIN(CASE WHEN IsActive = 1 AND NextRunAt > GETDATE() THEN NextRunAt END) AS nextRun
+            FROM ReportSchedules
+        `);
+        const row = result.recordset[0];
+        return {
+            total: row.total || 0,
+            active: row.active || 0,
+            failed: row.failed || 0,
+            nextRun: row.nextRun || null,
+        };
+    } catch {
+        return null;
     }
 }

@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { ArrowRight, BarChart3, FileText, Database, Users, Shield, Clock, Activity, RefreshCw } from "lucide-react";
+import { ArrowRight, BarChart3, FileText, Database, Users, Shield, Clock, Activity, RefreshCw, Calendar, AlertTriangle } from "lucide-react";
 import { useAuth } from "@/components/providers/AuthProvider";
 import { timeAgo } from '@/lib/dateUtils';
 
@@ -28,6 +28,7 @@ export default function Home() {
   const { user } = useAuth();
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [logs, setLogs] = useState<ActivityLog[]>([]);
+  const [scheduleStats, setScheduleStats] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
   const isAdmin = user?.roleName?.toLowerCase() === 'admin';
 
@@ -39,6 +40,7 @@ export default function Home() {
       if (data.success) {
         setStats(data.stats);
         setLogs(data.recentLogs || []);
+        setScheduleStats(data.scheduleStats || null);
       }
     } catch (err) {
       console.error('Dashboard fetch error:', err);
@@ -129,6 +131,27 @@ export default function Home() {
           <p className="text-3xl font-bold text-slate-900">{isLoading ? '—' : logs.length}</p>
           <p className="text-xs text-slate-400 mt-2">รายการล่าสุด</p>
         </div>
+
+        {/* Schedule Status Card (Admin) */}
+        {isAdmin && scheduleStats && (
+          <div className={`bg-white rounded-2xl shadow-sm border p-5 hover:shadow-md transition-shadow ${scheduleStats.failed > 0 ? 'border-red-200' : 'border-slate-200'}`}>
+            <div className="flex items-center gap-3 mb-3">
+              <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${scheduleStats.failed > 0 ? 'bg-red-100' : 'bg-cyan-100'}`}>
+                {scheduleStats.failed > 0 ? <AlertTriangle className="w-5 h-5 text-red-600" /> : <Calendar className="w-5 h-5 text-cyan-600" />}
+              </div>
+              <span className="text-sm text-slate-500 font-medium">ตั้งเวลารายงาน</span>
+            </div>
+            <p className="text-3xl font-bold text-slate-900">{scheduleStats.active}<span className="text-sm font-normal text-slate-400 ml-1">active</span></p>
+            <div className="flex flex-col gap-1 mt-2 text-xs">
+              {scheduleStats.failed > 0 && (
+                <span className="text-red-500 font-semibold">⚠ {scheduleStats.failed} รายการ failed</span>
+              )}
+              {scheduleStats.nextRun && (
+                <span className="text-slate-400">ถัดไป: {timeAgo(scheduleStats.nextRun)}</span>
+              )}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Quick Access + Activity Log Row */}
