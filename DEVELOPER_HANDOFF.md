@@ -1,8 +1,8 @@
 # ReportCenter — Developer Handoff
 
-> **Version:** 2.1  
+> **Version:** 3.0  
 > **Last Updated:** 2026-02-21  
-> **Tech Stack:** Next.js 16.1.6 + React 19 + Tailwind CSS 4 + MSSQL (mssql driver)
+> **Tech Stack:** Next.js 16.1.6 + React 19 + Tailwind CSS 4 + MSSQL (mssql driver) + Nodemailer (SMTP)
 
 ---
 
@@ -52,10 +52,11 @@ reportcenter/
 │   │   │   │   ├── users/page.tsx        # Manage Users (search/filter/stats)
 │   │   │   │   ├── roles/page.tsx        # Manage Roles + Report access assignment
 │   │   │   │   ├── audit-logs/page.tsx   # Audit Log Viewer (paginated)
+│   │   │   │   ├── schedules/page.tsx    # Scheduled Reports (create/edit/toggle/delete)
 │   │   │   │   └── settings/page.tsx     # System Settings
 │   │   │   └── reports/
-│   │   │       ├── standard/page.tsx     # Standard report viewer (paginated)
-│   │   │       └── templates/page.tsx    # Email template report viewer
+│   │   │       ├── standard/page.tsx     # Standard report viewer (★ favorites)
+│   │   │       └── templates/page.tsx    # Email template report viewer (★ favorites)
 │   │   └── api/                          # API Routes (all .js)
 │   │       ├── auth/
 │   │       │   ├── login/route.js        # POST: login with bcrypt + allowedCompanies
@@ -71,7 +72,10 @@ reportcenter/
 │   │       │   ├── users/route.js        # GET/POST/PUT users & roles + company mappings
 │   │       │   ├── roles/route.js        # GET/POST/PUT/DELETE roles + ReportRoleMapping
 │   │       │   ├── audit-logs/route.js   # GET: paginated audit logs
+│   │       │   ├── schedules/route.js    # GET/POST/PUT/DELETE schedules
 │   │       │   └── settings/route.js     # GET/PUT system settings
+│   │       ├── cron/
+│   │       │   └── execute-schedules/route.js # GET: cron endpoint (runs due reports → email)
 │   │       └── reports/
 │   │           ├── available/route.js    # GET: reports user can access
 │   │           ├── execute/route.js      # POST: run T-SQL on company DB
@@ -149,6 +153,7 @@ UserCompanyMapping (UserId, CompanyId)
 │  - UserFavorites │     │                  │
 │  - Notifications │     │                  │
 │  - SystemSettings│     │                  │
+│  - ReportSchedules│    │                  │
 └──────────────────┘     └──────────────────┘
 ```
 
@@ -168,6 +173,7 @@ UserCompanyMapping (UserId, CompanyId)
 | `UserFavorites`      | User's pinned/favorite reports (auto-created) |
 | `Notifications`      | In-app notification messages (auto-created)  |
 | `SystemSettings`     | Key-value config (company names, app settings)|
+| `ReportSchedules`    | Scheduled report runs + email config (auto-created) |
 
 ### Key Columns
 
@@ -190,6 +196,14 @@ UserId INT, ReportId INT, CreatedAt DATETIME, PRIMARY KEY (UserId, ReportId)
 -- Notifications (auto-created on first API call)
 NotificationId INT PK IDENTITY, UserId INT NULL (NULL = broadcast),
 Title NVARCHAR(200), Message NVARCHAR(500), Type NVARCHAR(20), IsRead BIT
+
+-- ReportSchedules (auto-created on first API call)
+ScheduleId INT PK IDENTITY, ReportId INT FK, ScheduleName NVARCHAR(200),
+Frequency NVARCHAR(20), DayOfWeek INT NULL, DayOfMonth INT NULL,
+RunTime NVARCHAR(5), CompanyId INT, Parameters NVARCHAR(MAX) NULL,
+EmailTo NVARCHAR(500), EmailCc NVARCHAR(500) NULL, EmailSubject NVARCHAR(300) NULL,
+IsActive BIT, LastRunAt DATETIME NULL, LastRunStatus NVARCHAR(20) NULL,
+NextRunAt DATETIME NULL, CreatedBy INT, CreatedAt/UpdatedAt DATETIME
 ```
 
 ---
@@ -232,6 +246,10 @@ Title NVARCHAR(200), Message NVARCHAR(500), Type NVARCHAR(20), IsRead BIT
 | POST   | `/api/admin/roles`           | Create role + report mappings    |
 | PUT    | `/api/admin/roles`           | Update role name + report mappings |
 | DELETE | `/api/admin/roles?roleId=`   | Delete role (blocked if users assigned) |
+| GET    | `/api/admin/schedules`       | List all schedules + report/user info |
+| POST   | `/api/admin/schedules`       | Create schedule (auto-calculates NextRunAt) |
+| PUT    | `/api/admin/schedules`       | Update schedule / toggle active   |
+| DELETE | `/api/admin/schedules?scheduleId=` | Delete schedule              |
 | GET    | `/api/admin/settings`        | Get all settings                  |
 | PUT    | `/api/admin/settings`        | Update settings                   |
 
@@ -247,6 +265,14 @@ Title NVARCHAR(200), Message NVARCHAR(500), Type NVARCHAR(20), IsRead BIT
 | Method | Path              | Description                      |
 |--------|-------------------|----------------------------------|
 | GET    | `/api/dashboard`  | Stats (totals) + recent activity |
+
+### Cron (External Trigger)
+
+| Method | Path                            | Description                      |
+|--------|---------------------------------|----------------------------------|
+| GET    | `/api/cron/execute-schedules`   | Run due schedules → Excel → Email |
+
+> ต้องส่ง `?secret=<CRON_SECRET>` เพื่อ authenticate — เรียกผ่าน Windows Task Scheduler หรือ external cron
 
 ---
 
@@ -282,6 +308,16 @@ C3_DB_DATABASE=SMF-AUTOLOGIS
 
 # JWT Secret (change in production!)
 JWT_SECRET=rc-super-secret-key-2026-change-me
+
+# SMTP (Outlook 365) — for scheduled reports email
+SMTP_HOST=smtp.office365.com
+SMTP_PORT=587
+SMTP_USER=your-email@company.com
+SMTP_PASS=your-app-password
+SMTP_FROM=ReportCenter <your-email@company.com>
+
+# Cron endpoint protection
+CRON_SECRET=rc-cron-secret-2026
 ```
 
 > ⚠️ ไฟล์ `.env.local` ถูก `.gitignore` อยู่แล้ว — ค่า default ยังมี fallback ใน `db.js` สำหรับ dev environment
@@ -298,6 +334,7 @@ JWT_SECRET=rc-super-secret-key-2026-change-me
 | `bcryptjs` | latest  | Password hashing                 |
 | `jose`     | latest  | JWT token sign/verify            |
 | `xlsx`     | 0.18.5  | Excel export                     |
+| `nodemailer` | latest | SMTP email sending (Outlook 365) |
 | `lucide-react` | latest | Icon library                 |
 | `@dnd-kit` | latest  | Drag and drop (template builder) |
 
@@ -368,10 +405,57 @@ JWT_SECRET=rc-super-secret-key-2026-change-me
 - `UserFavorites` — เมื่อเรียก `/api/reports/favorites`
 - `Notifications` — เมื่อเรียก `/api/notifications`
 - `SystemSettings` — เมื่อเรียก `/api/admin/settings`
+- `ReportSchedules` — เมื่อเรียก `/api/admin/schedules` (รวม auto-migrate เพิ่ม column ใหม่)
 
 ---
 
-## 10. Scripts Reference
+## 10. Scheduled Reports & Email
+
+### Overview
+ระบบส่งรายงานอัตโนมัติทาง Email (Excel attachment) ตาม schedule ที่ admin กำหนด
+
+### Flow
+```
+Admin สร้าง Schedule (เลือก Report + บริษัท + ความถี่ + ผู้รับ Email)
+    ↓ บันทึกลง ReportSchedules + คำนวณ NextRunAt
+    ↓
+Cron Job เรียก GET /api/cron/execute-schedules?secret=<CRON_SECRET>
+    ↓ ดึง schedules ที่ NextRunAt <= now
+    ↓ Execute SQL บน Company DB
+    ↓ สร้าง Excel buffer (xlsx)
+    ↓ ส่ง Email ผ่าน Outlook 365 SMTP (nodemailer)
+    ↓ อัปเดต LastRunAt, LastRunStatus, NextRunAt
+```
+
+### Parameters & Relative Dates
+Report ที่มี parameters → admin เลือก **relative date preset** ใน modal:
+
+| Preset | คำนวณเป็น |
+|--------|----------|
+| `TODAY` | วันที่ปัจจุบัน |
+| `YESTERDAY` | เมื่อวาน |
+| `MONTH_START` | วันที่ 1 ของเดือนนี้ |
+| `MONTH_END` | วันสุดท้ายของเดือน |
+| `PREV_MONTH_START` | วันที่ 1 เดือนก่อน |
+| `PREV_MONTH_END` | วันสุดท้ายเดือนก่อน |
+| `YEAR_START` | 1 มกราคมปีนี้ |
+
+ค่าเหล่านี้ถูก resolve เป็นวันที่จริง (YYYY-MM-DD) ตอน cron รันรายงาน
+
+### Cron Setup (Windows Task Scheduler)
+```bash
+# ตัวอย่าง: รันทุก 5 นาที
+curl http://localhost:3000/api/cron/execute-schedules?secret=rc-cron-secret-2026
+```
+
+### Report Favorites
+- ★ ปุ่มติดดาว (favorite) ที่หน้า Standard/Template Reports
+- รายการ Favorites แสดงเป็น chips ด้านบนหน้ารายงาน
+- ข้อมูลเก็บใน `UserFavorites` table (auto-created)
+
+---
+
+## 11. Scripts Reference
 
 ```bash
 # Hash a password for DB insertion
@@ -386,10 +470,11 @@ node scripts/create-activity-logs.js
 
 ---
 
-## 11. Feature Roadmap (Future)
+## 12. Feature Roadmap (Future)
 
-- [ ] Report scheduling (auto-generate at intervals via cron/background job)
-- [ ] Email notification integration (SMTP for report delivery)
+- [x] Report scheduling (auto-generate at intervals via cron)
+- [x] Email notification integration (SMTP via Outlook 365)
+- [x] Report Favorites (star/pin reports)
 - [ ] Advanced search with filters (date range, type, status) on admin pages
 - [ ] Backend-driven server-side pagination for report tables (currently client-side)
 - [ ] Password complexity rules enforcement
