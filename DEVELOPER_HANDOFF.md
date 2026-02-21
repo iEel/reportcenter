@@ -1,6 +1,6 @@
 # ReportCenter — Developer Handoff
 
-> **Version:** 5.2  
+> **Version:** 5.3  
 > **Last Updated:** 2026-02-22  
 > **Tech Stack:** Next.js 16.1.6 + React 19 + Tailwind CSS 4 + MSSQL (mssql driver) + Microsoft Graph API (OAuth2) / Nodemailer (SMTP fallback) + @azure/msal-node
 
@@ -499,6 +499,16 @@ curl http://localhost:4000/api/cron/execute-schedules?secret=rc-cron-secret-2026
 - เรียก `POST /api/admin/test-email` → ส่ง email ทดสอบไป SMTP_USER
 - ใช้ตรวจว่า email config (Graph API / SMTP) ทำงานถูกต้อง
 
+### Background Job System (Heavy Reports)
+- Admin ติ๊ก **"รายงานขนาดใหญ่ (Background Job)"** ที่หน้าเพิ่ม/แก้ไขรายงาน → เซ็ต `IsHeavy = 1`
+- Report ปกติ → export client-side เหมือนเดิม
+- Report IsHeavy → `POST /api/reports/execute-async` → สร้าง Job record → รัน query ใน background (timeout 15 นาที) → สร้าง xlsb → disk
+- Frontend poll `GET /api/reports/jobs/{id}` ทุก 3 วินาที → แสดง banner: running/done/failed
+- `GET /api/reports/jobs/{id}/download` → stream ไฟล์ให้ user, กดซ้ำได้
+- **Auto-cleanup:** ไฟล์ลบหลัง 24 ชม., DB records ลบหลัง 7 วัน (ทำตอน cron รัน)
+- Schema: `Reports.IsHeavy BIT` (auto-add), `ReportJobs` table (auto-create)
+- ไฟล์ job เก็บที่ `tmp/jobs/` (อยู่ใน `.gitignore`)
+
 ### Report Favorites
 - ★ ปุ่มติดดาว (favorite) ที่หน้า Standard/Template Reports
 - รายการ Favorites แสดงเป็น chips ด้านบนหน้ารายงาน
@@ -541,6 +551,7 @@ node scripts/create-activity-logs.js
 - [x] SQL Injection guard for LookupQuery (SELECT-only whitelist)
 - [x] Environment validation on startup (`src/lib/env-check.js`)
 - [x] Test Email button on schedule page (`POST /api/admin/test-email`)
+- [x] Background Job system for heavy reports (IsHeavy toggle + async APIs + polling UI)
 - [ ] Password complexity rules enforcement
 - [ ] Two-factor authentication (2FA)
 
