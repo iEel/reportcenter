@@ -330,7 +330,7 @@ export async function PATCH(request) {
         await pool.request()
             .input('ScheduleId', sql.Int, scheduleId)
             .input('Now', sql.DateTime, new Date())
-            .query(`UPDATE ReportSchedules SET LastRunAt = @Now, LastStatus = 'SUCCESS' WHERE ScheduleId = @ScheduleId`);
+            .query(`UPDATE ReportSchedules SET LastRunAt = @Now, LastRunStatus = 'SUCCESS' WHERE ScheduleId = @ScheduleId`);
 
         // Log activity
         try {
