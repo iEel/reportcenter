@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { Home, FileText, Database, Settings, LayoutTemplate, Users, LogOut, Lock, Menu, X } from 'lucide-react';
+import { Home, FileText, Database, Settings, LayoutTemplate, Users, LogOut, Lock, Menu, X, Calendar } from 'lucide-react';
 import { useAuth } from '@/components/providers/AuthProvider';
 import { useState, useEffect } from 'react';
 
@@ -13,6 +13,7 @@ const menus = [
 
     // Admin Only
     { title: 'จัดการรายงาน', path: '/admin/reports', icon: Database, role: 'admin' },
+    { title: 'ตั้งเวลารายงาน', path: '/admin/schedules', icon: Calendar, role: 'admin' },
     { title: 'จัดการผู้ใช้', path: '/admin/users', icon: Users, role: 'admin' },
     { title: 'จัดการสิทธิ์ (Roles)', path: '/admin/roles', icon: Settings, role: 'admin' },
     { title: 'ดูประวัติการใช้งาน', path: '/admin/audit-logs', icon: FileText, role: 'admin' },
