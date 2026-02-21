@@ -1,8 +1,8 @@
 # ReportCenter — Developer Handoff
 
-> **Version:** 4.0  
-> **Last Updated:** 2026-02-21  
-> **Tech Stack:** Next.js 16.1.6 + React 19 + Tailwind CSS 4 + MSSQL (mssql driver) + Nodemailer (OAuth2 XOAUTH2 / SMTP) + @azure/msal-node
+> **Version:** 5.0  
+> **Last Updated:** 2026-02-22  
+> **Tech Stack:** Next.js 16.1.6 + React 19 + Tailwind CSS 4 + MSSQL (mssql driver) + Microsoft Graph API (OAuth2) / Nodemailer (SMTP fallback) + @azure/msal-node
 
 ---
 
@@ -79,7 +79,8 @@ reportcenter/
 │   │       └── reports/
 │   │           ├── available/route.js    # GET: reports user can access
 │   │           ├── execute/route.js      # POST: run T-SQL on company DB (supports pagination + exportAll)
-│   │           ├── parameters/route.js   # GET: report parameters
+│   │           ├── parameters/route.js   # GET: report parameters (auto-migrate LookupQuery column)
+│   │           ├── search-param/route.js # GET: typeahead search for parameters with LookupQuery
 │   │           └── favorites/route.js    # GET/POST: toggle favorite reports
 │   ├── components/
 │   │   ├── layout/
@@ -92,11 +93,12 @@ reportcenter/
 │   │   │   └── ConfirmProvider.tsx       # Custom confirm dialog (danger/warning/default)
 │   │   ├── ErrorBoundary.tsx             # Global error boundary
 │   │   ├── Skeletons.tsx                 # Reusable loading skeletons
+│   │   ├── TypeaheadInput.tsx            # Debounced server-side search input (for parameters with LookupQuery)
 │   │   └── TemplateEditor.tsx            # Click-to-Insert email template editor
 │   ├── lib/
 │   │   ├── auth.js                       # JWT sign/verify (jose) + getSession()
 │   │   ├── db.js                         # MSSQL connection pool manager
-│   │   ├── email.js                      # Email transporter (OAuth2 XOAUTH2 + password fallback)
+│   │   ├── email.js                      # Email sender (Microsoft Graph API primary + SMTP password fallback)
 │   │   └── dateUtils.ts                  # Date/time utilities (Asia/Bangkok, 24h)
 │   └── middleware.ts                     # Route protection (JWT check)
 ├── scripts/
@@ -189,6 +191,11 @@ ReportId INT PK, ReportName NVARCHAR(200), Description NVARCHAR(500),
 ReportType INT (1=Standard, 2=Template), TSqlQuery NVARCHAR(MAX),
 EmailTemplateContent NVARCHAR(MAX), IsPublic BIT, IsActive BIT
 
+-- ReportParameters
+ParameterId INT PK IDENTITY, ReportId INT FK, ParameterName NVARCHAR(50),
+DisplayLabel NVARCHAR(100), InputType NVARCHAR(20), DropdownQuery NVARCHAR(MAX) NULL,
+LookupQuery NVARCHAR(MAX) NULL (auto-migrated), OrderIndex INT
+
 -- UserCompanyMapping
 UserId INT, CompanyId INT, PRIMARY KEY (UserId, CompanyId)
 
@@ -226,8 +233,9 @@ NextRunAt DATETIME NULL, CreatedBy INT, CreatedAt/UpdatedAt DATETIME
 | Method | Path                        | Description                       |
 |--------|-----------------------------|-----------------------------------|
 | GET    | `/api/reports/available`    | List reports user can access      |
-| GET    | `/api/reports/parameters`   | Get parameters for a report       |
-| POST   | `/api/reports/execute`      | Execute T-SQL on company DB (supports `page`/`pageSize`/`exportAll`) |
+| GET    | `/api/reports/parameters`   | Get parameters for a report (incl. `LookupQuery`)       |
+| POST   | `/api/reports/execute`      | Execute T-SQL on company DB (handles ORDER BY in pagination) |
+| GET    | `/api/reports/search-param` | Typeahead search for parameter values (`?reportId=&paramName=&q=&companyId=`) |
 | GET    | `/api/reports/favorites`    | Get user's favorite reports       |
 | POST   | `/api/reports/favorites`    | Toggle favorite (add/remove)      |
 
@@ -322,7 +330,7 @@ SMTP_FROM=ReportCenter <your-email@company.com>
 # Cron endpoint protection
 CRON_SECRET=rc-cron-secret-2026
 
-# Azure AD OAuth2 (for SMTP — optional, fallback to SMTP_PASS)
+# Azure AD OAuth2 (for Microsoft Graph API email — optional, fallback to SMTP_PASS)
 AZURE_TENANT_ID=your-tenant-id
 AZURE_CLIENT_ID=your-client-id
 AZURE_CLIENT_SECRET=your-client-secret
@@ -440,7 +448,7 @@ Cron Job เรียก GET /api/cron/execute-schedules?secret=<CRON_SECRET>
     ↓ ดึง schedules ที่ NextRunAt <= now
     ↓ Execute SQL บน Company DB
     ↓ สร้าง Excel buffer (xlsx)
-    ↓ ส่ง Email ผ่าน OAuth2 XOAUTH2 (Azure AD) หรือ fallback SMTP password
+    ↓ ส่ง Email ผ่าน Microsoft Graph API (Azure AD) หรือ fallback SMTP password
     ↓ อัปเดต LastRunAt, LastRunStatus, NextRunAt
 ```
 
@@ -462,7 +470,7 @@ Report ที่มี parameters → admin เลือก **relative date pres
 | `PREV_MONTH_END` | วันสุดท้ายเดือนก่อน |
 | `YEAR_START` | 1 มกราคมปีนี้ |
 
-ค่าเหล่านี้ถูก resolve เป็นวันที่จริง (YYYY-MM-DD) ตอน cron รันรายงาน
+ค่าเหล่านี้ถูก resolve เป็นวันที่จริง (YYYY-MM-DD) ตอน cron รันรายงาน **และ** manual trigger (PATCH)
 
 ### Cron Setup (Windows Task Scheduler)
 ```bash
@@ -495,17 +503,18 @@ node scripts/create-activity-logs.js
 ## 12. Feature Roadmap (Future)
 
 - [x] Report scheduling (auto-generate at intervals via cron)
-- [x] Email notification integration (OAuth2 XOAUTH2 + SMTP fallback)
+- [x] Email notification integration (Microsoft Graph API + SMTP fallback)
 - [x] Report Favorites (star/pin reports)
 - [x] Export Excel on Standard + Template report pages
 - [x] Search/Filter for report dropdown (by name + description)
-- [x] Server-side pagination (OFFSET/FETCH + totalRows count)
-- [x] OAuth2 SMTP via Azure AD MSAL (shared `src/lib/email.js`)
+- [x] Server-side pagination (OFFSET/FETCH + totalRows count + ORDER BY handling)
+- [x] Email via Azure AD MSAL → Microsoft Graph API (`src/lib/email.js`)
 - [x] Dashboard schedule status card (active/failed/nextRun)
 - [x] Manual trigger for schedules (⚡ Zap button)
 - [x] Detailed activity logging (LOGIN, LOGOUT, EXECUTE, EXPORT, CREATE/UPDATE_REPORT, RUN_SCHEDULE)
 - [x] Conditional sidebar menus based on user's available report types
 - [x] TemplateEditor component (click-to-insert, preview mode)
+- [x] Parameter Typeahead search (LookupQuery + TypeaheadInput + auto-execute on select)
 - [ ] Password complexity rules enforcement
 - [ ] Two-factor authentication (2FA)
 
@@ -531,22 +540,70 @@ All logging is **non-blocking** (wrapped in try/catch) — logging failure never
 
 ## 14. Email System (`src/lib/email.js`)
 
-### OAuth2 Flow (Primary)
+### Microsoft Graph API (Primary)
 ```
 Server → Azure AD (acquireTokenByClientCredential)
-       ← Access Token (scope: outlook.office365.com/.default)
-Server → SMTP Office365 (XOAUTH2 auth type)
-       → Send email with Excel attachment
+       ← Access Token (scope: graph.microsoft.com/.default)
+Server → POST https://graph.microsoft.com/v1.0/users/{SMTP_USER}/sendMail
+       → Send email with Base64 attachments (Excel)
 ```
 
+> ⚠️ **SMTP XOAUTH2 ไม่รองรับ** client_credentials flow — ต้องใช้ Graph API โดยตรง
+
 ### Fallback
-If `AZURE_TENANT_ID` / `AZURE_CLIENT_ID` / `AZURE_CLIENT_SECRET` are not set, falls back to password auth:
+If `AZURE_TENANT_ID` / `AZURE_CLIENT_ID` / `AZURE_CLIENT_SECRET` are not set, falls back to Nodemailer SMTP password auth:
 ```
-Server → SMTP Office365 (user + pass)
+Server → SMTP Office365 (user + pass via Nodemailer)
+```
+
+### API Function: `sendMail(options)`
+```javascript
+import { sendMail } from '@/lib/email';
+
+await sendMail({
+    to: 'user@example.com',
+    cc: 'cc@example.com',
+    subject: 'Report',
+    text: 'body text',
+    html: '<p>HTML body</p>',
+    attachments: [{ filename: 'report.xlsx', content: buffer }],
+});
 ```
 
 ### Required Azure AD Setup
 1. Register app in **Microsoft Entra ID** → App registrations
 2. Add **API permission**: Microsoft Graph → Application → `Mail.Send` → Grant admin consent
 3. Create **Client secret** → copy value to `AZURE_CLIENT_SECRET`
-4. Set `SMTP_USER` to the email address that will send (must have a mailbox)
+4. Set `SMTP_USER` to the email address that will send (must have a mailbox in the tenant)
+
+---
+
+## 15. Parameter Typeahead Search
+
+### Overview
+Template Reports ที่มี parameter เยอะ (200K+ rows) ใช้ **Typeahead search** แทน text input ธรรมดา
+
+### How It Works
+```
+Admin → แก้ไขรายงาน → ตั้ง LookupQuery สำหรับ parameter ที่ต้องการ
+    เช่น: SELECT TOP 20 JOBNO AS value, JOBNO + ' - ' + EXPORTERNAME AS label
+          FROM SFJOB WHERE JOBNO LIKE '%' + @q + '%' ORDER BY JOBNO DESC
+
+User → เลือกบริษัท → เลือกรายงาน → พิมพ์ในช่อง parameter
+     → debounce 300ms → API ค้นหาบน Company DB ที่เลือก
+     → แสดง dropdown suggestions (max 30 รายการ)
+     → เลือก suggestion → report auto-execute ทันที!
+```
+
+### Key Components
+| Component | File | Purpose |
+|-----------|------|---------|
+| `TypeaheadInput` | `src/components/TypeaheadInput.tsx` | Debounced input + keyboard nav + clear button |
+| Search API | `src/app/api/reports/search-param/route.js` | Runs `LookupQuery` on company DB with `@q` param |
+| LookupQuery | `ReportParameters.LookupQuery` column | SQL that returns `value` + `label` columns |
+
+### LookupQuery Rules
+- SQL ต้อง return คอลัมน์ **`value`** (ค่าจริงที่ใส่ใน parameter) และ **`label`** (แสดงให้ user เห็น)
+- ใช้ **`@q`** เป็น placeholder สำหรับค่าที่ user พิมพ์
+- ใช้ **`TOP 20-30`** เพื่อจำกัดผลลัพธ์
+- `LIKE @q + '%'` ใช้ index ได้ (เร็ว), `LIKE '%' + @q + '%'` full scan (ช้ากว่าแต่ค้นตรงกลางได้)
