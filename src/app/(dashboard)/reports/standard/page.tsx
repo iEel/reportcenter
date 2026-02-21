@@ -28,9 +28,13 @@ export default function StandardReportPage() {
     // Pagination state
     const [currentPage, setCurrentPage] = useState(1);
     const [pageSize, setPageSize] = useState(50);
+    const [totalRows, setTotalRows] = useState(0);
 
     // Favorites
     const [favoriteIds, setFavoriteIds] = useState<number[]>([]);
+
+    // Search
+    const [searchQuery, setSearchQuery] = useState('');
 
     const companyNames: Record<number, string> = {
         1: 'Sonic Interfreight (SNI)',
@@ -132,7 +136,7 @@ export default function StandardReportPage() {
         setParamValues(prev => ({ ...prev, [paramName]: value }));
     };
 
-    const handleExecuteReport = async () => {
+    const handleExecuteReport = async (requestedPage?: number) => {
         if (!selectedReportId) {
             toast('กรุณาเลือกรายงานก่อนดึงข้อมูล', 'info');
             return;
@@ -151,10 +155,10 @@ export default function StandardReportPage() {
             if (!confirmRun) return;
         }
 
-
+        const pg = requestedPage || 1;
         setIsExecuting(true);
         setExecutionError(null);
-        setReportData(null);
+        if (pg === 1) setReportData(null);
 
         try {
             const res = await fetch('/api/reports/execute', {
@@ -163,7 +167,9 @@ export default function StandardReportPage() {
                 body: JSON.stringify({
                     reportId: selectedReportId,
                     companyId: selectedCompany,
-                    parameters: paramValues
+                    parameters: paramValues,
+                    page: pg,
+                    pageSize,
                 })
             });
 
@@ -171,6 +177,8 @@ export default function StandardReportPage() {
 
             if (data.success) {
                 setReportData(data.data);
+                setTotalRows(data.totalRows || data.data.length);
+                setCurrentPage(pg);
             } else {
                 setExecutionError(data.message || 'เกิดข้อผิดพลาดในการดึงข้อมูล');
             }
@@ -189,18 +197,38 @@ export default function StandardReportPage() {
 
     const columns = getColumns();
 
-    const handleExportExcel = () => {
-        if (!reportData || reportData.length === 0) return;
+    const handleExportExcel = async () => {
+        if (!selectedReportId) return;
 
-        // Find report name for filename
         const report = reports.find(r => r.ReportId.toString() === selectedReportId);
         const reportName = report ? report.ReportName : 'Report';
         const dateStr = new Date().toISOString().split('T')[0];
 
-        const worksheet = xlsx.utils.json_to_sheet(reportData);
-        const workbook = xlsx.utils.book_new();
-        xlsx.utils.book_append_sheet(workbook, worksheet, "Report Data");
-        xlsx.writeFile(workbook, `${reportName}_${dateStr}.xlsx`);
+        try {
+            // Fetch ALL data for export (no pagination)
+            const res = await fetch('/api/reports/execute', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    reportId: selectedReportId,
+                    companyId: selectedCompany,
+                    parameters: paramValues,
+                    exportAll: true,
+                })
+            });
+            const data = await res.json();
+            if (!data.success || !data.data.length) {
+                toast('ไม่มีข้อมูลให้ส่งออก', 'info');
+                return;
+            }
+            const worksheet = xlsx.utils.json_to_sheet(data.data);
+            const workbook = xlsx.utils.book_new();
+            xlsx.utils.book_append_sheet(workbook, worksheet, "Report Data");
+            xlsx.writeFile(workbook, `${reportName}_${dateStr}.xlsx`);
+            toast(`ส่งออก ${data.data.length} รายการเรียบร้อย`, 'success');
+        } catch {
+            toast('ไม่สามารถส่งออกข้อมูลได้', 'error');
+        }
     };
 
 
@@ -221,8 +249,8 @@ export default function StandardReportPage() {
                                     key={r.ReportId}
                                     onClick={() => setSelectedReportId(r.ReportId.toString())}
                                     className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium border transition-all ${selectedReportId === r.ReportId.toString()
-                                            ? 'bg-blue-50 border-blue-200 text-blue-700 shadow-sm'
-                                            : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50 hover:border-slate-300'
+                                        ? 'bg-blue-50 border-blue-200 text-blue-700 shadow-sm'
+                                        : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50 hover:border-slate-300'
                                         }`}
                                 >
                                     <Star className="w-3.5 h-3.5 text-amber-500 fill-amber-500" />
@@ -240,6 +268,16 @@ export default function StandardReportPage() {
                             เลือกรายงานมาตรฐาน
                             {isLoadingReports && <RefreshCw className="w-3 h-3 animate-spin text-slate-400" />}
                         </label>
+                        <div className="relative mb-2">
+                            <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                            <input
+                                type="text"
+                                value={searchQuery}
+                                onChange={e => setSearchQuery(e.target.value)}
+                                placeholder="ค้นหารายงาน..."
+                                className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+                            />
+                        </div>
                         <div className="flex gap-2">
                             <div className="relative flex-1">
                                 <select
@@ -248,8 +286,12 @@ export default function StandardReportPage() {
                                     disabled={isLoadingReports || isExecuting}
                                     className="appearance-none w-full bg-slate-50 border border-slate-200 text-slate-900 py-2.5 pl-4 pr-10 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 font-medium disabled:opacity-60"
                                 >
-                                    <option value="">-- กรุณาเลือกรายงาน --</option>
-                                    {reports.map(r => (
+                                    <option value="">-- กรุณาเลือกรายงาน ({reports.length} รายการ) --</option>
+                                    {reports.filter(r => {
+                                        if (!searchQuery) return true;
+                                        const q = searchQuery.toLowerCase();
+                                        return r.ReportName?.toLowerCase().includes(q) || r.Description?.toLowerCase().includes(q);
+                                    }).map(r => (
                                         <option key={r.ReportId} value={r.ReportId}>{r.ReportName} {r.Description ? `(${r.Description})` : ''}</option>
                                     ))}
                                 </select>
@@ -259,8 +301,8 @@ export default function StandardReportPage() {
                                 <button
                                     onClick={() => toggleFavorite(parseInt(selectedReportId))}
                                     className={`p-2.5 rounded-lg border transition-all ${favoriteIds.includes(parseInt(selectedReportId))
-                                            ? 'bg-amber-50 border-amber-200 text-amber-500 hover:bg-amber-100'
-                                            : 'bg-white border-slate-200 text-slate-400 hover:bg-slate-50 hover:text-amber-500'
+                                        ? 'bg-amber-50 border-amber-200 text-amber-500 hover:bg-amber-100'
+                                        : 'bg-white border-slate-200 text-slate-400 hover:bg-slate-50 hover:text-amber-500'
                                         }`}
                                     title={favoriteIds.includes(parseInt(selectedReportId)) ? 'นำออกจากรายการโปรด' : 'เพิ่มลงรายการโปรด'}
                                 >
@@ -332,7 +374,7 @@ export default function StandardReportPage() {
 
                             <div className="flex items-end mt-2 lg:mt-0">
                                 <button
-                                    onClick={handleExecuteReport}
+                                    onClick={() => handleExecuteReport()}
                                     disabled={isExecuting}
                                     className="w-full bg-slate-900 hover:bg-slate-800 text-white py-2 px-4 rounded-lg flex items-center justify-center gap-2 font-medium transition-colors shadow-sm active:scale-95 disabled:opacity-70 disabled:active:scale-100"
                                 >
@@ -363,7 +405,7 @@ export default function StandardReportPage() {
                 <div className="p-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
                     <p className="text-sm font-medium text-slate-600">
                         {reportData ? (
-                            <>พบข้อมูล <span className="text-blue-600 font-bold">{reportData.length}</span> รายการ (หน้า {currentPage}/{Math.ceil(reportData.length / pageSize) || 1})</>
+                            <>พบข้อมูล <span className="text-blue-600 font-bold">{totalRows}</span> รายการ (หน้า {currentPage}/{Math.ceil(totalRows / pageSize) || 1})</>
                         ) : (
                             'รอการดึงข้อมูล...'
                         )}
@@ -413,7 +455,7 @@ export default function StandardReportPage() {
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-slate-100 text-slate-700">
-                                {reportData.slice((currentPage - 1) * pageSize, currentPage * pageSize).map((row, rowIndex) => (
+                                {reportData.map((row, rowIndex) => (
                                     <tr key={rowIndex} className="hover:bg-blue-50/50 transition-colors">
                                         <td className="px-6 py-4 text-center font-mono text-xs text-slate-400 bg-slate-50/30">
                                             {(currentPage - 1) * pageSize + rowIndex + 1}
@@ -439,11 +481,11 @@ export default function StandardReportPage() {
                 </div>
 
                 {/* Pagination Controls */}
-                {reportData && reportData.length > pageSize && (
+                {reportData && totalRows > pageSize && (
                     <div className="px-6 py-3 border-t border-slate-100 flex items-center justify-between bg-slate-50/50">
                         <div className="flex items-center gap-2 text-sm text-slate-500">
                             <span>แสดง</span>
-                            <select value={pageSize} onChange={e => { setPageSize(Number(e.target.value)); setCurrentPage(1); }} className="border border-slate-200 rounded px-2 py-1 text-sm bg-white">
+                            <select value={pageSize} onChange={e => { setPageSize(Number(e.target.value)); handleExecuteReport(1); }} className="border border-slate-200 rounded px-2 py-1 text-sm bg-white">
                                 <option value={25}>25</option>
                                 <option value={50}>50</option>
                                 <option value={100}>100</option>
@@ -451,11 +493,11 @@ export default function StandardReportPage() {
                             <span>รายการ/หน้า</span>
                         </div>
                         <div className="flex items-center gap-1">
-                            <button onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage <= 1} className="p-1.5 rounded border border-slate-200 hover:bg-slate-100 disabled:opacity-40">
+                            <button onClick={() => handleExecuteReport(currentPage - 1)} disabled={currentPage <= 1 || isExecuting} className="p-1.5 rounded border border-slate-200 hover:bg-slate-100 disabled:opacity-40">
                                 <ChevronLeft className="w-4 h-4" />
                             </button>
-                            <span className="px-3 text-sm font-medium">{currentPage} / {Math.ceil(reportData.length / pageSize)}</span>
-                            <button onClick={() => setCurrentPage(p => Math.min(Math.ceil((reportData?.length || 0) / pageSize), p + 1))} disabled={currentPage >= Math.ceil(reportData.length / pageSize)} className="p-1.5 rounded border border-slate-200 hover:bg-slate-100 disabled:opacity-40">
+                            <span className="px-3 text-sm font-medium">{currentPage} / {Math.ceil(totalRows / pageSize)}</span>
+                            <button onClick={() => handleExecuteReport(currentPage + 1)} disabled={currentPage >= Math.ceil(totalRows / pageSize) || isExecuting} className="p-1.5 rounded border border-slate-200 hover:bg-slate-100 disabled:opacity-40">
                                 <ChevronRight className="w-4 h-4" />
                             </button>
                         </div>

@@ -1,7 +1,8 @@
 "use client";
 
-import { Search, Filter, Copy, LayoutTemplate, ChevronDown, CheckCircle2, RefreshCw, Loader2, AlertCircle, Star } from "lucide-react";
+import { Search, Filter, Copy, Download, LayoutTemplate, ChevronDown, CheckCircle2, RefreshCw, Loader2, AlertCircle, Star } from "lucide-react";
 import { useState, useEffect } from "react";
+import * as xlsx from 'xlsx';
 import { useAuth } from "@/components/providers/AuthProvider";
 import { useToast } from "@/components/providers/ToastProvider";
 
@@ -28,6 +29,9 @@ export default function TemplateReportPage() {
 
     // Favorites
     const [favoriteIds, setFavoriteIds] = useState<number[]>([]);
+
+    // Search
+    const [searchQuery, setSearchQuery] = useState('');
 
     const companyNames: Record<number, string> = {
         1: 'Sonic Interfreight (SNI)',
@@ -204,6 +208,22 @@ export default function TemplateReportPage() {
 
     const columns = getColumns();
 
+    const handleExportExcel = () => {
+        if (!reportData || reportData.length === 0) return;
+        const report = reports.find(r => r.ReportId.toString() === selectedReportId);
+        const reportName = report ? report.ReportName : 'Report';
+        const dateStr = new Date().toISOString().split('T')[0];
+        // Export raw data (without _rowId)
+        const exportData = reportData.map(row => {
+            const { _rowId, ...rest } = row;
+            return rest;
+        });
+        const worksheet = xlsx.utils.json_to_sheet(exportData);
+        const workbook = xlsx.utils.book_new();
+        xlsx.utils.book_append_sheet(workbook, worksheet, "Report Data");
+        xlsx.writeFile(workbook, `${reportName}_${dateStr}.xlsx`);
+    };
+
     return (
         <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500 min-h-full flex flex-col">
 
@@ -221,8 +241,8 @@ export default function TemplateReportPage() {
                                     key={r.ReportId}
                                     onClick={() => setSelectedReportId(r.ReportId.toString())}
                                     className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium border transition-all ${selectedReportId === r.ReportId.toString()
-                                            ? 'bg-purple-50 border-purple-200 text-purple-700 shadow-sm'
-                                            : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50 hover:border-slate-300'
+                                        ? 'bg-purple-50 border-purple-200 text-purple-700 shadow-sm'
+                                        : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50 hover:border-slate-300'
                                         }`}
                                 >
                                     <Star className="w-3.5 h-3.5 text-amber-500 fill-amber-500" />
@@ -240,6 +260,16 @@ export default function TemplateReportPage() {
                             เลือกรายงาน Template
                             {isLoadingReports && <RefreshCw className="w-3 h-3 animate-spin text-slate-400" />}
                         </label>
+                        <div className="relative mb-2">
+                            <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                            <input
+                                type="text"
+                                value={searchQuery}
+                                onChange={e => setSearchQuery(e.target.value)}
+                                placeholder="ค้นหารายงาน..."
+                                className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500"
+                            />
+                        </div>
                         <div className="flex gap-2">
                             <div className="relative flex-1">
                                 <select
@@ -248,8 +278,12 @@ export default function TemplateReportPage() {
                                     disabled={isLoadingReports || isExecuting}
                                     className="appearance-none w-full bg-slate-50 border border-slate-200 text-slate-900 py-2.5 pl-4 pr-10 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 font-medium disabled:opacity-60"
                                 >
-                                    <option value="">-- กรุณาเลือกรายงานเทมเพลต --</option>
-                                    {reports.map(r => (
+                                    <option value="">-- กรุณาเลือกรายงานเทมเพลต ({reports.length} รายการ) --</option>
+                                    {reports.filter(r => {
+                                        if (!searchQuery) return true;
+                                        const q = searchQuery.toLowerCase();
+                                        return r.ReportName?.toLowerCase().includes(q) || r.Description?.toLowerCase().includes(q);
+                                    }).map(r => (
                                         <option key={r.ReportId} value={r.ReportId}>{r.ReportName} {r.Description ? `(${r.Description})` : ''}</option>
                                     ))}
                                 </select>
@@ -259,8 +293,8 @@ export default function TemplateReportPage() {
                                 <button
                                     onClick={() => toggleFavorite(parseInt(selectedReportId))}
                                     className={`p-2.5 rounded-lg border transition-all ${favoriteIds.includes(parseInt(selectedReportId))
-                                            ? 'bg-amber-50 border-amber-200 text-amber-500 hover:bg-amber-100'
-                                            : 'bg-white border-slate-200 text-slate-400 hover:bg-slate-50 hover:text-amber-500'
+                                        ? 'bg-amber-50 border-amber-200 text-amber-500 hover:bg-amber-100'
+                                        : 'bg-white border-slate-200 text-slate-400 hover:bg-slate-50 hover:text-amber-500'
                                         }`}
                                     title={favoriteIds.includes(parseInt(selectedReportId)) ? 'นำออกจากรายการโปรด' : 'เพิ่มลงรายการโปรด'}
                                 >
@@ -381,6 +415,16 @@ export default function TemplateReportPage() {
                             'รอการดึงข้อมูล...'
                         )}
                     </p>
+                    <div className="flex items-center gap-2">
+                        <button
+                            onClick={handleExportExcel}
+                            disabled={!reportData || reportData.length === 0}
+                            className="flex items-center gap-2 text-sm font-medium text-emerald-600 bg-emerald-50 hover:bg-emerald-100 px-3 py-1.5 rounded-lg border border-emerald-200 transition-colors disabled:opacity-50"
+                        >
+                            <Download className="w-4 h-4" />
+                            Export Excel
+                        </button>
+                    </div>
                 </div>
 
                 <div className="flex-1 overflow-auto">
