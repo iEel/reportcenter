@@ -20,6 +20,23 @@ function createTransporter() {
     });
 }
 
+// Resolve relative date presets to actual dates
+function resolveRelativeDate(preset) {
+    const now = new Date();
+    const fmt = (d) => d.toISOString().split('T')[0]; // YYYY-MM-DD
+
+    switch (preset) {
+        case 'TODAY': return fmt(now);
+        case 'YESTERDAY': { const d = new Date(now); d.setDate(d.getDate() - 1); return fmt(d); }
+        case 'MONTH_START': return fmt(new Date(now.getFullYear(), now.getMonth(), 1));
+        case 'MONTH_END': return fmt(new Date(now.getFullYear(), now.getMonth() + 1, 0));
+        case 'PREV_MONTH_START': return fmt(new Date(now.getFullYear(), now.getMonth() - 1, 1));
+        case 'PREV_MONTH_END': return fmt(new Date(now.getFullYear(), now.getMonth(), 0));
+        case 'YEAR_START': return fmt(new Date(now.getFullYear(), 0, 1));
+        default: return preset; // Return as-is if not a preset
+    }
+}
+
 // GET: called by external cron job (e.g. Windows Task Scheduler, curl)
 // Usage: GET /api/cron/execute-schedules?secret=rc-cron-secret-2026
 export async function GET(request) {
@@ -51,18 +68,21 @@ export async function GET(request) {
         const transporter = createTransporter();
         const results = [];
 
+
         for (const schedule of dueSchedules.recordset) {
             try {
                 // 1. Execute the report query on company DB
                 const companyPool = await connectToCompanyDB(schedule.CompanyId);
                 const request = companyPool.request();
 
-                // Parse and apply parameters if any
+                // Parse, resolve relative dates, and apply parameters
                 if (schedule.Parameters) {
                     try {
                         const params = JSON.parse(schedule.Parameters);
                         for (const [key, value] of Object.entries(params)) {
-                            request.input(key, value);
+                            // Resolve relative date presets (TODAY, MONTH_START, etc.)
+                            const resolved = resolveRelativeDate(value);
+                            request.input(key, resolved);
                         }
                     } catch (e) {
                         console.warn(`Schedule ${schedule.ScheduleId}: invalid params JSON`);

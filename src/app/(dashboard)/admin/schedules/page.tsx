@@ -35,6 +35,23 @@ interface Report {
     ReportType: number;
 }
 
+interface Param {
+    ParameterId: number;
+    ParameterName: string;
+    DisplayLabel: string;
+    InputType: string;
+}
+
+const DATE_PRESETS = [
+    { value: 'TODAY', label: 'วันนี้ (TODAY)' },
+    { value: 'YESTERDAY', label: 'เมื่อวาน (YESTERDAY)' },
+    { value: 'MONTH_START', label: 'วันที่ 1 ของเดือนนี้' },
+    { value: 'MONTH_END', label: 'วันสุดท้ายเดือนนี้' },
+    { value: 'PREV_MONTH_START', label: 'วันที่ 1 ของเดือนก่อน' },
+    { value: 'PREV_MONTH_END', label: 'วันสุดท้ายเดือนก่อน' },
+    { value: 'YEAR_START', label: 'วันที่ 1 มกรา ของปีนี้' },
+];
+
 const DAYS = ['อาทิตย์', 'จันทร์', 'อังคาร', 'พุธ', 'พฤหัสบดี', 'ศุกร์', 'เสาร์'];
 const FREQ_LABELS: Record<string, string> = { daily: 'ทุกวัน', weekly: 'รายสัปดาห์', monthly: 'รายเดือน' };
 
@@ -67,6 +84,37 @@ export default function ScheduledReportsPage() {
         emailSubject: '',
     });
 
+    // Dynamic parameters
+    const [params, setParams] = useState<Param[]>([]);
+    const [paramValues, setParamValues] = useState<Record<string, string>>({});
+    const [isLoadingParams, setIsLoadingParams] = useState(false);
+
+    const fetchParams = async (reportId: string) => {
+        if (!reportId) { setParams([]); setParamValues({}); return; }
+        setIsLoadingParams(true);
+        try {
+            const res = await fetch(`/api/reports/parameters?reportId=${reportId}`);
+            const data = await res.json();
+            if (data.success) {
+                setParams(data.parameters);
+                // Only reset if no existing values
+                const initial: Record<string, string> = {};
+                data.parameters.forEach((p: Param) => { initial[p.ParameterName] = ''; });
+                setParamValues(prev => Object.keys(prev).length > 0 ? prev : initial);
+            }
+        } catch (err) {
+            console.error('Error fetching params:', err);
+        } finally {
+            setIsLoadingParams(false);
+        }
+    };
+
+    const handleReportChange = (reportId: string) => {
+        setForm(f => ({ ...f, reportId }));
+        setParamValues({});
+        fetchParams(reportId);
+    };
+
     const fetchSchedules = async () => {
         setIsLoading(true);
         try {
@@ -98,6 +146,8 @@ export default function ScheduledReportsPage() {
     const openCreateModal = () => {
         setEditSchedule(null);
         setForm({ reportId: '', scheduleName: '', frequency: 'daily', dayOfWeek: 1, dayOfMonth: 1, runTime: '08:00', companyId: '1', isActive: true, emailTo: '', emailCc: '', emailSubject: '' });
+        setParams([]);
+        setParamValues({});
         setShowModal(true);
     };
 
@@ -116,6 +166,13 @@ export default function ScheduledReportsPage() {
             emailCc: s.EmailCc || '',
             emailSubject: s.EmailSubject || '',
         });
+        // Load saved params
+        if (s.Parameters) {
+            try { setParamValues(JSON.parse(s.Parameters)); } catch { setParamValues({}); }
+        } else {
+            setParamValues({});
+        }
+        fetchParams(s.ReportId.toString());
         setShowModal(true);
     };
 
@@ -138,6 +195,7 @@ export default function ScheduledReportsPage() {
                 emailTo: form.emailTo,
                 emailCc: form.emailCc || null,
                 emailSubject: form.emailSubject || null,
+                parameters: Object.keys(paramValues).length > 0 ? paramValues : null,
             };
 
             if (editSchedule) {
@@ -311,13 +369,53 @@ export default function ScheduledReportsPage() {
                             {/* Report */}
                             <div>
                                 <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">รายงาน <span className="text-red-500">*</span></label>
-                                <select value={form.reportId} onChange={e => setForm({ ...form, reportId: e.target.value })} className={inputClass}>
+                                <select value={form.reportId} onChange={e => handleReportChange(e.target.value)} className={inputClass}>
                                     <option value="">-- เลือกรายงาน --</option>
                                     {reports.map(r => (
                                         <option key={r.ReportId} value={r.ReportId}>{r.ReportName}</option>
                                     ))}
                                 </select>
                             </div>
+
+                            {/* Dynamic Parameters */}
+                            {params.length > 0 && (
+                                <div className="pt-3 border-t border-slate-200 dark:border-slate-600">
+                                    <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-300 mb-3 flex items-center gap-2">
+                                        ⚡ ตัวแปรของรายงาน
+                                        {isLoadingParams && <RefreshCw className="w-3 h-3 animate-spin text-slate-400" />}
+                                    </h3>
+                                    <div className="space-y-3">
+                                        {params.map(p => (
+                                            <div key={p.ParameterId}>
+                                                <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">{p.DisplayLabel || p.ParameterName}</label>
+                                                {p.InputType === 'date' ? (
+                                                    <div>
+                                                        <select
+                                                            value={paramValues[p.ParameterName] || ''}
+                                                            onChange={e => setParamValues(v => ({ ...v, [p.ParameterName]: e.target.value }))}
+                                                            className={inputClass}
+                                                        >
+                                                            <option value="">-- เลือกวันที่สัมพัทธ์ --</option>
+                                                            {DATE_PRESETS.map(dp => (
+                                                                <option key={dp.value} value={dp.value}>{dp.label}</option>
+                                                            ))}
+                                                        </select>
+                                                        <p className="text-xs text-slate-400 mt-1">ระบบจะคำนวณวันที่จริงอัตโนมัติตอนรันรายงาน</p>
+                                                    </div>
+                                                ) : (
+                                                    <input
+                                                        type={p.InputType === 'number' ? 'number' : 'text'}
+                                                        value={paramValues[p.ParameterName] || ''}
+                                                        onChange={e => setParamValues(v => ({ ...v, [p.ParameterName]: e.target.value }))}
+                                                        placeholder={`ค่า ${p.DisplayLabel || p.ParameterName}`}
+                                                        className={inputClass}
+                                                    />
+                                                )}
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
 
                             {/* Company */}
                             <div>
