@@ -47,6 +47,14 @@ export async function GET(request) {
 
         const lookupQuery = paramResult.recordset[0].LookupQuery;
 
+        // SQL Injection Guard: only allow SELECT queries
+        const normalized = lookupQuery.trim().toUpperCase();
+        const forbidden = ['INSERT ', 'UPDATE ', 'DELETE ', 'DROP ', 'ALTER ', 'EXEC ', 'EXECUTE ', 'TRUNCATE ', 'CREATE ', 'GRANT ', 'REVOKE ', 'xp_', 'sp_'];
+        if (!normalized.startsWith('SELECT ') || forbidden.some(kw => normalized.includes(kw))) {
+            console.error(`Blocked unsafe LookupQuery for param "${paramName}":`, lookupQuery);
+            return NextResponse.json({ success: false, message: 'LookupQuery contains forbidden SQL statements' }, { status: 400 });
+        }
+
         // Execute lookup on company DB
         const companyPool = await connectToCompanyDB(parseInt(companyId));
         const result = await companyPool.request()

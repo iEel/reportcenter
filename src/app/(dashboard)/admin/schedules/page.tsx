@@ -76,6 +76,7 @@ export default function ScheduledReportsPage() {
     const [editSchedule, setEditSchedule] = useState<Schedule | null>(null);
     const [isSaving, setIsSaving] = useState(false);
     const [triggeringId, setTriggeringId] = useState<number | null>(null);
+    const [testingEmail, setTestingEmail] = useState(false);
 
     const [form, setForm] = useState({
         reportId: '',
@@ -278,6 +279,27 @@ export default function ScheduledReportsPage() {
         }
     };
 
+    const handleTestEmail = async () => {
+        setTestingEmail(true);
+        try {
+            const res = await fetch('/api/admin/test-email', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({}),
+            });
+            const data = await res.json();
+            if (data.success) {
+                toast(data.message || 'ส่ง Email ทดสอบสำเร็จ!', 'success');
+            } else {
+                toast(data.message || 'ส่ง Email ไม่สำเร็จ', 'error');
+            }
+        } catch {
+            toast('ไม่สามารถเชื่อมต่อได้', 'error');
+        } finally {
+            setTestingEmail(false);
+        }
+    };
+
     const activeCount = schedules.filter(s => s.IsActive).length;
     const pausedCount = schedules.length - activeCount;
     const successCount = schedules.filter(s => s.LastRunStatus === 'success').length;
@@ -300,6 +322,9 @@ export default function ScheduledReportsPage() {
                         <p className="text-blue-100 text-sm mt-1.5">สร้างรายงานอัตโนมัติ แล้วส่ง Excel ทาง Email ตาม schedule ที่กำหนด</p>
                     </div>
                     <div className="flex gap-2">
+                        <button onClick={handleTestEmail} disabled={testingEmail} className="inline-flex items-center gap-2 px-4 py-2.5 bg-white/10 backdrop-blur-sm hover:bg-white/20 rounded-xl text-sm font-medium transition-all disabled:opacity-50">
+                            <Send className={`w-4 h-4 ${testingEmail ? 'animate-pulse' : ''}`} /> {testingEmail ? 'กำลังส่ง...' : 'ทดสอบ Email'}
+                        </button>
                         <button onClick={fetchSchedules} className="p-2.5 bg-white/10 backdrop-blur-sm hover:bg-white/20 rounded-xl transition-all">
                             <RefreshCw className={`w-5 h-5 ${isLoading ? 'animate-spin' : ''}`} />
                         </button>
