@@ -224,7 +224,7 @@ export default function StandardReportPage() {
             const worksheet = xlsx.utils.json_to_sheet(data.data);
             const workbook = xlsx.utils.book_new();
             xlsx.utils.book_append_sheet(workbook, worksheet, "Report Data");
-            xlsx.writeFile(workbook, `${reportName}_${dateStr}.xlsx`);
+            xlsx.writeFile(workbook, `${reportName}_${dateStr}.xlsb`, { bookType: 'xlsb' });
             toast(`ส่งออก ${data.data.length} รายการเรียบร้อย`, 'success');
         } catch {
             toast('ไม่สามารถส่งออกข้อมูลได้', 'error');

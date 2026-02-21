@@ -84,7 +84,7 @@ export async function GET(request) {
                 const ws = xlsx.utils.json_to_sheet(data);
                 const wb = xlsx.utils.book_new();
                 xlsx.utils.book_append_sheet(wb, ws, 'Report');
-                const excelBuffer = xlsx.write(wb, { type: 'buffer', bookType: 'xlsx' });
+                const excelBuffer = xlsx.write(wb, { type: 'buffer', bookType: 'xlsb' });
 
                 // 3. Send email
                 const companyNames = { 1: 'Sonic Interfreight (SNI)', 2: 'Grandlink Logistics (GRL)', 3: 'Sonic Autologis (SALOG)' };
@@ -122,7 +122,7 @@ export async function GET(request) {
                     `,
                     attachments: [
                         {
-                            filename: `${schedule.ReportName}_${companyName.split('(')[1]?.replace(')', '') || schedule.CompanyId}_${dateStr.replace(/\//g, '-')}.xlsx`,
+                            filename: `${schedule.ReportName}_${companyName.split('(')[1]?.replace(')', '') || schedule.CompanyId}_${dateStr.replace(/\//g, '-')}.xlsb`,
                             content: excelBuffer,
                             contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
                         },

@@ -311,7 +311,7 @@ export async function PATCH(request) {
         const worksheet = xlsx.utils.json_to_sheet(rows);
         const workbook = xlsx.utils.book_new();
         xlsx.utils.book_append_sheet(workbook, worksheet, 'Report Data');
-        const buffer = xlsx.write(workbook, { bookType: 'xlsx', type: 'buffer' });
+        const buffer = xlsx.write(workbook, { bookType: 'xlsb', type: 'buffer' });
 
         // Build params text for email
         const paramEntries = Object.entries(resolvedParams);
@@ -332,7 +332,7 @@ export async function PATCH(request) {
             subject: `${subject} (Manual)`,
             text: `รายงาน "${sched.ReportName}"\nบริษัท: ${companyName}${paramsText}\nถูกรันด้วยตนเองโดย ${user.fullName}\nพบข้อมูล ${rows.length} รายการ`,
             attachments: [{
-                filename: `${sched.ReportName}_${companyName.split('(')[1]?.replace(')', '') || sched.CompanyId}_${dateStr}.xlsx`,
+                filename: `${sched.ReportName}_${companyName.split('(')[1]?.replace(')', '') || sched.CompanyId}_${dateStr}.xlsb`,
                 content: buffer,
             }],
         });

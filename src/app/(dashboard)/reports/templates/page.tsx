@@ -224,7 +224,7 @@ export default function TemplateReportPage() {
         const worksheet = xlsx.utils.json_to_sheet(exportData);
         const workbook = xlsx.utils.book_new();
         xlsx.utils.book_append_sheet(workbook, worksheet, "Report Data");
-        xlsx.writeFile(workbook, `${reportName}_${dateStr}.xlsx`);
+        xlsx.writeFile(workbook, `${reportName}_${dateStr}.xlsb`, { bookType: 'xlsb' });
     };
 
     return (
