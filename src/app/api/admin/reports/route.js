@@ -46,11 +46,12 @@ export async function POST(request) {
                 paramStmt.input('ParameterName', sql.NVarChar(50));
                 paramStmt.input('DisplayLabel', sql.NVarChar(100));
                 paramStmt.input('InputType', sql.NVarChar(20));
+                paramStmt.input('LookupQuery', sql.NVarChar(sql.MAX));
                 paramStmt.input('OrderIndex', sql.Int);
 
                 const paramQuery = `
-                    INSERT INTO ReportParameters (ReportId, ParameterName, DisplayLabel, InputType, OrderIndex)
-                    VALUES (@ReportId, @ParameterName, @DisplayLabel, @InputType, @OrderIndex);
+                    INSERT INTO ReportParameters (ReportId, ParameterName, DisplayLabel, InputType, LookupQuery, OrderIndex)
+                    VALUES (@ReportId, @ParameterName, @DisplayLabel, @InputType, @LookupQuery, @OrderIndex);
                 `;
 
                 await paramStmt.prepare(paramQuery);
@@ -62,6 +63,7 @@ export async function POST(request) {
                         ParameterName: p.ParameterName,
                         DisplayLabel: p.DisplayLabel || p.ParameterName,
                         InputType: p.InputType || 'text',
+                        LookupQuery: p.LookupQuery || null,
                         OrderIndex: i + 1
                     });
                 }

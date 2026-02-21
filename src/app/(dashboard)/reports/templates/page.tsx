@@ -5,6 +5,7 @@ import { useState, useEffect } from "react";
 import * as xlsx from 'xlsx';
 import { useAuth } from "@/components/providers/AuthProvider";
 import { useToast } from "@/components/providers/ToastProvider";
+import TypeaheadInput from "@/components/TypeaheadInput";
 
 export default function TemplateReportPage() {
     const { user } = useAuth();
@@ -338,7 +339,16 @@ export default function TemplateReportPage() {
                                     <label className="block text-xs font-medium text-slate-500 mb-1">
                                         {param.DisplayLabel || param.ParameterName}
                                     </label>
-                                    {param.InputType === 'date' ? (
+                                    {param.LookupQuery ? (
+                                        <TypeaheadInput
+                                            value={paramValues[param.ParameterName] || ''}
+                                            onChange={(val) => handleParamChange(param.ParameterName, val)}
+                                            reportId={selectedReportId}
+                                            paramName={param.ParameterName}
+                                            companyId={selectedCompany}
+                                            placeholder={`ค้นหา${param.DisplayLabel || param.ParameterName}...`}
+                                        />
+                                    ) : param.InputType === 'date' ? (
                                         <input
                                             type="date"
                                             value={paramValues[param.ParameterName] || ''}

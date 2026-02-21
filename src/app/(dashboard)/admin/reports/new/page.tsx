@@ -56,7 +56,8 @@ export default function NewReportPage() {
             return existing || {
                 ParameterName: paramName,
                 DisplayLabel: paramName.replace('@', ''),
-                InputType: 'text'
+                InputType: 'text',
+                LookupQuery: '',
             };
         });
 
@@ -336,6 +337,18 @@ export default function NewReportPage() {
                                                             <option value="text">ข้อความ (Textbox)</option>
                                                             <option value="number">ตัวเลข</option>
                                                         </select>
+                                                    </div>
+                                                    <div className="md:col-span-12">
+                                                        <label className="block text-xs font-semibold text-slate-500 uppercase tracking-widest mb-1">
+                                                            Lookup Query <span className="text-slate-400 normal-case font-normal">(SQL ค้นหาแบบ Typeahead — ใช้ @q แทนค่าที่ user พิมพ์, ต้อง return คอลัมน์ value และ label)</span>
+                                                        </label>
+                                                        <textarea
+                                                            value={param.LookupQuery || ''}
+                                                            onChange={e => handleParamChange(index, 'LookupQuery', e.target.value)}
+                                                            placeholder={`ตัวอย่าง: SELECT TOP 20 JOBNO AS value, JOBNO + ' - ' + EXPORTERNAME AS label FROM SFJOB WHERE JOBNO LIKE @q + '%' ORDER BY JOBNO DESC`}
+                                                            rows={2}
+                                                            className="w-full px-3 py-1.5 border border-slate-200 rounded-md text-xs font-mono focus:ring-1 focus:ring-blue-500 outline-none resize-none bg-slate-50"
+                                                        />
                                                     </div>
                                                 </div>
                                             </div>

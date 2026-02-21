@@ -13,8 +13,16 @@ export async function GET(request) {
 
         const pool = await connectToCentralDB();
 
+        // Auto-add LookupQuery column if missing
+        try {
+            await pool.request().query(`
+                IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = 'ReportParameters' AND COLUMN_NAME = 'LookupQuery')
+                ALTER TABLE ReportParameters ADD LookupQuery NVARCHAR(MAX) NULL;
+            `);
+        } catch { }
+
         const query = `
-            SELECT ParameterId, ParameterName, DisplayLabel, InputType, DropdownQuery, OrderIndex 
+            SELECT ParameterId, ParameterName, DisplayLabel, InputType, DropdownQuery, LookupQuery, OrderIndex 
             FROM ReportParameters
             WHERE ReportId = @ReportId
             ORDER BY OrderIndex;
