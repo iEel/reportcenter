@@ -3,6 +3,36 @@ import sql from 'mssql';
 import { connectToCentralDB, connectToCompanyDB } from '@/lib/db';
 import { sendMail } from '@/lib/email';
 import * as xlsx from 'xlsx';
+import fs from 'fs';
+import path from 'path';
+
+// Cleanup old job files (>24h)
+async function cleanupOldJobs() {
+    try {
+        const jobsDir = path.join(process.cwd(), 'tmp', 'jobs');
+        if (fs.existsSync(jobsDir)) {
+            const files = fs.readdirSync(jobsDir);
+            const cutoff = Date.now() - 24 * 60 * 60 * 1000;
+            let deleted = 0;
+            for (const file of files) {
+                const filePath = path.join(jobsDir, file);
+                const stat = fs.statSync(filePath);
+                if (stat.mtimeMs < cutoff) {
+                    fs.unlinkSync(filePath);
+                    deleted++;
+                }
+            }
+            if (deleted > 0) console.log(`[Cleanup] Deleted ${deleted} old job files`);
+        }
+        // Cleanup DB records older than 7 days
+        const pool = await connectToCentralDB();
+        await pool.request().query(`
+            DELETE FROM ReportJobs WHERE CreatedAt < DATEADD(DAY, -7, GETDATE())
+        `);
+    } catch (err) {
+        console.warn('[Cleanup] Error:', err.message);
+    }
+}
 
 // Secret key to protect the cron endpoint from unauthorized access
 const CRON_SECRET = process.env.CRON_SECRET || 'rc-cron-secret-2026';
@@ -28,6 +58,8 @@ function resolveRelativeDate(preset) {
 // Usage: GET /api/cron/execute-schedules?secret=rc-cron-secret-2026
 export async function GET(request) {
     try {
+        // Cleanup old job files first
+        await cleanupOldJobs();
         const { searchParams } = new URL(request.url);
         const secret = searchParams.get('secret');
 
