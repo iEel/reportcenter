@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import sql from 'mssql';
 import { connectToCentralDB, connectToCompanyDB } from '@/lib/db';
-import { createMailTransporter } from '@/lib/email';
+import { sendMail } from '@/lib/email';
 import * as xlsx from 'xlsx';
 
 // Secret key to protect the cron endpoint from unauthorized access
@@ -52,7 +52,6 @@ export async function GET(request) {
             return NextResponse.json({ success: true, message: 'No schedules due', executed: 0 });
         }
 
-        const transporter = await createMailTransporter();
         const results = [];
 
 
@@ -115,7 +114,7 @@ export async function GET(request) {
                     ],
                 };
 
-                await transporter.sendMail(mailOptions);
+                await sendMail(mailOptions);
 
                 // 4. Update schedule: LastRunAt, LastRunStatus, NextRunAt
                 const nextRun = calculateNextRun(schedule.Frequency, schedule.RunTime, schedule.DayOfWeek, schedule.DayOfMonth);

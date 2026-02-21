@@ -3,7 +3,7 @@ import sql from 'mssql';
 import { connectToCentralDB } from '@/lib/db';
 import { verifyToken } from '@/lib/auth';
 import { cookies } from 'next/headers';
-import { createMailTransporter } from '@/lib/email';
+import { sendMail } from '@/lib/email';
 
 // Auto-create ReportSchedules table with email fields
 async function ensureTable(pool) {
@@ -310,13 +310,11 @@ export async function PATCH(request) {
         xlsx.utils.book_append_sheet(workbook, worksheet, 'Report Data');
         const buffer = xlsx.write(workbook, { bookType: 'xlsx', type: 'buffer' });
 
-        // Send email via shared OAuth2 utility
-        const transporter = await createMailTransporter();
-
+        // Send email via Graph API or SMTP fallback
         const dateStr = new Date().toISOString().split('T')[0];
         const subject = sched.EmailSubject || `[ReportCenter] ${sched.ReportName} - ${dateStr}`;
 
-        await transporter.sendMail({
+        await sendMail({
             from: process.env.SMTP_FROM || process.env.SMTP_USER,
             to: sched.EmailTo,
             cc: sched.EmailCc || undefined,
