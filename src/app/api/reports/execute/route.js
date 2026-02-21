@@ -66,20 +66,27 @@ export async function POST(request) {
         let totalRows = 0;
 
         if (usePagination) {
-            // Count total rows first
+            // Strip ORDER BY from original query for COUNT (SQL Server doesn't allow it in subqueries)
+            const orderByMatch = tSqlQuery.match(/\bORDER\s+BY\b[\s\S]*$/i);
+            const queryWithoutOrderBy = orderByMatch
+                ? tSqlQuery.substring(0, tSqlQuery.lastIndexOf(orderByMatch[0]))
+                : tSqlQuery;
+            const orderByClause = orderByMatch ? orderByMatch[0] : 'ORDER BY (SELECT NULL)';
+
+            // Count total rows (without ORDER BY)
             const countReq = companyPool.request();
             bindParams(countReq);
-            const countResult = await countReq.query(`SELECT COUNT(*) AS total FROM (${tSqlQuery}) AS _countQuery`);
+            const countResult = await countReq.query(`SELECT COUNT(*) AS total FROM (${queryWithoutOrderBy}) AS _countQuery`);
             totalRows = countResult.recordset[0].total;
 
-            // Paginated query using OFFSET/FETCH
+            // Paginated query — use original ORDER BY if exists
             const offset = (parseInt(page) - 1) * parseInt(pageSize);
             const dataReq = companyPool.request();
             bindParams(dataReq);
             dataReq.input('_offset', sql.Int, offset);
             dataReq.input('_pageSize', sql.Int, parseInt(pageSize));
             dataResult = await dataReq.query(
-                `SELECT * FROM (${tSqlQuery}) AS _paged ORDER BY (SELECT NULL) OFFSET @_offset ROWS FETCH NEXT @_pageSize ROWS ONLY`
+                `${queryWithoutOrderBy} ${orderByClause} OFFSET @_offset ROWS FETCH NEXT @_pageSize ROWS ONLY`
             );
         } else {
             // Full query (no pagination or export mode)
