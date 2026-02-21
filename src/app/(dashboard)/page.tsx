@@ -8,8 +8,8 @@ import { timeAgo } from '@/lib/dateUtils';
 
 interface DashboardStats {
   totalReports: number;
-  totalUsers: number;
-  totalRoles: number;
+  totalUsers: number | null;
+  totalRoles: number | null;
   standardReports: number;
   templateReports: number;
 }
@@ -29,6 +29,7 @@ export default function Home() {
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [logs, setLogs] = useState<ActivityLog[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const isAdmin = user?.roleName?.toLowerCase() === 'admin';
 
   const fetchDashboard = async () => {
     setIsLoading(true);
@@ -92,27 +93,31 @@ export default function Home() {
           </div>
         </div>
 
-        <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-5 hover:shadow-md transition-shadow">
-          <div className="flex items-center gap-3 mb-3">
-            <div className="w-10 h-10 bg-emerald-100 rounded-xl flex items-center justify-center">
-              <Users className="w-5 h-5 text-emerald-600" />
+        {isAdmin && (
+          <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-5 hover:shadow-md transition-shadow">
+            <div className="flex items-center gap-3 mb-3">
+              <div className="w-10 h-10 bg-emerald-100 rounded-xl flex items-center justify-center">
+                <Users className="w-5 h-5 text-emerald-600" />
+              </div>
+              <span className="text-sm text-slate-500 font-medium">ผู้ใช้งาน</span>
             </div>
-            <span className="text-sm text-slate-500 font-medium">ผู้ใช้งาน</span>
+            <p className="text-3xl font-bold text-slate-900">{isLoading ? '—' : stats?.totalUsers || 0}</p>
+            <p className="text-xs text-slate-400 mt-2">บัญชีที่ Active</p>
           </div>
-          <p className="text-3xl font-bold text-slate-900">{isLoading ? '—' : stats?.totalUsers || 0}</p>
-          <p className="text-xs text-slate-400 mt-2">บัญชีที่ Active</p>
-        </div>
+        )}
 
-        <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-5 hover:shadow-md transition-shadow">
-          <div className="flex items-center gap-3 mb-3">
-            <div className="w-10 h-10 bg-purple-100 rounded-xl flex items-center justify-center">
-              <Shield className="w-5 h-5 text-purple-600" />
+        {isAdmin && (
+          <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-5 hover:shadow-md transition-shadow">
+            <div className="flex items-center gap-3 mb-3">
+              <div className="w-10 h-10 bg-purple-100 rounded-xl flex items-center justify-center">
+                <Shield className="w-5 h-5 text-purple-600" />
+              </div>
+              <span className="text-sm text-slate-500 font-medium">ตำแหน่ง/สิทธิ์</span>
             </div>
-            <span className="text-sm text-slate-500 font-medium">ตำแหน่ง/สิทธิ์</span>
+            <p className="text-3xl font-bold text-slate-900">{isLoading ? '—' : stats?.totalRoles || 0}</p>
+            <p className="text-xs text-slate-400 mt-2">Role ในระบบ</p>
           </div>
-          <p className="text-3xl font-bold text-slate-900">{isLoading ? '—' : stats?.totalRoles || 0}</p>
-          <p className="text-xs text-slate-400 mt-2">Role ในระบบ</p>
-        </div>
+        )}
 
         <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-5 hover:shadow-md transition-shadow">
           <div className="flex items-center gap-3 mb-3">
@@ -180,7 +185,7 @@ export default function Home() {
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-lg font-bold text-slate-800 flex items-center gap-2">
               <Clock className="w-5 h-5 text-slate-400" />
-              กิจกรรมล่าสุด
+              กิจกรรมล่าสุด{!isAdmin && ' ของคุณ'}
             </h2>
             <button onClick={fetchDashboard} className="p-2 hover:bg-slate-100 rounded-lg text-slate-400 hover:text-slate-600 transition-colors">
               <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
