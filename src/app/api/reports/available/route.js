@@ -1,28 +1,54 @@
 import { NextResponse } from 'next/server';
 import sql from 'mssql';
 import { connectToCentralDB } from '@/lib/db';
+import { verifyToken } from '@/lib/auth';
+import { cookies } from 'next/headers';
 
 export async function GET(request) {
     try {
-        // In a real application, you would get the user's role from their authentication token (NextAuth, JWT, etc.)
-        // For this demo, we'll simulate a logged-in user with RoleId = 2 (Sales)
-        const userRoleId = 2; // Hardcoded for demonstration
+        // Get user's RoleId from JWT
+        const cookieStore = await cookies();
+        const token = cookieStore.get('rc_token')?.value;
+        let userRoleId = null;
+        let isAdmin = false;
+
+        if (token) {
+            try {
+                const payload = await verifyToken(token);
+                userRoleId = payload.roleId;
+                isAdmin = payload.roleName?.toLowerCase() === 'admin';
+            } catch (e) {
+                return NextResponse.json({ success: false, message: 'Unauthorized' }, { status: 401 });
+            }
+        } else {
+            return NextResponse.json({ success: false, message: 'Unauthorized' }, { status: 401 });
+        }
 
         const pool = await connectToCentralDB();
 
-        const query = `
-            SELECT r.ReportId, r.ReportName, r.Description, r.ReportType, r.EmailTemplateContent
-            FROM Reports r
-            LEFT JOIN ReportRoleMapping m ON r.ReportId = m.ReportId
-            WHERE r.IsActive = 1 
-              AND (r.IsPublic = 1 OR m.RoleId = @UserRoleId)
-            GROUP BY r.ReportId, r.ReportName, r.Description, r.ReportType, r.EmailTemplateContent
-            ORDER BY r.ReportType, r.ReportName;
-        `;
+        let result;
 
-        const result = await pool.request()
-            .input('UserRoleId', sql.Int, userRoleId)
-            .query(query);
+        if (isAdmin) {
+            // Admin sees all active reports
+            result = await pool.request().query(`
+                SELECT r.ReportId, r.ReportName, r.Description, r.ReportType, r.EmailTemplateContent
+                FROM Reports r
+                WHERE r.IsActive = 1
+                ORDER BY r.ReportType, r.ReportName
+            `);
+        } else {
+            // Regular user: only reports assigned to their role
+            result = await pool.request()
+                .input('UserRoleId', sql.Int, userRoleId)
+                .query(`
+                    SELECT DISTINCT r.ReportId, r.ReportName, r.Description, r.ReportType, r.EmailTemplateContent
+                    FROM Reports r
+                    INNER JOIN ReportRoleMapping m ON r.ReportId = m.ReportId
+                    WHERE r.IsActive = 1 
+                      AND m.RoleId = @UserRoleId
+                    ORDER BY r.ReportType, r.ReportName
+                `);
+        }
 
         return NextResponse.json({ success: true, reports: result.recordset });
 

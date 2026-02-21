@@ -38,22 +38,22 @@ export async function GET() {
             standardCount = byTypeResult.recordset.find(r => r.ReportType === 1)?.total || 0;
             templateCount = byTypeResult.recordset.find(r => r.ReportType === 2)?.total || 0;
         } else if (currentUser?.roleId) {
-            // User sees only reports assigned to their role + public reports
+            // User sees only reports assigned to their role
             const reportsResult = await pool.request()
                 .input('RoleId', sql.Int, currentUser.roleId)
                 .query(`
                     SELECT COUNT(DISTINCT r.ReportId) AS total
                     FROM Reports r
-                    LEFT JOIN ReportRoleMapping rrm ON r.ReportId = rrm.ReportId
-                    WHERE r.IsActive = 1 AND (r.IsPublic = 1 OR rrm.RoleId = @RoleId)
+                    INNER JOIN ReportRoleMapping rrm ON r.ReportId = rrm.ReportId
+                    WHERE r.IsActive = 1 AND rrm.RoleId = @RoleId
                 `);
             const byTypeResult = await pool.request()
                 .input('RoleId', sql.Int, currentUser.roleId)
                 .query(`
                     SELECT r.ReportType, COUNT(DISTINCT r.ReportId) AS total
                     FROM Reports r
-                    LEFT JOIN ReportRoleMapping rrm ON r.ReportId = rrm.ReportId
-                    WHERE r.IsActive = 1 AND (r.IsPublic = 1 OR rrm.RoleId = @RoleId)
+                    INNER JOIN ReportRoleMapping rrm ON r.ReportId = rrm.ReportId
+                    WHERE r.IsActive = 1 AND rrm.RoleId = @RoleId
                     GROUP BY r.ReportType
                 `);
             totalReportsQuery = reportsResult.recordset[0].total;
