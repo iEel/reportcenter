@@ -140,7 +140,7 @@ export default function TemplateReportPage() {
         setParamValues(prev => ({ ...prev, [paramName]: value }));
     };
 
-    const handleExecuteReport = async () => {
+    const handleExecuteReport = async (overrideParams?: Record<string, string>) => {
         if (!selectedReportId) {
             alert("กรุณาเลือกรายงานก่อนดึงข้อมูล");
             return;
@@ -150,6 +150,8 @@ export default function TemplateReportPage() {
         setExecutionError(null);
         setReportData(null);
 
+        const finalParams = overrideParams || paramValues;
+
         try {
             const res = await fetch('/api/reports/execute', {
                 method: 'POST',
@@ -157,7 +159,7 @@ export default function TemplateReportPage() {
                 body: JSON.stringify({
                     reportId: selectedReportId,
                     companyId: selectedCompany,
-                    parameters: paramValues
+                    parameters: finalParams
                 })
             });
 
@@ -343,6 +345,11 @@ export default function TemplateReportPage() {
                                         <TypeaheadInput
                                             value={paramValues[param.ParameterName] || ''}
                                             onChange={(val) => handleParamChange(param.ParameterName, val)}
+                                            onSelect={(val) => {
+                                                const updated = { ...paramValues, [param.ParameterName]: val };
+                                                setParamValues(updated);
+                                                handleExecuteReport(updated);
+                                            }}
                                             reportId={selectedReportId}
                                             paramName={param.ParameterName}
                                             companyId={selectedCompany}
@@ -375,7 +382,7 @@ export default function TemplateReportPage() {
 
                             <div className="flex items-end mt-2 lg:mt-0">
                                 <button
-                                    onClick={handleExecuteReport}
+                                    onClick={() => handleExecuteReport()}
                                     disabled={isExecuting}
                                     className="w-full bg-slate-900 hover:bg-slate-800 text-white py-2 px-4 rounded-lg flex items-center justify-center gap-2 font-medium transition-colors shadow-sm active:scale-95 disabled:opacity-70 disabled:active:scale-100"
                                 >

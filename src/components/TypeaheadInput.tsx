@@ -11,6 +11,7 @@ interface Suggestion {
 interface TypeaheadInputProps {
     value: string;
     onChange: (value: string) => void;
+    onSelect?: (value: string) => void;
     reportId: string;
     paramName: string;
     companyId: string;
@@ -21,6 +22,7 @@ interface TypeaheadInputProps {
 export default function TypeaheadInput({
     value,
     onChange,
+    onSelect,
     reportId,
     paramName,
     companyId,
@@ -93,6 +95,7 @@ export default function TypeaheadInput({
         onChange(suggestion.value);
         setIsOpen(false);
         setSuggestions([]);
+        onSelect?.(suggestion.value);
     };
 
     const handleClear = () => {
