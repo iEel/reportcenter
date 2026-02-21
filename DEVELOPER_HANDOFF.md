@@ -1,6 +1,6 @@
 # ReportCenter — Developer Handoff
 
-> **Version:** 5.0  
+> **Version:** 5.1  
 > **Last Updated:** 2026-02-22  
 > **Tech Stack:** Next.js 16.1.6 + React 19 + Tailwind CSS 4 + MSSQL (mssql driver) + Microsoft Graph API (OAuth2) / Nodemailer (SMTP fallback) + @azure/msal-node
 
@@ -327,6 +327,9 @@ SMTP_USER=your-email@company.com
 SMTP_PASS=your-app-password
 SMTP_FROM=ReportCenter <your-email@company.com>
 
+# Server Port (default 3000)
+PORT=4000
+
 # Cron endpoint protection
 CRON_SECRET=rc-cron-secret-2026
 
@@ -456,6 +459,19 @@ Cron Job เรียก GET /api/cron/execute-schedules?secret=<CRON_SECRET>
 - Admin กดปุ่ม ⚡ ที่ schedule card → `PATCH /api/admin/schedules` → รัน SQL + สร้าง Excel + ส่ง Email ทันที
 - แสดง loading spinner ขณะรัน + toast notification
 - Subject มี `(Manual)` ต่อท้าย + บันทึก `RUN_SCHEDULE` ใน ActivityLogs
+
+### Email Content
+Email ที่ส่งจากระบบ (ทั้ง cron + manual) จะมีข้อมูลดังนี้:
+
+| ส่วน | ตัวอย่าง |
+|------|----------|
+| **Subject** | `[ReportCenter] Cutoff - Grandlink Logistics (GRL) - 22/02/2569` |
+| **บริษัท** | Grandlink Logistics (GRL) |
+| **ตัวแปร** | begin: 2026-01-01, end: 2026-01-31 |
+| **จำนวนข้อมูล** | 150 แถว |
+| **ชื่อไฟล์แนบ** | `Cutoff_GRL_22-02-2569.xlsx` |
+
+> Company names ถูก map จาก CompanyId: `{ 1: 'Sonic Interfreight (SNI)', 2: 'Grandlink Logistics (GRL)', 3: 'Sonic Autologis (SALOG)' }`
 
 ### Parameters & Relative Dates
 Report ที่มี parameters → admin เลือก **relative date preset** ใน modal:
