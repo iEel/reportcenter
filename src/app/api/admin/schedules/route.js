@@ -276,9 +276,16 @@ export async function PATCH(request) {
                     // Resolve relative date presets
                     if (def.InputType === 'date' && typeof value === 'string') {
                         const now = new Date();
-                        if (value === 'TODAY') value = now.toISOString().split('T')[0];
-                        else if (value === 'YESTERDAY') { now.setDate(now.getDate() - 1); value = now.toISOString().split('T')[0]; }
-                        else if (value === 'MONTH_START') value = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
+                        const fmt = (d) => d.toISOString().split('T')[0];
+                        switch (value) {
+                            case 'TODAY': value = fmt(now); break;
+                            case 'YESTERDAY': { const d = new Date(now); d.setDate(d.getDate() - 1); value = fmt(d); break; }
+                            case 'MONTH_START': value = fmt(new Date(now.getFullYear(), now.getMonth(), 1)); break;
+                            case 'MONTH_END': value = fmt(new Date(now.getFullYear(), now.getMonth() + 1, 0)); break;
+                            case 'PREV_MONTH_START': value = fmt(new Date(now.getFullYear(), now.getMonth() - 1, 1)); break;
+                            case 'PREV_MONTH_END': value = fmt(new Date(now.getFullYear(), now.getMonth(), 0)); break;
+                            case 'YEAR_START': value = fmt(new Date(now.getFullYear(), 0, 1)); break;
+                        }
                     }
 
                     if (value !== undefined && value !== '') {
