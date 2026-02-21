@@ -115,7 +115,8 @@ export async function POST(request) {
                 const ws = xlsx.utils.json_to_sheet(data);
                 const wb = xlsx.utils.book_new();
                 xlsx.utils.book_append_sheet(wb, ws, 'Report');
-                xlsx.writeFile(wb, filePath, { bookType: 'xlsb' });
+                const buf = xlsx.write(wb, { type: 'buffer', bookType: 'xlsb' });
+                fs.writeFileSync(filePath, buf);
 
                 // Update job: done
                 const pool2 = await connectToCentralDB();
