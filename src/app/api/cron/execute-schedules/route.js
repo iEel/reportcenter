@@ -85,10 +85,12 @@ export async function GET(request) {
                 const excelBuffer = xlsx.write(wb, { type: 'buffer', bookType: 'xlsx' });
 
                 // 3. Send email
+                const companyNames = { 1: 'Sonic Interfreight (SNI)', 2: 'Grandlink Logistics (GRL)', 3: 'Sonic Autologis (SALOG)' };
+                const companyName = companyNames[schedule.CompanyId] || `Company ${schedule.CompanyId}`;
                 const dateStr = now.toLocaleDateString('th-TH', { day: '2-digit', month: '2-digit', year: 'numeric' });
                 const subject = schedule.EmailSubject
                     ? schedule.EmailSubject.replace('{date}', dateStr).replace('{report}', schedule.ReportName)
-                    : `[ReportCenter] ${schedule.ReportName} - ${dateStr}`;
+                    : `[ReportCenter] ${schedule.ReportName} - ${companyName} - ${dateStr}`;
 
                 const mailOptions = {
                     from: process.env.SMTP_FROM || process.env.SMTP_USER,
@@ -98,6 +100,7 @@ export async function GET(request) {
                     html: `
                         <div style="font-family: 'Segoe UI', sans-serif; padding: 20px;">
                             <h2 style="color: #1e293b;">📊 ${schedule.ReportName}</h2>
+                            <p style="color: #64748b;">บริษัท: <strong>${companyName}</strong></p>
                             <p style="color: #64748b;">กำหนดการ: <strong>${schedule.ScheduleName}</strong></p>
                             <p style="color: #64748b;">สร้างเมื่อ: ${dateStr}</p>
                             <p style="color: #64748b;">จำนวนข้อมูล: <strong>${data.length} แถว</strong></p>
@@ -107,7 +110,7 @@ export async function GET(request) {
                     `,
                     attachments: [
                         {
-                            filename: `${schedule.ReportName}_${dateStr.replace(/\//g, '-')}.xlsx`,
+                            filename: `${schedule.ReportName}_${companyName.split('(')[1]?.replace(')', '') || schedule.CompanyId}_${dateStr.replace(/\//g, '-')}.xlsx`,
                             content: excelBuffer,
                             contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
                         },

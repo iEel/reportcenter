@@ -311,17 +311,19 @@ export async function PATCH(request) {
         const buffer = xlsx.write(workbook, { bookType: 'xlsx', type: 'buffer' });
 
         // Send email via Graph API or SMTP fallback
+        const companyNames = { 1: 'Sonic Interfreight (SNI)', 2: 'Grandlink Logistics (GRL)', 3: 'Sonic Autologis (SALOG)' };
+        const companyName = companyNames[sched.CompanyId] || `Company ${sched.CompanyId}`;
         const dateStr = new Date().toISOString().split('T')[0];
-        const subject = sched.EmailSubject || `[ReportCenter] ${sched.ReportName} - ${dateStr}`;
+        const subject = sched.EmailSubject || `[ReportCenter] ${sched.ReportName} - ${companyName} - ${dateStr}`;
 
         await sendMail({
             from: process.env.SMTP_FROM || process.env.SMTP_USER,
             to: sched.EmailTo,
             cc: sched.EmailCc || undefined,
             subject: `${subject} (Manual)`,
-            text: `รายงาน "${sched.ReportName}" ถูกรันด้วยตนเองโดย ${user.fullName}\nพบข้อมูล ${rows.length} รายการ`,
+            text: `รายงาน "${sched.ReportName}"\nบริษัท: ${companyName}\nถูกรันด้วยตนเองโดย ${user.fullName}\nพบข้อมูล ${rows.length} รายการ`,
             attachments: [{
-                filename: `${sched.ReportName}_${dateStr}.xlsx`,
+                filename: `${sched.ReportName}_${companyName.split('(')[1]?.replace(')', '') || sched.CompanyId}_${dateStr}.xlsx`,
                 content: buffer,
             }],
         });
