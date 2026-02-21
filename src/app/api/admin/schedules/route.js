@@ -4,7 +4,7 @@ import { connectToCentralDB } from '@/lib/db';
 import { verifyToken } from '@/lib/auth';
 import { cookies } from 'next/headers';
 
-// Auto-create ReportSchedules table
+// Auto-create ReportSchedules table with email fields
 async function ensureTable(pool) {
     await pool.request().query(`
         IF OBJECT_ID('ReportSchedules') IS NULL
@@ -12,14 +12,18 @@ async function ensureTable(pool) {
             ScheduleId INT IDENTITY(1,1) PRIMARY KEY,
             ReportId INT NOT NULL,
             ScheduleName NVARCHAR(200) NOT NULL,
-            Frequency NVARCHAR(20) NOT NULL,  -- 'daily', 'weekly', 'monthly'
-            DayOfWeek INT NULL,               -- 0=Sun..6=Sat (for weekly)
-            DayOfMonth INT NULL,              -- 1-31 (for monthly)
-            RunTime NVARCHAR(5) NOT NULL,     -- 'HH:mm' e.g. '08:00'
+            Frequency NVARCHAR(20) NOT NULL,
+            DayOfWeek INT NULL,
+            DayOfMonth INT NULL,
+            RunTime NVARCHAR(5) NOT NULL,
             CompanyId INT NOT NULL,
-            Parameters NVARCHAR(MAX) NULL,    -- JSON string of param values
+            Parameters NVARCHAR(MAX) NULL,
+            EmailTo NVARCHAR(500) NOT NULL,
+            EmailCc NVARCHAR(500) NULL,
+            EmailSubject NVARCHAR(300) NULL,
             IsActive BIT DEFAULT 1,
             LastRunAt DATETIME NULL,
+            LastRunStatus NVARCHAR(20) NULL,
             NextRunAt DATETIME NULL,
             CreatedBy INT NOT NULL,
             CreatedAt DATETIME DEFAULT GETDATE(),
@@ -27,9 +31,22 @@ async function ensureTable(pool) {
             FOREIGN KEY (ReportId) REFERENCES Reports(ReportId)
         )
     `);
+
+    // Add email columns if table already exists but columns don't
+    try {
+        await pool.request().query(`
+            IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('ReportSchedules') AND name = 'EmailTo')
+            ALTER TABLE ReportSchedules ADD EmailTo NVARCHAR(500) NULL;
+            IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('ReportSchedules') AND name = 'EmailCc')
+            ALTER TABLE ReportSchedules ADD EmailCc NVARCHAR(500) NULL;
+            IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('ReportSchedules') AND name = 'EmailSubject')
+            ALTER TABLE ReportSchedules ADD EmailSubject NVARCHAR(300) NULL;
+            IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('ReportSchedules') AND name = 'LastRunStatus')
+            ALTER TABLE ReportSchedules ADD LastRunStatus NVARCHAR(20) NULL;
+        `);
+    } catch (e) { /* columns may already exist */ }
 }
 
-// Helper: calculate next run datetime
 function calculateNextRun(frequency, runTime, dayOfWeek, dayOfMonth) {
     const now = new Date();
     const [hour, minute] = runTime.split(':').map(Number);
@@ -50,7 +67,6 @@ function calculateNextRun(frequency, runTime, dayOfWeek, dayOfMonth) {
             next.setDate(dayOfMonth);
         }
     }
-
     return next;
 }
 
@@ -95,7 +111,7 @@ export async function POST(request) {
         }
 
         const body = await request.json();
-        const { reportId, scheduleName, frequency, dayOfWeek, dayOfMonth, runTime, companyId, parameters } = body;
+        const { reportId, scheduleName, frequency, dayOfWeek, dayOfMonth, runTime, companyId, parameters, emailTo, emailCc, emailSubject } = body;
 
         const pool = await connectToCentralDB();
         await ensureTable(pool);
@@ -111,11 +127,14 @@ export async function POST(request) {
             .input('RunTime', sql.NVarChar, runTime)
             .input('CompanyId', sql.Int, companyId)
             .input('Parameters', sql.NVarChar, parameters ? JSON.stringify(parameters) : null)
+            .input('EmailTo', sql.NVarChar, emailTo)
+            .input('EmailCc', sql.NVarChar, emailCc || null)
+            .input('EmailSubject', sql.NVarChar, emailSubject || null)
             .input('NextRunAt', sql.DateTime, nextRun)
             .input('CreatedBy', sql.Int, user.userId)
             .query(`
-                INSERT INTO ReportSchedules (ReportId, ScheduleName, Frequency, DayOfWeek, DayOfMonth, RunTime, CompanyId, Parameters, NextRunAt, CreatedBy)
-                VALUES (@ReportId, @ScheduleName, @Frequency, @DayOfWeek, @DayOfMonth, @RunTime, @CompanyId, @Parameters, @NextRunAt, @CreatedBy)
+                INSERT INTO ReportSchedules (ReportId, ScheduleName, Frequency, DayOfWeek, DayOfMonth, RunTime, CompanyId, Parameters, EmailTo, EmailCc, EmailSubject, NextRunAt, CreatedBy)
+                VALUES (@ReportId, @ScheduleName, @Frequency, @DayOfWeek, @DayOfMonth, @RunTime, @CompanyId, @Parameters, @EmailTo, @EmailCc, @EmailSubject, @NextRunAt, @CreatedBy)
             `);
 
         return NextResponse.json({ success: true });
@@ -137,7 +156,7 @@ export async function PUT(request) {
         }
 
         const body = await request.json();
-        const { scheduleId, scheduleName, frequency, dayOfWeek, dayOfMonth, runTime, companyId, parameters, isActive } = body;
+        const { scheduleId, scheduleName, frequency, dayOfWeek, dayOfMonth, runTime, companyId, parameters, isActive, emailTo, emailCc, emailSubject } = body;
 
         const pool = await connectToCentralDB();
         const nextRun = calculateNextRun(frequency, runTime, dayOfWeek, dayOfMonth);
@@ -152,6 +171,9 @@ export async function PUT(request) {
             .input('CompanyId', sql.Int, companyId)
             .input('Parameters', sql.NVarChar, parameters ? JSON.stringify(parameters) : null)
             .input('IsActive', sql.Bit, isActive ? 1 : 0)
+            .input('EmailTo', sql.NVarChar, emailTo)
+            .input('EmailCc', sql.NVarChar, emailCc || null)
+            .input('EmailSubject', sql.NVarChar, emailSubject || null)
             .input('NextRunAt', sql.DateTime, nextRun)
             .query(`
                 UPDATE ReportSchedules SET
@@ -159,6 +181,7 @@ export async function PUT(request) {
                     DayOfWeek = @DayOfWeek, DayOfMonth = @DayOfMonth,
                     RunTime = @RunTime, CompanyId = @CompanyId,
                     Parameters = @Parameters, IsActive = @IsActive,
+                    EmailTo = @EmailTo, EmailCc = @EmailCc, EmailSubject = @EmailSubject,
                     NextRunAt = @NextRunAt, UpdatedAt = GETDATE()
                 WHERE ScheduleId = @ScheduleId
             `);

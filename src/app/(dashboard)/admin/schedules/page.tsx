@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react";
-import { Calendar, Plus, Clock, Trash2, RefreshCw, Play, Pause, Edit3, X, CheckCircle2, AlertCircle } from "lucide-react";
+import { Calendar, Plus, Clock, Trash2, RefreshCw, Play, Pause, Edit3, X, Mail, Send } from "lucide-react";
 import { useToast } from "@/components/providers/ToastProvider";
 import { useConfirm } from "@/components/providers/ConfirmProvider";
 import { formatDateTime } from "@/lib/dateUtils";
@@ -18,8 +18,12 @@ interface Schedule {
     RunTime: string;
     CompanyId: number;
     Parameters: string | null;
+    EmailTo: string;
+    EmailCc: string | null;
+    EmailSubject: string | null;
     IsActive: boolean;
     LastRunAt: string | null;
+    LastRunStatus: string | null;
     NextRunAt: string | null;
     CreatedByName: string;
     CreatedAt: string;
@@ -49,7 +53,6 @@ export default function ScheduledReportsPage() {
     const [showModal, setShowModal] = useState(false);
     const [editSchedule, setEditSchedule] = useState<Schedule | null>(null);
 
-    // Form state
     const [form, setForm] = useState({
         reportId: '',
         scheduleName: '',
@@ -59,6 +62,9 @@ export default function ScheduledReportsPage() {
         runTime: '08:00',
         companyId: '1',
         isActive: true,
+        emailTo: '',
+        emailCc: '',
+        emailSubject: '',
     });
 
     const fetchSchedules = async () => {
@@ -91,7 +97,7 @@ export default function ScheduledReportsPage() {
 
     const openCreateModal = () => {
         setEditSchedule(null);
-        setForm({ reportId: '', scheduleName: '', frequency: 'daily', dayOfWeek: 1, dayOfMonth: 1, runTime: '08:00', companyId: '1', isActive: true });
+        setForm({ reportId: '', scheduleName: '', frequency: 'daily', dayOfWeek: 1, dayOfMonth: 1, runTime: '08:00', companyId: '1', isActive: true, emailTo: '', emailCc: '', emailSubject: '' });
         setShowModal(true);
     };
 
@@ -106,13 +112,16 @@ export default function ScheduledReportsPage() {
             runTime: s.RunTime,
             companyId: s.CompanyId.toString(),
             isActive: s.IsActive,
+            emailTo: s.EmailTo || '',
+            emailCc: s.EmailCc || '',
+            emailSubject: s.EmailSubject || '',
         });
         setShowModal(true);
     };
 
     const handleSave = async () => {
-        if (!form.reportId || !form.scheduleName.trim()) {
-            toast('กรุณากรอกข้อมูลให้ครบ', 'error');
+        if (!form.reportId || !form.scheduleName.trim() || !form.emailTo.trim()) {
+            toast('กรุณากรอกข้อมูลให้ครบ (ชื่อ, รายงาน, ผู้รับ Email)', 'error');
             return;
         }
 
@@ -126,6 +135,9 @@ export default function ScheduledReportsPage() {
                 runTime: form.runTime,
                 companyId: parseInt(form.companyId),
                 isActive: form.isActive,
+                emailTo: form.emailTo,
+                emailCc: form.emailCc || null,
+                emailSubject: form.emailSubject || null,
             };
 
             if (editSchedule) {
@@ -168,6 +180,9 @@ export default function ScheduledReportsPage() {
                 runTime: s.RunTime,
                 companyId: s.CompanyId,
                 isActive: !s.IsActive,
+                emailTo: s.EmailTo,
+                emailCc: s.EmailCc,
+                emailSubject: s.EmailSubject,
             };
             await fetch('/api/admin/schedules', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
             toast(s.IsActive ? 'หยุดกำหนดการแล้ว' : 'เปิดกำหนดการแล้ว', 'success');
@@ -184,8 +199,18 @@ export default function ScheduledReportsPage() {
         return s.Frequency;
     };
 
+    const getStatusBadge = (s: Schedule) => {
+        if (!s.LastRunStatus) return null;
+        if (s.LastRunStatus === 'success') {
+            return <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-50 text-emerald-700 border border-emerald-200">✓ สำเร็จ</span>;
+        }
+        return <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-red-50 text-red-600 border border-red-200">✗ ล้มเหลว</span>;
+    };
+
     const activeCount = schedules.filter(s => s.IsActive).length;
     const pausedCount = schedules.length - activeCount;
+
+    const inputClass = "w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500";
 
     return (
         <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
@@ -194,7 +219,7 @@ export default function ScheduledReportsPage() {
                 <div>
                     <h1 className="text-2xl font-bold text-slate-900 dark:text-white">ตั้งเวลารายงาน (Scheduled Reports)</h1>
                     <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-                        จัดการกำหนดการสร้างรายงานอัตโนมัติ —
+                        สร้างรายงานอัตโนมัติ แล้วส่ง Excel ทาง Email ตาม schedule —
                         <span className="font-bold text-green-600 ml-1">{activeCount} ใช้งาน</span>
                         {pausedCount > 0 && <span className="font-bold text-slate-400 ml-2">{pausedCount} หยุดชั่วคราว</span>}
                     </p>
@@ -219,7 +244,7 @@ export default function ScheduledReportsPage() {
                 <div className="text-center py-16 bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700">
                     <Calendar className="w-12 h-12 mx-auto mb-4 text-slate-300" />
                     <p className="text-slate-500 text-lg font-medium">ยังไม่มีกำหนดการ</p>
-                    <p className="text-slate-400 text-sm mt-1">กด &quot;สร้างกำหนดการ&quot; เพื่อตั้งเวลารายงานอัตโนมัติ</p>
+                    <p className="text-slate-400 text-sm mt-1">กด &quot;สร้างกำหนดการ&quot; เพื่อตั้งเวลาส่ง Report ทาง Email อัตโนมัติ</p>
                 </div>
             ) : (
                 <div className="grid gap-4">
@@ -235,12 +260,16 @@ export default function ScheduledReportsPage() {
                                         <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-50 text-blue-700 border border-blue-200">
                                             {FREQ_LABELS[s.Frequency]}
                                         </span>
+                                        {getStatusBadge(s)}
                                     </div>
                                     <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
                                         📊 {s.ReportName} — 🏢 {companyNames[s.CompanyId] || `Company ${s.CompanyId}`}
                                     </p>
                                     <div className="flex flex-wrap gap-x-4 gap-y-1 mt-2 text-xs text-slate-400">
                                         <span className="flex items-center gap-1"><Clock className="w-3 h-3" /> {getFreqText(s)}</span>
+                                        <span className="flex items-center gap-1"><Mail className="w-3 h-3" /> {s.EmailTo}{s.EmailCc ? ` (CC: ${s.EmailCc})` : ''}</span>
+                                    </div>
+                                    <div className="flex flex-wrap gap-x-4 gap-y-1 mt-1 text-xs text-slate-400">
                                         {s.NextRunAt && <span>▶ ถัดไป: {formatDateTime(s.NextRunAt)}</span>}
                                         {s.LastRunAt && <span>✓ ล่าสุด: {formatDateTime(s.LastRunAt)}</span>}
                                     </div>
@@ -265,10 +294,10 @@ export default function ScheduledReportsPage() {
             {/* Modal */}
             {showModal && (
                 <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-                    <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl w-full max-w-lg">
+                    <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
                         {/* Modal Header */}
-                        <div className="bg-gradient-to-r from-blue-600 to-indigo-600 p-5 rounded-t-2xl flex items-center justify-between">
-                            <h2 className="text-white font-bold text-lg">{editSchedule ? 'แก้ไขกำหนดการ' : 'สร้างกำหนดการใหม่'}</h2>
+                        <div className="bg-gradient-to-r from-blue-600 to-indigo-600 p-5 rounded-t-2xl flex items-center justify-between sticky top-0 z-10">
+                            <h2 className="text-white font-bold text-lg flex items-center gap-2"><Send className="w-5 h-5" /> {editSchedule ? 'แก้ไขกำหนดการ' : 'สร้างกำหนดการใหม่'}</h2>
                             <button onClick={() => setShowModal(false)} className="text-white/60 hover:text-white"><X className="w-5 h-5" /></button>
                         </div>
 
@@ -276,13 +305,13 @@ export default function ScheduledReportsPage() {
                             {/* Schedule Name */}
                             <div>
                                 <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">ชื่อกำหนดการ <span className="text-red-500">*</span></label>
-                                <input value={form.scheduleName} onChange={e => setForm({ ...form, scheduleName: e.target.value })} placeholder="เช่น สรุปยอดขายรายวัน" className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500" />
+                                <input value={form.scheduleName} onChange={e => setForm({ ...form, scheduleName: e.target.value })} placeholder="เช่น สรุปยอดขายรายวัน" className={inputClass} />
                             </div>
 
                             {/* Report */}
                             <div>
                                 <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">รายงาน <span className="text-red-500">*</span></label>
-                                <select value={form.reportId} onChange={e => setForm({ ...form, reportId: e.target.value })} className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500">
+                                <select value={form.reportId} onChange={e => setForm({ ...form, reportId: e.target.value })} className={inputClass}>
                                     <option value="">-- เลือกรายงาน --</option>
                                     {reports.map(r => (
                                         <option key={r.ReportId} value={r.ReportId}>{r.ReportName}</option>
@@ -293,7 +322,7 @@ export default function ScheduledReportsPage() {
                             {/* Company */}
                             <div>
                                 <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">บริษัท</label>
-                                <select value={form.companyId} onChange={e => setForm({ ...form, companyId: e.target.value })} className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500">
+                                <select value={form.companyId} onChange={e => setForm({ ...form, companyId: e.target.value })} className={inputClass}>
                                     {Object.entries(companyNames).map(([id, name]) => (
                                         <option key={id} value={id}>{name}</option>
                                     ))}
@@ -304,7 +333,7 @@ export default function ScheduledReportsPage() {
                             <div className="grid grid-cols-2 gap-4">
                                 <div>
                                     <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">ความถี่</label>
-                                    <select value={form.frequency} onChange={e => setForm({ ...form, frequency: e.target.value })} className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500">
+                                    <select value={form.frequency} onChange={e => setForm({ ...form, frequency: e.target.value })} className={inputClass}>
                                         <option value="daily">ทุกวัน</option>
                                         <option value="weekly">รายสัปดาห์</option>
                                         <option value="monthly">รายเดือน</option>
@@ -312,42 +341,60 @@ export default function ScheduledReportsPage() {
                                 </div>
                                 <div>
                                     <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">เวลา</label>
-                                    <input type="time" value={form.runTime} onChange={e => setForm({ ...form, runTime: e.target.value })} className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500" />
+                                    <input type="time" value={form.runTime} onChange={e => setForm({ ...form, runTime: e.target.value })} className={inputClass} />
                                 </div>
                             </div>
 
-                            {/* Conditional: Day of Week */}
                             {form.frequency === 'weekly' && (
                                 <div>
                                     <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">วันในสัปดาห์</label>
-                                    <select value={form.dayOfWeek} onChange={e => setForm({ ...form, dayOfWeek: parseInt(e.target.value) })} className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500">
-                                        {DAYS.map((d, i) => (
-                                            <option key={i} value={i}>{d}</option>
-                                        ))}
+                                    <select value={form.dayOfWeek} onChange={e => setForm({ ...form, dayOfWeek: parseInt(e.target.value) })} className={inputClass}>
+                                        {DAYS.map((d, i) => (<option key={i} value={i}>{d}</option>))}
                                     </select>
                                 </div>
                             )}
 
-                            {/* Conditional: Day of Month */}
                             {form.frequency === 'monthly' && (
                                 <div>
                                     <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">วันที่ในเดือน</label>
-                                    <select value={form.dayOfMonth} onChange={e => setForm({ ...form, dayOfMonth: parseInt(e.target.value) })} className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500">
-                                        {Array.from({ length: 28 }, (_, i) => (
-                                            <option key={i + 1} value={i + 1}>{i + 1}</option>
-                                        ))}
+                                    <select value={form.dayOfMonth} onChange={e => setForm({ ...form, dayOfMonth: parseInt(e.target.value) })} className={inputClass}>
+                                        {Array.from({ length: 28 }, (_, i) => (<option key={i + 1} value={i + 1}>{i + 1}</option>))}
                                     </select>
                                 </div>
                             )}
+
+                            {/* Email Section */}
+                            <div className="pt-4 border-t border-slate-200 dark:border-slate-600">
+                                <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-300 mb-3 flex items-center gap-2">
+                                    <Mail className="w-4 h-4 text-blue-500" /> ตั้งค่าการส่ง Email
+                                </h3>
+
+                                <div className="space-y-4">
+                                    <div>
+                                        <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">ส่งถึง (To) <span className="text-red-500">*</span></label>
+                                        <input value={form.emailTo} onChange={e => setForm({ ...form, emailTo: e.target.value })} placeholder="user@company.com, user2@company.com" className={inputClass} />
+                                        <p className="text-xs text-slate-400 mt-1">คั่นด้วย , หากมีหลายคน</p>
+                                    </div>
+                                    <div>
+                                        <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">สำเนา (CC)</label>
+                                        <input value={form.emailCc} onChange={e => setForm({ ...form, emailCc: e.target.value })} placeholder="manager@company.com" className={inputClass} />
+                                    </div>
+                                    <div>
+                                        <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">หัวข้อ Email (ไม่ใส่จะใช้ค่าเริ่มต้น)</label>
+                                        <input value={form.emailSubject} onChange={e => setForm({ ...form, emailSubject: e.target.value })} placeholder="[ReportCenter] {report} - {date}" className={inputClass} />
+                                        <p className="text-xs text-slate-400 mt-1">ใช้ {'{report}'} แทนชื่อรายงาน, {'{date}'} แทนวันที่</p>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
 
                         {/* Modal Footer */}
-                        <div className="px-6 py-4 bg-slate-50 dark:bg-slate-700/50 rounded-b-2xl flex justify-end gap-3">
+                        <div className="px-6 py-4 bg-slate-50 dark:bg-slate-700/50 rounded-b-2xl flex justify-end gap-3 sticky bottom-0">
                             <button onClick={() => setShowModal(false)} className="px-4 py-2 text-sm font-medium text-slate-600 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors">
                                 ยกเลิก
                             </button>
-                            <button onClick={handleSave} className="px-5 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors shadow-sm">
-                                {editSchedule ? 'บันทึกการเปลี่ยนแปลง' : 'สร้างกำหนดการ'}
+                            <button onClick={handleSave} className="px-5 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors shadow-sm inline-flex items-center gap-2">
+                                <Send className="w-4 h-4" /> {editSchedule ? 'บันทึกการเปลี่ยนแปลง' : 'สร้างกำหนดการ'}
                             </button>
                         </div>
                     </div>
