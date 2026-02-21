@@ -1,8 +1,8 @@
 # ReportCenter — Developer Handoff
 
-> **Version:** 3.0  
+> **Version:** 4.0  
 > **Last Updated:** 2026-02-21  
-> **Tech Stack:** Next.js 16.1.6 + React 19 + Tailwind CSS 4 + MSSQL (mssql driver) + Nodemailer (SMTP)
+> **Tech Stack:** Next.js 16.1.6 + React 19 + Tailwind CSS 4 + MSSQL (mssql driver) + Nodemailer (OAuth2 XOAUTH2 / SMTP) + @azure/msal-node
 
 ---
 
@@ -78,24 +78,25 @@ reportcenter/
 │   │       │   └── execute-schedules/route.js # GET: cron endpoint (runs due reports → email)
 │   │       └── reports/
 │   │           ├── available/route.js    # GET: reports user can access
-│   │           ├── execute/route.js      # POST: run T-SQL on company DB
+│   │           ├── execute/route.js      # POST: run T-SQL on company DB (supports pagination + exportAll)
 │   │           ├── parameters/route.js   # GET: report parameters
 │   │           └── favorites/route.js    # GET/POST: toggle favorite reports
 │   ├── components/
 │   │   ├── layout/
 │   │   │   ├── AppLayout.tsx             # Sidebar + Header wrapper + AuthProvider
-│   │   │   ├── Sidebar.tsx               # Mobile responsive + role menus
+│   │   │   ├── Sidebar.tsx               # Mobile responsive + role menus + conditional report menus
 │   │   │   └── Header.tsx                # Dark mode toggle + Notification bell + dropdown
 │   │   ├── providers/
-│   │   │   ├── AuthProvider.tsx          # React Context for user session + allowedCompanies
+│   │   │   ├── AuthProvider.tsx          # React Context for user session + allowedCompanies + availableReportTypes
 │   │   │   ├── ToastProvider.tsx         # Toast notification system (success/error/info)
 │   │   │   └── ConfirmProvider.tsx       # Custom confirm dialog (danger/warning/default)
 │   │   ├── ErrorBoundary.tsx             # Global error boundary
 │   │   ├── Skeletons.tsx                 # Reusable loading skeletons
 │   │   └── TemplateEditor.tsx            # Click-to-Insert email template editor
 │   ├── lib/
-│   │   ├── auth.js                       # JWT sign/verify (jose)
+│   │   ├── auth.js                       # JWT sign/verify (jose) + getSession()
 │   │   ├── db.js                         # MSSQL connection pool manager
+│   │   ├── email.js                      # Email transporter (OAuth2 XOAUTH2 + password fallback)
 │   │   └── dateUtils.ts                  # Date/time utilities (Asia/Bangkok, 24h)
 │   └── middleware.ts                     # Route protection (JWT check)
 ├── scripts/
@@ -215,8 +216,8 @@ NextRunAt DATETIME NULL, CreatedBy INT, CreatedAt/UpdatedAt DATETIME
 
 | Method | Path                        | Description                          |
 |--------|-----------------------------|--------------------------------------|
-| POST   | `/api/auth/login`           | Login, returns JWT cookie with allowedCompanies |
-| POST   | `/api/auth/logout`          | Clear JWT cookie                     |
+| POST   | `/api/auth/login`           | Login, returns JWT cookie + logs LOGIN activity |
+| POST   | `/api/auth/logout`          | Clear JWT cookie + logs LOGOUT activity          |
 | GET    | `/api/auth/me`              | Get current user + allowedCompanies  |
 | PUT    | `/api/auth/change-password` | Change password (verify current first) |
 
@@ -226,7 +227,7 @@ NextRunAt DATETIME NULL, CreatedBy INT, CreatedAt/UpdatedAt DATETIME
 |--------|-----------------------------|-----------------------------------|
 | GET    | `/api/reports/available`    | List reports user can access      |
 | GET    | `/api/reports/parameters`   | Get parameters for a report       |
-| POST   | `/api/reports/execute`      | Execute T-SQL on company DB       |
+| POST   | `/api/reports/execute`      | Execute T-SQL on company DB (supports `page`/`pageSize`/`exportAll`) |
 | GET    | `/api/reports/favorites`    | Get user's favorite reports       |
 | POST   | `/api/reports/favorites`    | Toggle favorite (add/remove)      |
 
@@ -251,6 +252,7 @@ NextRunAt DATETIME NULL, CreatedBy INT, CreatedAt/UpdatedAt DATETIME
 | POST   | `/api/admin/schedules`       | Create schedule (auto-calculates NextRunAt) |
 | PUT    | `/api/admin/schedules`       | Update schedule / toggle active   |
 | DELETE | `/api/admin/schedules?scheduleId=` | Delete schedule              |
+| PATCH  | `/api/admin/schedules`       | Manual trigger: run schedule immediately → email |
 | GET    | `/api/admin/settings`        | Get all settings                  |
 | PUT    | `/api/admin/settings`        | Update settings                   |
 
@@ -265,7 +267,7 @@ NextRunAt DATETIME NULL, CreatedBy INT, CreatedAt/UpdatedAt DATETIME
 
 | Method | Path              | Description                      |
 |--------|-------------------|----------------------------------|
-| GET    | `/api/dashboard`  | Stats (totals) + recent activity |
+| GET    | `/api/dashboard`  | Stats (totals) + recent activity + scheduleStats (admin) |
 
 ### Cron (External Trigger)
 
@@ -319,6 +321,11 @@ SMTP_FROM=ReportCenter <your-email@company.com>
 
 # Cron endpoint protection
 CRON_SECRET=rc-cron-secret-2026
+
+# Azure AD OAuth2 (for SMTP — optional, fallback to SMTP_PASS)
+AZURE_TENANT_ID=your-tenant-id
+AZURE_CLIENT_ID=your-client-id
+AZURE_CLIENT_SECRET=your-client-secret
 ```
 
 > ⚠️ ไฟล์ `.env.local` ถูก `.gitignore` อยู่แล้ว — ค่า default ยังมี fallback ใน `db.js` สำหรับ dev environment
@@ -335,7 +342,8 @@ CRON_SECRET=rc-cron-secret-2026
 | `bcryptjs` | latest  | Password hashing                 |
 | `jose`     | latest  | JWT token sign/verify            |
 | `xlsx`     | 0.18.5  | Excel export                     |
-| `nodemailer` | latest | SMTP email sending (Outlook 365) |
+| `nodemailer` | latest | SMTP email sending (OAuth2 XOAUTH2 / password) |
+| `@azure/msal-node` | latest | Azure AD OAuth2 token acquisition |
 | `lucide-react` | latest | Icon library                 |
 | `@dnd-kit` | latest  | Drag and drop (template builder) |
 
@@ -432,9 +440,14 @@ Cron Job เรียก GET /api/cron/execute-schedules?secret=<CRON_SECRET>
     ↓ ดึง schedules ที่ NextRunAt <= now
     ↓ Execute SQL บน Company DB
     ↓ สร้าง Excel buffer (xlsx)
-    ↓ ส่ง Email ผ่าน Outlook 365 SMTP (nodemailer)
+    ↓ ส่ง Email ผ่าน OAuth2 XOAUTH2 (Azure AD) หรือ fallback SMTP password
     ↓ อัปเดต LastRunAt, LastRunStatus, NextRunAt
 ```
+
+### Manual Trigger (⚡ Zap Button)
+- Admin กดปุ่ม ⚡ ที่ schedule card → `PATCH /api/admin/schedules` → รัน SQL + สร้าง Excel + ส่ง Email ทันที
+- แสดง loading spinner ขณะรัน + toast notification
+- Subject มี `(Manual)` ต่อท้าย + บันทึก `RUN_SCHEDULE` ใน ActivityLogs
 
 ### Parameters & Relative Dates
 Report ที่มี parameters → admin เลือก **relative date preset** ใน modal:
@@ -482,9 +495,58 @@ node scripts/create-activity-logs.js
 ## 12. Feature Roadmap (Future)
 
 - [x] Report scheduling (auto-generate at intervals via cron)
-- [x] Email notification integration (SMTP via Outlook 365)
+- [x] Email notification integration (OAuth2 XOAUTH2 + SMTP fallback)
 - [x] Report Favorites (star/pin reports)
-- [ ] Advanced search with filters (date range, type, status) on admin pages
-- [ ] Backend-driven server-side pagination for report tables (currently client-side)
+- [x] Export Excel on Standard + Template report pages
+- [x] Search/Filter for report dropdown (by name + description)
+- [x] Server-side pagination (OFFSET/FETCH + totalRows count)
+- [x] OAuth2 SMTP via Azure AD MSAL (shared `src/lib/email.js`)
+- [x] Dashboard schedule status card (active/failed/nextRun)
+- [x] Manual trigger for schedules (⚡ Zap button)
+- [x] Detailed activity logging (LOGIN, LOGOUT, EXECUTE, EXPORT, CREATE/UPDATE_REPORT, RUN_SCHEDULE)
+- [x] Conditional sidebar menus based on user's available report types
+- [x] TemplateEditor component (click-to-insert, preview mode)
 - [ ] Password complexity rules enforcement
 - [ ] Two-factor authentication (2FA)
+
+---
+
+## 13. Activity Logging
+
+### Logged Actions
+
+| ActionType | Endpoint | Notes |
+|------------|----------|-------|
+| `LOGIN` | `/api/auth/login` | On successful login |
+| `LOGOUT` | `/api/auth/logout` | Before clearing cookie |
+| `EXECUTE_REPORT` | `/api/reports/execute` | On paginated/normal execution |
+| `EXPORT_EXCEL` | `/api/reports/execute` | When `exportAll=true` |
+| `CREATE_REPORT` | `/api/admin/reports` POST | After transaction commit |
+| `UPDATE_REPORT` | `/api/admin/reports/[id]` PUT | After transaction commit |
+| `RUN_SCHEDULE` | `/api/admin/schedules` PATCH | Manual trigger |
+
+All logging is **non-blocking** (wrapped in try/catch) — logging failure never breaks the main operation.
+
+---
+
+## 14. Email System (`src/lib/email.js`)
+
+### OAuth2 Flow (Primary)
+```
+Server → Azure AD (acquireTokenByClientCredential)
+       ← Access Token (scope: outlook.office365.com/.default)
+Server → SMTP Office365 (XOAUTH2 auth type)
+       → Send email with Excel attachment
+```
+
+### Fallback
+If `AZURE_TENANT_ID` / `AZURE_CLIENT_ID` / `AZURE_CLIENT_SECRET` are not set, falls back to password auth:
+```
+Server → SMTP Office365 (user + pass)
+```
+
+### Required Azure AD Setup
+1. Register app in **Microsoft Entra ID** → App registrations
+2. Add **API permission**: Microsoft Graph → Application → `Mail.Send` → Grant admin consent
+3. Create **Client secret** → copy value to `AZURE_CLIENT_SECRET`
+4. Set `SMTP_USER` to the email address that will send (must have a mailbox)
