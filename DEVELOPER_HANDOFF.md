@@ -91,7 +91,8 @@ reportcenter/
 │   │   │   ├── ToastProvider.tsx         # Toast notification system (success/error/info)
 │   │   │   └── ConfirmProvider.tsx       # Custom confirm dialog (danger/warning/default)
 │   │   ├── ErrorBoundary.tsx             # Global error boundary
-│   │   └── Skeletons.tsx                 # Reusable loading skeletons
+│   │   ├── Skeletons.tsx                 # Reusable loading skeletons
+│   │   └── TemplateEditor.tsx            # Click-to-Insert email template editor
 │   ├── lib/
 │   │   ├── auth.js                       # JWT sign/verify (jose)
 │   │   ├── db.js                         # MSSQL connection pool manager
@@ -374,6 +375,14 @@ CRON_SECRET=rc-cron-secret-2026
 - `formatTime()` → `14:30`
 - `timeAgo()` → `5 นาทีที่แล้ว` / fallback เป็น formatDateTime
 - **MSSQL Fix**: strip trailing `Z` จาก DATETIME เพื่อป้องกัน double +7h offset
+
+### TemplateEditor (`src/components/TemplateEditor.tsx`)
+- **Split-panel**: ซ้าย = Available Fields (parse จาก SQL), ขวา = Textarea editor
+- **Click-to-Insert**: กดชื่อ field → แทรก `{{FieldName}}` ที่ตำแหน่ง cursor
+- **Used indicator**: field ที่ใช้แล้วจะเป็นสีเขียว + ✓ พร้อม counter (เช่น 3/5 ฟิลด์ถูกใช้)
+- **Preview mode**: แท็บ แก้ไข/ตัวอย่าง สลับดูผลลัพธ์ที่จัดสไตล์แล้ว
+- **SQL Parser**: อ่านชื่อ column จาก `SELECT ... FROM` อัตโนมัติ (รองรับ alias, bracket, table prefix)
+- ใช้งานทั้งหน้า สร้างรายงานใหม่ (`new/page.tsx`) และ แก้ไขรายงาน (`[id]/edit/page.tsx`)
 
 ---
 
