@@ -79,12 +79,11 @@ export default function Sidebar() {
             <div className="flex-1 px-4 py-6 space-y-1 overflow-y-auto">
                 <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-4 px-2">เมนูหลัก</p>
                 {menus.filter(m => m.role === 'all').filter(m => {
-                    // Hide report menus if user has no reports of that type
-                    if (m.reportType && user?.availableReportTypes) {
-                        return user.availableReportTypes.includes(m.reportType);
+                    // If menu has reportType, only show when user is loaded AND has that type
+                    if (m.reportType) {
+                        return user?.availableReportTypes?.includes(m.reportType) ?? false;
                     }
-                    // If no reportType set or data not loaded yet, show the menu
-                    return !m.reportType || !user;
+                    return true;
                 }).map(m => renderMenuLink(m))}
 
                 {isAdmin && (
