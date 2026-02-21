@@ -275,8 +275,43 @@ export default function TemplateReportPage() {
         xlsx.writeFile(workbook, `${reportName}_${dateStr}.xlsb`, { bookType: 'xlsb' });
     };
 
+    const handleJobDownload = () => {
+        if (activeJob?.jobId) {
+            window.open(`/api/reports/jobs/${activeJob.jobId}/download`, '_blank');
+        }
+    };
+
     return (
         <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500 min-h-full flex flex-col">
+
+            {/* Background Job Banner */}
+            {activeJob && (
+                <div className={`flex items-center justify-between px-5 py-3 rounded-xl border shadow-sm animate-in slide-in-from-top-2 duration-300 ${activeJob.status === 'running' ? 'bg-blue-50 border-blue-200' :
+                        activeJob.status === 'done' ? 'bg-emerald-50 border-emerald-200' :
+                            'bg-red-50 border-red-200'
+                    }`}>
+                    <div className="flex items-center gap-3">
+                        {activeJob.status === 'running' && <Loader2 className="w-5 h-5 text-blue-600 animate-spin" />}
+                        {activeJob.status === 'done' && <Download className="w-5 h-5 text-emerald-600" />}
+                        {activeJob.status === 'failed' && <AlertCircle className="w-5 h-5 text-red-600" />}
+                        <span className="text-sm font-medium">
+                            {activeJob.status === 'running' && 'กำลังสร้างรายงานในพื้นหลัง... กรุณารอสักครู่'}
+                            {activeJob.status === 'done' && `รายงานพร้อมแล้ว! (${activeJob.rowCount} แถว)`}
+                            {activeJob.status === 'failed' && `สร้างรายงานไม่สำเร็จ: ${activeJob.error}`}
+                        </span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                        {activeJob.status === 'done' && (
+                            <button onClick={handleJobDownload} className="inline-flex items-center gap-1.5 px-4 py-1.5 bg-emerald-600 text-white text-sm font-semibold rounded-lg hover:bg-emerald-700 transition-colors shadow-sm">
+                                <Download className="w-4 h-4" /> ดาวน์โหลด
+                            </button>
+                        )}
+                        {activeJob.status !== 'running' && (
+                            <button onClick={() => setActiveJob(null)} className="text-slate-400 hover:text-slate-600 text-sm">✕</button>
+                        )}
+                    </div>
+                </div>
+            )}
 
             {/* Header / Report Selector */}
             <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
