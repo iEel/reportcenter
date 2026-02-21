@@ -8,8 +8,8 @@ import { useState, useEffect } from 'react';
 
 const menus = [
     { title: 'หน้าหลัก', path: '/', icon: Home, role: 'all' },
-    { title: 'รายงานมาตรฐาน', path: '/reports/standard', icon: FileText, role: 'all' },
-    { title: 'รายงาน Template', path: '/reports/templates', icon: LayoutTemplate, role: 'all' },
+    { title: 'รายงานมาตรฐาน', path: '/reports/standard', icon: FileText, role: 'all', reportType: 1 },
+    { title: 'รายงาน Template', path: '/reports/templates', icon: LayoutTemplate, role: 'all', reportType: 2 },
 
     // Admin Only
     { title: 'จัดการรายงาน', path: '/admin/reports', icon: Database, role: 'admin' },
@@ -78,7 +78,14 @@ export default function Sidebar() {
 
             <div className="flex-1 px-4 py-6 space-y-1 overflow-y-auto">
                 <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-4 px-2">เมนูหลัก</p>
-                {menus.filter(m => m.role === 'all').map(m => renderMenuLink(m))}
+                {menus.filter(m => m.role === 'all').filter(m => {
+                    // Hide report menus if user has no reports of that type
+                    if (m.reportType && user?.availableReportTypes) {
+                        return user.availableReportTypes.includes(m.reportType);
+                    }
+                    // If no reportType set or data not loaded yet, show the menu
+                    return !m.reportType || !user;
+                }).map(m => renderMenuLink(m))}
 
                 {isAdmin && (
                     <div className="mt-8 mb-4">

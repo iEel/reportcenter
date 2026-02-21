@@ -10,6 +10,7 @@ interface UserInfo {
     roleName: string;
     companyId: number;
     allowedCompanies: number[];
+    availableReportTypes: number[];
 }
 
 interface AuthContextType {
