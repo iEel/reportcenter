@@ -91,7 +91,15 @@ export async function PUT(request, props) {
                 .input('ReportId', sql.Int, parseInt(id))
                 .query('DELETE FROM ReportParameters WHERE ReportId = @ReportId');
 
-            // 3. Insert New Parameters
+            // 3. Auto-add LookupQuery column if missing
+            try {
+                await transaction.request().query(`
+                    IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = 'ReportParameters' AND COLUMN_NAME = 'LookupQuery')
+                    ALTER TABLE ReportParameters ADD LookupQuery NVARCHAR(MAX) NULL;
+                `);
+            } catch { }
+
+            // 4. Insert New Parameters
             if (parameters && parameters.length > 0) {
                 const paramStmt = new sql.PreparedStatement(transaction);
                 paramStmt.input('ReportId', sql.Int);

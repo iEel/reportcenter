@@ -39,7 +39,15 @@ export async function POST(request) {
 
             const newReportId = reportResult.recordset[0].ReportId;
 
-            // 2. Insert Parameters if any
+            // 2. Auto-add LookupQuery column if missing
+            try {
+                await transaction.request().query(`
+                    IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = 'ReportParameters' AND COLUMN_NAME = 'LookupQuery')
+                    ALTER TABLE ReportParameters ADD LookupQuery NVARCHAR(MAX) NULL;
+                `);
+            } catch { }
+
+            // 3. Insert Parameters if any
             if (parameters && parameters.length > 0) {
                 const paramStmt = new sql.PreparedStatement(transaction);
                 paramStmt.input('ReportId', sql.Int);
