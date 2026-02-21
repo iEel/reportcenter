@@ -1,7 +1,24 @@
-# ReportCenter — Deployment Guide (Ubuntu Server)
+# ReportCenter — Deployment Guide (Ubuntu Server + Cloudflare Zero Trust)
 
 > **Target OS:** Ubuntu 22.04 LTS / 24.04 LTS  
 > **Last Updated:** 2026-02-22
+
+---
+
+## Architecture Overview
+
+```
+User → Cloudflare Zero Trust (HTTPS + Auth)
+         ↓ Cloudflare Tunnel (cloudflared)
+     Nginx (localhost:80) ← reverse proxy
+         ↓
+     Next.js (localhost:4000) ← PM2
+         ↓
+     MSSQL Databases
+```
+
+> 🔒 **ไม่ต้องเปิดพอร์ตใดๆ สู่ภายนอก** — Cloudflare Tunnel สร้าง outbound connection จาก server  
+> ✅ **Nginx** ทำหน้าที่ reverse proxy, proxy headers, timeouts, และจัดการ static files ถ้าต้องการ
 
 ---
 
@@ -13,14 +30,14 @@
 | npm      | 10+     | Package manager |
 | Git      | 2.x     | Clone repository |
 | PM2      | 5.x     | Process manager (auto-restart) |
-| Nginx    | 1.x     | Reverse proxy + SSL |
+| Nginx    | 1.x     | Reverse proxy (local buffer) |
+| cloudflared | latest | Cloudflare Tunnel agent |
 
 ---
 
 ## 2. Install Node.js 20 LTS
 
 ```bash
-# NodeSource repository
 curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
 sudo apt install -y nodejs
 
@@ -38,7 +55,7 @@ sudo npm install -g pm2
 
 # Auto-start on reboot
 pm2 startup systemd
-# (follow the output command, e.g. sudo env PATH=... pm2 startup ...)
+# (follow the output command)
 ```
 
 ---
@@ -46,13 +63,11 @@ pm2 startup systemd
 ## 4. Clone & Setup Project
 
 ```bash
-# Clone repository
 cd /opt
 sudo git clone https://github.com/iEel/reportcenter.git
 sudo chown -R $USER:$USER /opt/reportcenter
 cd /opt/reportcenter
 
-# Install dependencies
 npm install
 ```
 
@@ -61,8 +76,7 @@ npm install
 ## 5. Configure Environment
 
 ```bash
-cp .env.example .env.local   # หรือสร้างใหม่
-nano .env.local
+nano /opt/reportcenter/.env.local
 ```
 
 ```env
@@ -111,13 +125,16 @@ AZURE_CLIENT_ID=your-client-id
 AZURE_CLIENT_SECRET=your-client-secret
 ```
 
-> ⚠️ **สำคัญ**: เปลี่ยน `JWT_SECRET` และ `CRON_SECRET` เป็นค่าสุ่มที่ปลอดภัย
+> ⚠️ **สำคัญ**: เปลี่ยน `JWT_SECRET` และ `CRON_SECRET` เป็นค่าสุ่มที่ปลอดภัย  
+> ใช้ `openssl rand -base64 32` สร้างค่าสุ่ม
 
 ---
 
 ## 6. Build & Start
 
 ```bash
+cd /opt/reportcenter
+
 # Build production
 npm run build
 
@@ -125,9 +142,9 @@ npm run build
 pm2 start npm --name "reportcenter" -- start
 pm2 save
 
-# Check status
+# Verify
 pm2 status
-pm2 logs reportcenter
+curl http://localhost:4000   # ต้องเห็น HTML response
 ```
 
 ### PM2 Commands Reference
@@ -142,15 +159,13 @@ pm2 monit                    # monitor real-time
 
 ---
 
-## 7. Nginx Reverse Proxy
+## 7. Nginx Reverse Proxy (Local)
 
-### Install Nginx
+ติดตั้ง Nginx เพื่อคั่นกลางระหว่าง Cloudflare Tunnel กับ Next.js:
 
 ```bash
 sudo apt install -y nginx
 ```
-
-### Configure Site
 
 ```bash
 sudo nano /etc/nginx/sites-available/reportcenter
@@ -158,8 +173,8 @@ sudo nano /etc/nginx/sites-available/reportcenter
 
 ```nginx
 server {
-    listen 80;
-    server_name reportcenter.yourcompany.com;
+    listen 80 default_server;
+    server_name _;
 
     location / {
         proxy_pass http://127.0.0.1:4000;
@@ -182,92 +197,151 @@ server {
 ```bash
 # Enable site
 sudo ln -s /etc/nginx/sites-available/reportcenter /etc/nginx/sites-enabled/
+sudo rm -f /etc/nginx/sites-enabled/default
 
 # Test & reload
 sudo nginx -t
 sudo systemctl reload nginx
+sudo systemctl enable nginx
+
+# Verify
+curl http://localhost   # ต้องเห็น Next.js response
 ```
 
 ---
 
-## 8. SSL Certificate (Let's Encrypt)
+## 8. Install Cloudflare Tunnel (`cloudflared`)
 
 ```bash
-# Install Certbot
-sudo apt install -y certbot python3-certbot-nginx
+# Add Cloudflare GPG key & repository
+sudo mkdir -p --mode=0755 /usr/share/keyrings
+curl -fsSL https://pkg.cloudflare.com/cloudflare-main.gpg | sudo tee /usr/share/keyrings/cloudflare-main.gpg > /dev/null
+echo "deb [signed-by=/usr/share/keyrings/cloudflare-main.gpg] https://pkg.cloudflare.com/cloudflared $(lsb_release -cs) main" | sudo tee /etc/apt/sources.list.d/cloudflared.list
 
-# Get certificate (auto-configures Nginx)
-sudo certbot --nginx -d reportcenter.yourcompany.com
+# Install
+sudo apt update
+sudo apt install -y cloudflared
 
-# Auto-renew (certbot adds a systemd timer automatically)
-sudo certbot renew --dry-run
+# Verify
+cloudflared --version
 ```
 
 ---
 
-## 9. Firewall (UFW)
+## 9. Cloudflare Zero Trust Setup
+
+### 9.1 สร้าง Tunnel ผ่าน Dashboard
+
+1. เข้า [Cloudflare Zero Trust Dashboard](https://one.dash.cloudflare.com)
+2. ไปที่ **Networks** → **Tunnels**
+3. กด **Create a tunnel**
+4. ตั้งชื่อ tunnel: `reportcenter`
+5. เลือก **Cloudflared** → Copy install command
+
+### 9.2 ติดตั้ง Connector บน Server
+
+รัน command ที่ copy มาจาก Dashboard:
+
+```bash
+# ตัวอย่าง (token จะแตกต่างกัน)
+sudo cloudflared service install eyJhIjoixxxxxxxxxx...
+```
+
+ตรวจสอบ:
+```bash
+sudo systemctl status cloudflared
+# ● cloudflared.service - cloudflared
+#    Active: active (running)
+```
+
+### 9.3 ตั้งค่า Public Hostname
+
+กลับไปที่ Cloudflare Dashboard → Tunnel → **Configure** → **Public Hostname**:
+
+| Field | Value |
+|-------|-------|
+| **Subdomain** | `reportcenter` |
+| **Domain** | `yourcompany.com` |
+| **Type** | `HTTP` |
+| **URL** | `localhost:80` |
+
+> 💡 **Tunnel → Nginx (port 80) → Next.js (port 4000)**  
+> Nginx จัดการ proxy headers, buffering, logging ให้  
+> ไม่ต้องใช้ HTTPS เพราะ `cloudflared` สร้าง encryption อุโมงค์ไป Cloudflare แล้ว
+
+กด **Save** → ตอนนี้ `https://reportcenter.yourcompany.com` พร้อมใช้งานแล้ว!
+
+### 9.4 ตั้ง Access Policy (จำกัดสิทธิ์เข้าถึง)
+
+เพื่อให้เฉพาะพนักงานในบริษัทเข้าถึงได้:
+
+1. ไปที่ **Access** → **Applications** → **Add an application**
+2. เลือก **Self-hosted**
+3. ตั้งค่า:
+
+| Field | Value |
+|-------|-------|
+| **Application name** | ReportCenter |
+| **Session Duration** | 24 hours |
+| **Application domain** | `reportcenter.yourcompany.com` |
+
+4. สร้าง **Policy**:
+
+| Field | Value |
+|-------|-------|
+| **Policy name** | Allow Company |
+| **Action** | Allow |
+| **Include** | Emails ending in `@yourcompany.com` |
+
+5. **Authentication** → เลือกวิธี login:
+   - **One-time PIN** (ส่ง OTP ทาง email) — ง่ายที่สุด
+   - **Google Workspace** / **Microsoft Azure AD** — SSO
+
+### 9.5 Bypass API สำหรับ Cron
+
+Cron job รันจาก server เอง (localhost) → ไม่ผ่าน Cloudflare → ไม่มีปัญหา
+
+```bash
+# Cron เรียก localhost โดยตรง — วิ่งเข้า Next.js ตรงๆ ได้เลย ไม่ผ่าน authentication
+curl http://localhost:4000/api/cron/execute-schedules?secret=your-cron-secret
+```
+
+ถ้าต้องการเรียกจากภายนอกผ่าน Cloudflare → สร้าง **Service Token** ใน Access เพื่อ bypass auth (ดูเพิ่มเติมในเอกสาร Cloudflare)
+
+---
+
+## 10. Firewall (UFW)
 
 ```bash
 sudo ufw allow OpenSSH
-sudo ufw allow 'Nginx Full'
 sudo ufw enable
 sudo ufw status
 ```
 
-> 🔒 **ไม่ต้อง** เปิดพอร์ต 4000 — Nginx ทำหน้าที่ proxy อยู่แล้ว
+> 🔒 **แค่เปิด SSH เท่านั้น!** ไม่ต้องเปิดพอร์ต 80, 443, หรือ 4000 เพราะ `cloudflared` สร้าง outbound tunnel โทรกลับไปตั้งต้นที่ Cloudflare เอง
 
 ---
 
-## 10. Cron Job (Scheduled Reports)
+## 11. Cron Job (Scheduled Reports)
 
 ```bash
 crontab -e
 ```
 
-เพิ่มบรรทัด:
-
 ```bash
-# รันทุก 5 นาที — ตรวจ schedules ที่ครบกำหนด
-*/5 * * * * curl -s http://127.0.0.1:4000/api/cron/execute-schedules?secret=your-cron-secret-here >> /var/log/reportcenter-cron.log 2>&1
-```
-
-### ตรวจสอบ Cron
-
-```bash
-# ดู log
-tail -f /var/log/reportcenter-cron.log
-
-# ทดสอบ manual
-curl http://127.0.0.1:4000/api/cron/execute-schedules?secret=your-cron-secret-here
+# รันทุก 5 นาที — เรียกเข้า Next.js โดยตรง
+*/5 * * * * curl -s http://localhost:4000/api/cron/execute-schedules?secret=your-cron-secret-here >> /var/log/reportcenter-cron.log 2>&1
 ```
 
 ---
 
-## 11. Update / Deploy New Version
-
-```bash
-cd /opt/reportcenter
-
-# Pull latest code
-git pull origin master
-
-# Install new dependencies (if any)
-npm install
-
-# Rebuild
-npm run build
-
-# Restart
-pm2 restart reportcenter
-```
-
-### One-liner Deploy Script
+## 12. Update / Deploy New Version
 
 ```bash
 cd /opt/reportcenter && git pull && npm install && npm run build && pm2 restart reportcenter
 ```
 
-สร้างเป็น script ได้:
+### Deploy Script
 
 ```bash
 nano /opt/reportcenter/deploy.sh
@@ -294,20 +368,22 @@ chmod +x /opt/reportcenter/deploy.sh
 
 ---
 
-## 12. Monitoring & Logs
+## 13. Monitoring & Logs
 
 ```bash
-# PM2 logs (real-time)
+# PM2 logs
 pm2 logs reportcenter
 
-# PM2 monitoring
+# PM2 monitor
 pm2 monit
 
-# Nginx access log
+# Nginx logs
 tail -f /var/log/nginx/access.log
-
-# Nginx error log
 tail -f /var/log/nginx/error.log
+
+# Cloudflare Tunnel status
+sudo systemctl status cloudflared
+sudo journalctl -u cloudflared -f
 
 # Cron log
 tail -f /var/log/reportcenter-cron.log
@@ -315,62 +391,70 @@ tail -f /var/log/reportcenter-cron.log
 
 ---
 
-## 13. Troubleshooting
+## 14. Troubleshooting
 
 ### App won't start
 ```bash
-pm2 logs reportcenter --lines 50    # ดู error ล่าสุด
+pm2 logs reportcenter --lines 50
 node -v                              # ต้อง 20+
 cat .env.local                       # ตรวจ env vars
 ```
 
+### Tunnel disconnected
+```bash
+sudo systemctl status cloudflared    # ตรวจ status
+sudo systemctl restart cloudflared   # รีสตาร์ท
+sudo journalctl -u cloudflared -n 50 # ดู error logs
+```
+
+### 502 Bad Gateway (Cloudflare)
+```bash
+# 1. ตรวจ Next.js
+pm2 status
+curl http://localhost:4000
+
+# 2. ตรวจ Nginx
+sudo systemctl status nginx
+curl http://localhost
+
+# 3. ตรวจ Tunnel
+sudo systemctl status cloudflared
+```
+
 ### Database connection failed
 ```bash
-# ตรวจว่า MSSQL server เข้าถึงได้
-telnet 192.168.110.106 1433
-
-# ถ้าไม่ได้ — ตรวจ firewall ของ DB server
+telnet 192.168.110.106 1433          # ตรวจ MSSQL
 ```
 
 ### Email ส่งไม่ได้
 ```bash
-# ตรวจ Azure AD config
 pm2 logs reportcenter | grep "Email"
-
-# ต้องมี:
-# - AZURE_TENANT_ID, AZURE_CLIENT_ID, AZURE_CLIENT_SECRET ถูกต้อง
-# - Azure App มี Mail.Send permission + admin consent
-# - SMTP_USER ตรงกับ mailbox จริง
-```
-
-### Port conflict
-```bash
-# ตรวจว่า port 4000 ถูกใช้อยู่หรือไม่
-sudo lsof -i :4000
-# เปลี่ยน PORT ใน .env.local ถ้าต้องการ
 ```
 
 ---
 
-## 14. Security Checklist
+## 15. Security Checklist
 
-- [ ] เปลี่ยน `JWT_SECRET` เป็นค่าสุ่ม (ใช้ `openssl rand -base64 32`)
+- [ ] เปลี่ยน `JWT_SECRET` เป็นค่าสุ่ม (`openssl rand -base64 32`)
 - [ ] เปลี่ยน `CRON_SECRET` เป็นค่าสุ่ม
-- [ ] ตั้ง SSL (HTTPS) ผ่าน Let's Encrypt
-- [ ] ปิดพอร์ตที่ไม่จำเป็น (UFW)
-- [ ] ตั้ง `NODE_ENV=production` (Next.js จัดการให้ตอน `npm run build`)
-- [ ] ตรวจว่า `.env.local` ไม่ถูก commit (อยู่ใน `.gitignore` แล้ว)
-- [ ] ตั้ง Nginx rate limiting ถ้าเปิด public
+- [ ] ตั้ง Cloudflare Access Policy (จำกัด email/SSO)
+- [ ] UFW เปิดแค่ SSH เท่านั้น
+- [ ] Nginx ผูกไว้แค่ localhost (listen 80)
+- [ ] `.env.local` ไม่ถูก commit (อยู่ใน `.gitignore`)
+- [ ] Cloudflare Tunnel ตั้ง auto-start (`systemctl enable cloudflared`)
 
 ---
 
 ## Quick Reference
 
 ```
-📁 /opt/reportcenter          — Project root
-📄 /opt/reportcenter/.env.local — Environment config
-🔧 pm2 restart reportcenter   — Restart app
-📋 pm2 logs reportcenter      — View logs
-🔄 /opt/reportcenter/deploy.sh — One-click deploy
+📁 /opt/reportcenter              — Project root
+📄 /opt/reportcenter/.env.local   — Environment config
+🚀 pm2 restart reportcenter       — Restart Next.js app
+🔄 sudo systemctl restart nginx   — Restart Nginx
+📋 pm2 logs reportcenter          — View logs
+🔄 /opt/reportcenter/deploy.sh    — One-click deploy
+🔒 sudo systemctl status cloudflared — Tunnel status
 🌐 https://reportcenter.yourcompany.com — Access URL
+☁️  https://one.dash.cloudflare.com     — Zero Trust Dashboard
 ```
