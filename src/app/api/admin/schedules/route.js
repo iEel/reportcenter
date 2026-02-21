@@ -262,6 +262,7 @@ export async function PATCH(request) {
         const reqExec = companyPool.request();
 
         // Bind parameters if any
+        const resolvedParams = {};
         if (sched.Parameters) {
             try {
                 const params = JSON.parse(sched.Parameters);
@@ -288,6 +289,8 @@ export async function PATCH(request) {
                         }
                     }
 
+                    resolvedParams[paramName] = value;
+
                     if (value !== undefined && value !== '') {
                         if (def.InputType === 'date') reqExec.input(paramName, sql.Date, value);
                         else if (def.InputType === 'number') reqExec.input(paramName, sql.Decimal, parseFloat(value));
@@ -310,6 +313,12 @@ export async function PATCH(request) {
         xlsx.utils.book_append_sheet(workbook, worksheet, 'Report Data');
         const buffer = xlsx.write(workbook, { bookType: 'xlsx', type: 'buffer' });
 
+        // Build params text for email
+        const paramEntries = Object.entries(resolvedParams);
+        const paramsText = paramEntries.length > 0
+            ? '\nตัวแปร:\n' + paramEntries.map(([k, v]) => `  • ${k}: ${v}`).join('\n')
+            : '';
+
         // Send email via Graph API or SMTP fallback
         const companyNames = { 1: 'Sonic Interfreight (SNI)', 2: 'Grandlink Logistics (GRL)', 3: 'Sonic Autologis (SALOG)' };
         const companyName = companyNames[sched.CompanyId] || `Company ${sched.CompanyId}`;
@@ -321,7 +330,7 @@ export async function PATCH(request) {
             to: sched.EmailTo,
             cc: sched.EmailCc || undefined,
             subject: `${subject} (Manual)`,
-            text: `รายงาน "${sched.ReportName}"\nบริษัท: ${companyName}\nถูกรันด้วยตนเองโดย ${user.fullName}\nพบข้อมูล ${rows.length} รายการ`,
+            text: `รายงาน "${sched.ReportName}"\nบริษัท: ${companyName}${paramsText}\nถูกรันด้วยตนเองโดย ${user.fullName}\nพบข้อมูล ${rows.length} รายการ`,
             attachments: [{
                 filename: `${sched.ReportName}_${companyName.split('(')[1]?.replace(')', '') || sched.CompanyId}_${dateStr}.xlsx`,
                 content: buffer,

@@ -62,12 +62,14 @@ export async function GET(request) {
                 const request = companyPool.request();
 
                 // Parse, resolve relative dates, and apply parameters
+                const resolvedParams = {};
                 if (schedule.Parameters) {
                     try {
                         const params = JSON.parse(schedule.Parameters);
                         for (const [key, value] of Object.entries(params)) {
                             // Resolve relative date presets (TODAY, MONTH_START, etc.)
                             const resolved = resolveRelativeDate(value);
+                            resolvedParams[key] = resolved;
                             request.input(key, resolved);
                         }
                     } catch (e) {
@@ -92,6 +94,15 @@ export async function GET(request) {
                     ? schedule.EmailSubject.replace('{date}', dateStr).replace('{report}', schedule.ReportName)
                     : `[ReportCenter] ${schedule.ReportName} - ${companyName} - ${dateStr}`;
 
+                // Build parameters HTML
+                const paramEntries = Object.entries(resolvedParams);
+                const paramsHtml = paramEntries.length > 0
+                    ? `<p style="color: #64748b;">ตัวแปร:</p>
+                       <ul style="color: #64748b; margin: 4px 0 12px 20px; padding: 0;">
+                           ${paramEntries.map(([k, v]) => `<li><strong>${k.replace('@', '')}</strong>: ${v}</li>`).join('')}
+                       </ul>`
+                    : '';
+
                 const mailOptions = {
                     from: process.env.SMTP_FROM || process.env.SMTP_USER,
                     to: schedule.EmailTo,
@@ -103,6 +114,7 @@ export async function GET(request) {
                             <p style="color: #64748b;">บริษัท: <strong>${companyName}</strong></p>
                             <p style="color: #64748b;">กำหนดการ: <strong>${schedule.ScheduleName}</strong></p>
                             <p style="color: #64748b;">สร้างเมื่อ: ${dateStr}</p>
+                            ${paramsHtml}
                             <p style="color: #64748b;">จำนวนข้อมูล: <strong>${data.length} แถว</strong></p>
                             <hr style="border: none; border-top: 1px solid #e2e8f0; margin: 16px 0;" />
                             <p style="color: #94a3b8; font-size: 12px;">ส่งอัตโนมัติจาก ReportCenter</p>
