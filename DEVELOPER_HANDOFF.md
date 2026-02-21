@@ -1,6 +1,6 @@
 # ReportCenter — Developer Handoff
 
-> **Version:** 5.1  
+> **Version:** 5.2  
 > **Last Updated:** 2026-02-22  
 > **Tech Stack:** Next.js 16.1.6 + React 19 + Tailwind CSS 4 + MSSQL (mssql driver) + Microsoft Graph API (OAuth2) / Nodemailer (SMTP fallback) + @azure/msal-node
 
@@ -491,8 +491,13 @@ Report ที่มี parameters → admin เลือก **relative date pres
 ### Cron Setup (Windows Task Scheduler)
 ```bash
 # ตัวอย่าง: รันทุก 5 นาที
-curl http://localhost:3000/api/cron/execute-schedules?secret=rc-cron-secret-2026
+curl http://localhost:4000/api/cron/execute-schedules?secret=rc-cron-secret-2026
 ```
+
+### Test Email
+- ปุ่ม **"ทดสอบ Email"** ที่ header ของหน้าตั้งเวลารายงาน
+- เรียก `POST /api/admin/test-email` → ส่ง email ทดสอบไป SMTP_USER
+- ใช้ตรวจว่า email config (Graph API / SMTP) ทำงานถูกต้อง
 
 ### Report Favorites
 - ★ ปุ่มติดดาว (favorite) ที่หน้า Standard/Template Reports
@@ -531,6 +536,11 @@ node scripts/create-activity-logs.js
 - [x] Conditional sidebar menus based on user's available report types
 - [x] TemplateEditor component (click-to-insert, preview mode)
 - [x] Parameter Typeahead search (LookupQuery + TypeaheadInput + auto-execute on select)
+- [x] Excel Binary Workbook (.xlsb) — ไฟล์เล็กกว่า .xlsx 50-70%
+- [x] Session timeout auto-logout (JWT 8h + frontend 401 redirect + 5min recheck)
+- [x] SQL Injection guard for LookupQuery (SELECT-only whitelist)
+- [x] Environment validation on startup (`src/lib/env-check.js`)
+- [x] Test Email button on schedule page (`POST /api/admin/test-email`)
 - [ ] Password complexity rules enforcement
 - [ ] Two-factor authentication (2FA)
 
