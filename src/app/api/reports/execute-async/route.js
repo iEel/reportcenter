@@ -49,6 +49,22 @@ export async function POST(request) {
             return NextResponse.json({ success: false, message: 'Report not found' }, { status: 404 });
         }
 
+        // Authorization — check user's role has access to this report
+        const isAdmin = session.roleName?.toLowerCase() === 'admin';
+        if (!isAdmin) {
+            const accessCheck = await centralPool.request()
+                .input('ReportId', sql.Int, parseInt(reportId))
+                .input('RoleId', sql.Int, session.roleId)
+                .query('SELECT 1 FROM ReportRoleMapping WHERE ReportId = @ReportId AND RoleId = @RoleId');
+
+            if (accessCheck.recordset.length === 0) {
+                return NextResponse.json(
+                    { success: false, message: 'คุณไม่มีสิทธิ์เข้าถึงรายงานนี้' },
+                    { status: 403 }
+                );
+            }
+        }
+
         const { TSqlQuery: tSqlQuery, ReportName: reportName } = reportResult.recordset[0];
 
         // Get expected params

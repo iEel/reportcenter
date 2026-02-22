@@ -29,6 +29,23 @@ export async function GET(request) {
             return NextResponse.json({ success: false, message: 'Forbidden' }, { status: 403 });
         }
 
+        // Verify user has access to this report (role-based)
+        const isAdmin = user.roleName?.toLowerCase() === 'admin';
+        if (!isAdmin) {
+            const centralPool = await connectToCentralDB();
+            const accessCheck = await centralPool.request()
+                .input('ReportId', sql.Int, parseInt(reportId))
+                .input('RoleId', sql.Int, user.roleId)
+                .query('SELECT 1 FROM ReportRoleMapping WHERE ReportId = @ReportId AND RoleId = @RoleId');
+
+            if (accessCheck.recordset.length === 0) {
+                return NextResponse.json(
+                    { success: false, message: 'คุณไม่มีสิทธิ์เข้าถึงรายงานนี้' },
+                    { status: 403 }
+                );
+            }
+        }
+
         // Minimum 2 chars to search
         if (q.length < 2) {
             return NextResponse.json({ success: true, suggestions: [] });

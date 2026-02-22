@@ -25,6 +25,27 @@ export async function POST(request) {
         const tSqlQuery = reportResult.recordset[0].TSqlQuery;
         const reportName = reportResult.recordset[0].ReportName;
 
+        // 1.5 Authorization — check user's role has access to this report
+        const session = await getSession(request);
+        if (!session) {
+            return NextResponse.json({ success: false, message: 'Unauthorized' }, { status: 401 });
+        }
+
+        const isAdmin = session.roleName?.toLowerCase() === 'admin';
+        if (!isAdmin) {
+            const accessCheck = await centralPool.request()
+                .input('ReportId', sql.Int, parseInt(reportId))
+                .input('RoleId', sql.Int, session.roleId)
+                .query('SELECT 1 FROM ReportRoleMapping WHERE ReportId = @ReportId AND RoleId = @RoleId');
+
+            if (accessCheck.recordset.length === 0) {
+                return NextResponse.json(
+                    { success: false, message: 'คุณไม่มีสิทธิ์เข้าถึงรายงานนี้' },
+                    { status: 403 }
+                );
+            }
+        }
+
         // 2. Fetch Expected Parameters from Central Database to ensure type safety (basic protection)
         const paramResult = await centralPool.request()
             .input('ReportId', sql.Int, parseInt(reportId))
