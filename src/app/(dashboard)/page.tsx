@@ -29,6 +29,7 @@ export default function Home() {
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [logs, setLogs] = useState<ActivityLog[]>([]);
   const [scheduleStats, setScheduleStats] = useState<any>(null);
+  const [chartData, setChartData] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
   const isAdmin = user?.roleName?.toLowerCase() === 'admin';
 
@@ -50,6 +51,12 @@ export default function Home() {
   };
 
   useEffect(() => { fetchDashboard(); }, []);
+
+  useEffect(() => {
+    fetch('/api/dashboard/charts').then(r => r.json()).then(d => {
+      if (d.success) setChartData(d);
+    }).catch(() => { });
+  }, []);
 
 
 
@@ -80,10 +87,10 @@ export default function Home() {
 
       {/* Stats Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-5 hover:shadow-md transition-shadow">
+        <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700 p-5 hover:shadow-md transition-shadow">
           <div className="flex items-center gap-3 mb-3">
-            <div className="w-10 h-10 bg-blue-100 rounded-xl flex items-center justify-center">
-              <FileText className="w-5 h-5 text-blue-600" />
+            <div className="w-10 h-10 bg-blue-100 dark:bg-blue-900/50 rounded-xl flex items-center justify-center">
+              <FileText className="w-5 h-5 text-blue-600 dark:text-blue-400" />
             </div>
             <span className="text-sm text-slate-500 font-medium">รายงานทั้งหมด</span>
           </div>
@@ -155,6 +162,70 @@ export default function Home() {
       </div>
 
       {/* Quick Access + Activity Log Row */}
+
+      {/* Charts Section */}
+      {chartData && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* Usage per Day Bar Chart */}
+          <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700 p-6">
+            <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-300 mb-4">📊 การใช้งานรายวัน (14 วัน)</h3>
+            {chartData.usagePerDay.length > 0 ? (
+              <div className="flex items-end gap-1 h-32">
+                {chartData.usagePerDay.map((d: any, i: number) => {
+                  const max = Math.max(...chartData.usagePerDay.map((x: any) => x.count));
+                  const pct = max > 0 ? (d.count / max) * 100 : 0;
+                  return (
+                    <div key={i} className="flex-1 flex flex-col items-center gap-1 group">
+                      <span className="text-[10px] text-slate-400 opacity-0 group-hover:opacity-100 transition-opacity">{d.count}</span>
+                      <div
+                        className="w-full bg-gradient-to-t from-blue-600 to-blue-400 rounded-t-sm transition-all duration-500 hover:from-blue-500 hover:to-blue-300"
+                        style={{ height: `${Math.max(pct, 4)}%` }}
+                      />
+                      <span className="text-[9px] text-slate-400 truncate w-full text-center">{d.date?.slice(5)}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <p className="text-sm text-slate-400 text-center py-8">ยังไม่มีข้อมูล</p>
+            )}
+          </div>
+
+          {/* Top Reports */}
+          <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700 p-6">
+            <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-300 mb-4">🏆 รายงานยอดนิยม (30 วัน)</h3>
+            {chartData.topReports.length > 0 ? (
+              <div className="space-y-3">
+                {chartData.topReports.map((r: any, i: number) => {
+                  const max = chartData.topReports[0]?.count || 1;
+                  const pct = (r.count / max) * 100;
+                  const colors = ['bg-blue-500', 'bg-emerald-500', 'bg-amber-500', 'bg-purple-500', 'bg-rose-500'];
+                  return (
+                    <div key={i}>
+                      <div className="flex justify-between text-sm mb-1">
+                        <span className="text-slate-700 dark:text-slate-300 font-medium truncate">{r.ReportName}</span>
+                        <span className="text-slate-400 text-xs ml-2 shrink-0">{r.count} ครั้ง</span>
+                      </div>
+                      <div className="h-2 bg-slate-100 dark:bg-slate-700 rounded-full overflow-hidden">
+                        <div className={`h-full rounded-full transition-all duration-700 ${colors[i]}`} style={{ width: `${pct}%` }} />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <p className="text-sm text-slate-400 text-center py-8">ยังไม่มีข้อมูล</p>
+            )}
+            {chartData.activeUsersToday > 0 && (
+              <div className="mt-4 pt-3 border-t border-slate-100 dark:border-slate-700 flex items-center gap-2">
+                <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse" />
+                <span className="text-xs text-slate-500 dark:text-slate-400">ผู้ใช้งานวันนี้: <span className="font-semibold text-emerald-600">{chartData.activeUsersToday}</span> คน</span>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
 
         {/* Quick Access */}

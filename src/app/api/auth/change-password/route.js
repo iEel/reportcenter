@@ -3,6 +3,7 @@ import sql from 'mssql';
 import bcrypt from 'bcryptjs';
 import { connectToCentralDB } from '@/lib/db';
 import { getSession } from '@/lib/auth';
+import { validatePassword } from '@/lib/password-rules';
 
 export async function PUT(request) {
     try {
@@ -17,8 +18,10 @@ export async function PUT(request) {
             return NextResponse.json({ success: false, message: 'กรุณากรอกรหัสผ่านปัจจุบันและรหัสผ่านใหม่' }, { status: 400 });
         }
 
-        if (newPassword.length < 6) {
-            return NextResponse.json({ success: false, message: 'รหัสผ่านใหม่ต้องมีอย่างน้อย 6 ตัวอักษร' }, { status: 400 });
+        // Password complexity check
+        const pwCheck = validatePassword(newPassword);
+        if (!pwCheck.valid) {
+            return NextResponse.json({ success: false, message: 'รหัสผ่านไม่ผ่านเกณฑ์: ' + pwCheck.errors.join(', ') }, { status: 400 });
         }
 
         const pool = await connectToCentralDB();

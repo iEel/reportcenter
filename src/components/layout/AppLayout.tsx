@@ -5,7 +5,7 @@ import { AuthProvider } from "@/components/providers/AuthProvider";
 export default function AppLayout({ children }: { children: React.ReactNode }) {
     return (
         <AuthProvider>
-            <div className="flex h-screen overflow-hidden bg-slate-50 font-sans">
+            <div className="flex h-screen overflow-hidden bg-slate-50 dark:bg-slate-900 font-sans transition-colors duration-300">
                 <Sidebar />
                 <div className="flex-1 flex flex-col relative overflow-hidden">
                     <Header />

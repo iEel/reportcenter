@@ -195,6 +195,21 @@ export async function GET(request) {
                     `);
 
                 results.push({ scheduleId: schedule.ScheduleId, name: schedule.ScheduleName, status: 'failed', error: err.message });
+
+                // Create notification for admin users about the failure
+                try {
+                    await pool.request()
+                        .input('Title', sql.NVarChar(200), `❌ Schedule ล้มเหลว: ${schedule.ScheduleName}`)
+                        .input('Message', sql.NVarChar(500), `${err.message?.substring(0, 400)}`)
+                        .input('Type', sql.NVarChar(20), 'error')
+                        .query(`
+                            INSERT INTO Notifications (UserId, Title, Message, Type)
+                            SELECT u.UserId, @Title, @Message, @Type
+                            FROM Users u
+                            LEFT JOIN Roles r ON u.RoleId = r.RoleId
+                            WHERE r.RoleName = 'Admin'
+                        `);
+                } catch { }
             }
         }
 

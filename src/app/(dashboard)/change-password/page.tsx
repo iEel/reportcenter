@@ -38,8 +38,20 @@ export default function ChangePasswordPage() {
             setErrorMessage('กรุณากรอกรหัสผ่านปัจจุบัน');
             return;
         }
-        if (newPassword.length < 6) {
-            setErrorMessage('รหัสผ่านใหม่ต้องมีอย่างน้อย 6 ตัวอักษร');
+        if (newPassword.length < 8) {
+            setErrorMessage('รหัสผ่านใหม่ต้องมีอย่างน้อย 8 ตัวอักษร');
+            return;
+        }
+        if (!/[A-Z]/.test(newPassword)) {
+            setErrorMessage('ต้องมีตัวอักษรพิมพ์ใหญ่อย่างน้อย 1 ตัว');
+            return;
+        }
+        if (!/[0-9]/.test(newPassword)) {
+            setErrorMessage('ต้องมีตัวเลขอย่างน้อย 1 ตัว');
+            return;
+        }
+        if (!/[^A-Za-z0-9]/.test(newPassword)) {
+            setErrorMessage('ต้องมีอักขระพิเศษอย่างน้อย 1 ตัว');
             return;
         }
         if (newPassword !== confirmPassword) {
@@ -144,13 +156,19 @@ export default function ChangePasswordPage() {
                         </div>
                         {/* Strength Indicator */}
                         {newPassword.length > 0 && (
-                            <div className="mt-2 space-y-1">
+                            <div className="mt-2 space-y-2">
                                 <div className="flex gap-1">
                                     {[1, 2, 3, 4].map(i => (
                                         <div key={i} className={`h-1.5 flex-1 rounded-full transition-colors ${i <= strength.level ? strength.color : 'bg-slate-200'}`} />
                                     ))}
                                 </div>
                                 <p className="text-xs text-slate-500">ความแข็งแรง: <span className="font-medium">{strength.label}</span></p>
+                                <div className="space-y-1">
+                                    <p className={`text-xs flex items-center gap-1 ${newPassword.length >= 8 ? 'text-emerald-600' : 'text-slate-400'}`}>{newPassword.length >= 8 ? '✓' : '○'} อย่างน้อย 8 ตัวอักษร</p>
+                                    <p className={`text-xs flex items-center gap-1 ${/[A-Z]/.test(newPassword) ? 'text-emerald-600' : 'text-slate-400'}`}>{/[A-Z]/.test(newPassword) ? '✓' : '○'} ตัวพิมพ์ใหญ่ (A-Z)</p>
+                                    <p className={`text-xs flex items-center gap-1 ${/[0-9]/.test(newPassword) ? 'text-emerald-600' : 'text-slate-400'}`}>{/[0-9]/.test(newPassword) ? '✓' : '○'} ตัวเลข (0-9)</p>
+                                    <p className={`text-xs flex items-center gap-1 ${/[^A-Za-z0-9]/.test(newPassword) ? 'text-emerald-600' : 'text-slate-400'}`}>{/[^A-Za-z0-9]/.test(newPassword) ? '✓' : '○'} อักขระพิเศษ (!@#$)</p>
+                                </div>
                             </div>
                         )}
                     </div>
@@ -168,7 +186,7 @@ export default function ChangePasswordPage() {
                         {confirmPassword && confirmPassword !== newPassword && (
                             <p className="text-xs text-red-500 mt-1">รหัสผ่านไม่ตรงกัน</p>
                         )}
-                        {confirmPassword && confirmPassword === newPassword && newPassword.length >= 6 && (
+                        {confirmPassword && confirmPassword === newPassword && newPassword.length >= 8 && (
                             <p className="text-xs text-emerald-500 mt-1 flex items-center gap-1"><Check className="w-3 h-3" /> ตรงกัน</p>
                         )}
                     </div>
@@ -178,7 +196,7 @@ export default function ChangePasswordPage() {
                 <div className="px-6 py-4 bg-slate-50 border-t border-slate-100 flex justify-end">
                     <button
                         onClick={handleSubmit}
-                        disabled={isSaving || !currentPassword || newPassword.length < 6 || newPassword !== confirmPassword}
+                        disabled={isSaving || !currentPassword || newPassword.length < 8 || !/[A-Z]/.test(newPassword) || !/[0-9]/.test(newPassword) || !/[^A-Za-z0-9]/.test(newPassword) || newPassword !== confirmPassword}
                         className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-6 py-2.5 rounded-lg active:scale-95 transition-all shadow-md shadow-blue-500/30 font-medium disabled:opacity-50 disabled:active:scale-100"
                     >
                         {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Lock className="w-4 h-4" />}
@@ -186,6 +204,6 @@ export default function ChangePasswordPage() {
                     </button>
                 </div>
             </div>
-        </div>
+        </div >
     );
 }

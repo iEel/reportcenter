@@ -3,6 +3,7 @@ import sql from 'mssql';
 import bcrypt from 'bcryptjs';
 import { connectToCentralDB } from '@/lib/db';
 import { signToken, COOKIE_NAME } from '@/lib/auth';
+import { checkRateLimit, recordFailedAttempt, clearAttempts } from '@/lib/rate-limit';
 
 export async function POST(request) {
     try {
@@ -12,6 +13,20 @@ export async function POST(request) {
             return NextResponse.json(
                 { success: false, message: 'กรุณากรอก Username และ Password' },
                 { status: 400 }
+            );
+        }
+
+        // Rate limiting — get IP from headers
+        const ip = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim()
+            || request.headers.get('x-real-ip')
+            || 'unknown';
+
+        const rateCheck = checkRateLimit(ip);
+        if (!rateCheck.allowed) {
+            const retryMin = Math.ceil(rateCheck.retryAfterMs / 60000);
+            return NextResponse.json(
+                { success: false, message: `เข้าสู่ระบบผิดพลาดเกินกำหนด กรุณารอ ${retryMin} นาที` },
+                { status: 429 }
             );
         }
 
@@ -27,8 +42,9 @@ export async function POST(request) {
             `);
 
         if (result.recordset.length === 0) {
+            recordFailedAttempt(ip);
             return NextResponse.json(
-                { success: false, message: 'ไม่พบผู้ใช้งานนี้ในระบบ' },
+                { success: false, message: 'Username หรือ Password ไม่ถูกต้อง' },
                 { status: 401 }
             );
         }
@@ -45,11 +61,16 @@ export async function POST(request) {
         // Compare password with bcrypt hash
         const isValid = await bcrypt.compare(password, user.PasswordHash);
         if (!isValid) {
+            recordFailedAttempt(ip);
+            const remaining = rateCheck.remaining - 1;
             return NextResponse.json(
-                { success: false, message: 'Username หรือ Password ไม่ถูกต้อง' },
+                { success: false, message: `Username หรือ Password ไม่ถูกต้อง${remaining <= 2 ? ` (เหลืออีก ${remaining} ครั้ง)` : ''}` },
                 { status: 401 }
             );
         }
+
+        // Success — clear rate limit
+        clearAttempts(ip);
 
         // Fetch allowed companies
         const companyResult = await pool.request()

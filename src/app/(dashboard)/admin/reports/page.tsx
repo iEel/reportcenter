@@ -12,6 +12,7 @@ export default function AdminReportsPage() {
     const [reports, setReports] = useState<any[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [searchQuery, setSearchQuery] = useState('');
+    const [selectedIds, setSelectedIds] = useState<number[]>([]);
 
     const fetchReports = async () => {
         setIsLoading(true);
@@ -59,6 +60,44 @@ export default function AdminReportsPage() {
         fetchReports();
     }, []);
 
+    const handleBulkDelete = async () => {
+        if (selectedIds.length === 0) return;
+        const ok = await confirm({
+            title: `ลบรายงาน ${selectedIds.length} รายการ`,
+            message: `คุณแน่ใจหรือ? การดำเนินการนี้ไม่สามารถย้อนกลับได้`,
+            confirmLabel: `ลบ ${selectedIds.length} รายการ`,
+            variant: 'danger',
+        });
+        if (!ok) return;
+        try {
+            const res = await fetch('/api/admin/reports/bulk', {
+                method: 'DELETE',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ reportIds: selectedIds }),
+            });
+            const data = await res.json();
+            if (data.success) {
+                toast(`ลบ ${data.deleted} รายการเรียบร้อย`, 'success');
+                setSelectedIds([]);
+                fetchReports();
+            } else {
+                toast(data.message || 'ไม่สามารถลบได้', 'error');
+            }
+        } catch { toast('เกิดข้อผิดพลาด', 'error'); }
+    };
+
+    const toggleSelect = (id: number) => {
+        setSelectedIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
+    };
+
+    const toggleSelectAll = () => {
+        if (selectedIds.length === filteredReports.length) {
+            setSelectedIds([]);
+        } else {
+            setSelectedIds(filteredReports.map(r => r.ReportId));
+        }
+    };
+
     return (
         <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
@@ -92,12 +131,20 @@ export default function AdminReportsPage() {
                             className="w-full pl-9 pr-4 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors bg-white font-medium"
                         />
                     </div>
+                    {selectedIds.length > 0 && (
+                        <button onClick={handleBulkDelete} className="flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors text-sm font-medium shadow-sm">
+                            <Trash2 className="w-4 h-4" /> ลบที่เลือก ({selectedIds.length})
+                        </button>
+                    )}
                 </div>
 
                 <div className="overflow-x-auto min-h-[300px]">
                     <table className="w-full text-left text-sm whitespace-nowrap">
                         <thead className="bg-slate-50 text-slate-600 font-medium border-b border-slate-200">
                             <tr>
+                                <th className="px-3 py-4 w-10">
+                                    <input type="checkbox" checked={selectedIds.length === filteredReports.length && filteredReports.length > 0} onChange={toggleSelectAll} className="w-4 h-4 rounded border-slate-300" />
+                                </th>
                                 <th className="px-6 py-4">ข้ออ้างอิง (ID)</th>
                                 <th className="px-6 py-4">ชื่อรายงาน</th>
                                 <th className="px-6 py-4">ประเภท</th>
@@ -109,7 +156,7 @@ export default function AdminReportsPage() {
                         <tbody className="divide-y divide-slate-100 text-slate-700">
                             {isLoading ? (
                                 <tr>
-                                    <td colSpan={6} className="px-6 py-12 text-center text-slate-500">
+                                    <td colSpan={7} className="px-6 py-12 text-center text-slate-500">
                                         <div className="flex flex-col items-center justify-center">
                                             <RefreshCw className="w-6 h-6 animate-spin text-blue-500 mb-2" />
                                             กำลังโหลดข้อมูล...
@@ -118,10 +165,13 @@ export default function AdminReportsPage() {
                                 </tr>
                             ) : filteredReports.length === 0 ? (
                                 <tr>
-                                    <td colSpan={6} className="px-6 py-8 text-center text-slate-500">{searchQuery ? 'ไม่พบรายงานที่ค้นหา' : 'ไม่พบข้อมูลรายงานในระบบ'}</td>
+                                    <td colSpan={7} className="px-6 py-8 text-center text-slate-500">{searchQuery ? 'ไม่พบรายงานที่ค้นหา' : 'ไม่พบข้อมูลรายงานในระบบ'}</td>
                                 </tr>
                             ) : filteredReports.map((report) => (
-                                <tr key={report.ReportId} className="hover:bg-slate-50/80 transition-colors group">
+                                <tr key={report.ReportId} className={`hover:bg-slate-50/80 transition-colors group ${selectedIds.includes(report.ReportId) ? 'bg-blue-50/50' : ''}`}>
+                                    <td className="px-3 py-4">
+                                        <input type="checkbox" checked={selectedIds.includes(report.ReportId)} onChange={() => toggleSelect(report.ReportId)} className="w-4 h-4 rounded border-slate-300" />
+                                    </td>
                                     <td className="px-6 py-4 font-mono text-slate-500">RID-{report.ReportId.toString().padStart(4, '0')}</td>
                                     <td className="px-6 py-4">
                                         <div className="flex flex-col">
