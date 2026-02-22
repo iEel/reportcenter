@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import sql from 'mssql';
 import bcrypt from 'bcryptjs';
 import { connectToCentralDB } from '@/lib/db';
+import { validatePassword } from '@/lib/password-rules';
 
 export async function GET(request) {
     try {
@@ -70,6 +71,16 @@ export async function POST(request) {
 
         // Hash the password with bcrypt before storing
         const rawPassword = PasswordHash || 'P@ssw0rd123';
+
+        // Validate password complexity
+        const { valid, errors } = validatePassword(rawPassword);
+        if (!valid) {
+            return NextResponse.json(
+                { success: false, message: 'รหัสผ่านไม่ผ่านเกณฑ์: ' + errors.join(', ') },
+                { status: 400 }
+            );
+        }
+
         const hashedPassword = await bcrypt.hash(rawPassword, 10);
 
         // Insert user

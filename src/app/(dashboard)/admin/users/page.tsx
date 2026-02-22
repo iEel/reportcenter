@@ -368,8 +368,8 @@ export default function AdminUsersPage() {
                                         <button
                                             onClick={() => handleToggleActive(user)}
                                             className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium cursor-pointer transition-all hover:scale-105 ${user.IsActive
-                                                    ? 'bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800'
-                                                    : 'bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-600'
+                                                ? 'bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800'
+                                                : 'bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-600'
                                                 }`}
                                             title={user.IsActive ? 'คลิกเพื่อระงับ' : 'คลิกเพื่อเปิดใช้งาน'}
                                         >
@@ -451,7 +451,7 @@ export default function AdminUsersPage() {
                                                     value={formData.PasswordHash}
                                                     onChange={e => setFormData({ ...formData, PasswordHash: e.target.value })}
                                                     className="w-full px-3 py-2.5 pr-10 border border-slate-200 dark:border-slate-600 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 bg-white dark:bg-slate-700 dark:text-white text-sm"
-                                                    placeholder="(ค่าเริ่มต้น: default_password)"
+                                                    placeholder="(ค่าเริ่มต้น: P@ssw0rd123)"
                                                 />
                                                 <button
                                                     type="button"
@@ -461,6 +461,7 @@ export default function AdminUsersPage() {
                                                     {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                                                 </button>
                                             </div>
+                                            <p className="text-xs text-slate-400 mt-1">ขั้นต่ำ 8 ตัว, ต้องมี A-Z, ตัวเลข, อักขระพิเศษ</p>
                                         </div>
                                     )}
                                 </div>
@@ -498,8 +499,8 @@ export default function AdminUsersPage() {
                                                     <label
                                                         key={company.id}
                                                         className={`flex items-center gap-3 cursor-pointer border rounded-xl p-3 transition-all ${isChecked
-                                                                ? `${colors.bg} ${colors.border} ${colors.text} shadow-sm`
-                                                                : 'border-slate-200 dark:border-slate-600 hover:border-slate-300 dark:hover:border-slate-500 bg-white dark:bg-slate-700'
+                                                            ? `${colors.bg} ${colors.border} ${colors.text} shadow-sm`
+                                                            : 'border-slate-200 dark:border-slate-600 hover:border-slate-300 dark:hover:border-slate-500 bg-white dark:bg-slate-700'
                                                             }`}
                                                     >
                                                         <div className={`w-5 h-5 rounded border-2 flex items-center justify-center flex-shrink-0 transition-all ${isChecked ? 'bg-blue-600 border-blue-600' : 'border-slate-300 dark:border-slate-500'
@@ -529,8 +530,8 @@ export default function AdminUsersPage() {
                             <div>
                                 <h4 className="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-3">สถานะ</h4>
                                 <label className={`flex items-center gap-3 cursor-pointer border rounded-xl p-3.5 transition-all ${formData.IsActive
-                                        ? 'bg-emerald-50 dark:bg-emerald-900/20 border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300'
-                                        : 'bg-slate-50 dark:bg-slate-700 border-slate-200 dark:border-slate-600'
+                                    ? 'bg-emerald-50 dark:bg-emerald-900/20 border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300'
+                                    : 'bg-slate-50 dark:bg-slate-700 border-slate-200 dark:border-slate-600'
                                     }`}>
                                     <div className={`w-10 h-6 rounded-full relative transition-all ${formData.IsActive ? 'bg-emerald-500' : 'bg-slate-300 dark:bg-slate-600'}`}>
                                         <div className={`w-5 h-5 rounded-full bg-white shadow-sm absolute top-0.5 transition-all ${formData.IsActive ? 'left-[18px]' : 'left-0.5'}`}></div>
