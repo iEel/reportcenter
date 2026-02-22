@@ -86,22 +86,29 @@ DB_PASSWORD=your-db-password
 DB_SERVER=192.168.110.106
 DB_DATABASE=ReportCenterDB
 DB_INSTANCE=alpha
+DB_REQUEST_TIMEOUT=30000
+DB_CONNECTION_TIMEOUT=10000
+DB_POOL_MIN=2
+DB_POOL_MAX=20
 
 # === Company Databases ===
 C1_DB_USER=smf
 C1_DB_PASSWORD=your-password
 C1_DB_SERVER=192.168.110.200
 C1_DB_DATABASE=SONIC2021
+C1_DB_INSTANCE=SONIC
 
 C2_DB_USER=smf
 C2_DB_PASSWORD=your-password
 C2_DB_SERVER=192.168.110.200
 C2_DB_DATABASE=GLEDB2014
+C2_DB_INSTANCE=GLINK
 
 C3_DB_USER=smf
 C3_DB_PASSWORD=your-password
 C3_DB_SERVER=192.168.110.200
 C3_DB_DATABASE=SMF-AUTOLOGIS
+C3_DB_INSTANCE=AUTOLOGIS
 
 # === JWT Secret (เปลี่ยนใน production!) ===
 JWT_SECRET=your-strong-random-secret-here
@@ -134,6 +141,9 @@ AZURE_CLIENT_SECRET=your-client-secret
 
 ```bash
 cd /opt/reportcenter
+
+# Run tests first
+npm run test
 
 # Build production
 npm run build
