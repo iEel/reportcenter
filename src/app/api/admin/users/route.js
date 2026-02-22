@@ -3,7 +3,7 @@ import sql from 'mssql';
 import bcrypt from 'bcryptjs';
 import { connectToCentralDB } from '@/lib/db';
 import { validatePassword } from '@/lib/password-rules';
-import { getSession } from '@/lib/auth';
+import { getSession, invalidateSessionCache } from '@/lib/auth';
 
 export async function GET(request) {
     try {
@@ -157,7 +157,7 @@ export async function PUT(request) {
 
         const pool = await connectToCentralDB();
 
-        // Update user
+        // Update user + increment TokenVersion to force logout
         await pool.request()
             .input('UserId', sql.Int, parseInt(UserId))
             .input('FullName', sql.NVarChar(150), FullName)
@@ -166,9 +166,13 @@ export async function PUT(request) {
             .input('IsActive', sql.Bit, IsActive ? 1 : 0)
             .query(`
                 UPDATE Users
-                SET FullName = @FullName, CompanyId = @CompanyId, RoleId = @RoleId, IsActive = @IsActive
+                SET FullName = @FullName, CompanyId = @CompanyId, RoleId = @RoleId, IsActive = @IsActive,
+                    TokenVersion = ISNULL(TokenVersion, 0) + 1
                 WHERE UserId = @UserId
             `);
+
+        // Invalidate session cache for this user immediately
+        invalidateSessionCache(parseInt(UserId));
 
         // Update company mappings (delete + re-insert)
         if (allowedCompanies) {

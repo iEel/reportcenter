@@ -1,13 +1,21 @@
 import '@/lib/env-check';
 import sql from 'mssql';
 
+// Shared pool & timeout settings (configurable via .env)
+const REQUEST_TIMEOUT = parseInt(process.env.DB_REQUEST_TIMEOUT) || 30000;   // 30s
+const CONNECTION_TIMEOUT = parseInt(process.env.DB_CONNECTION_TIMEOUT) || 10000; // 10s
+const POOL_MIN = parseInt(process.env.DB_POOL_MIN) || 2;
+const POOL_MAX = parseInt(process.env.DB_POOL_MAX) || 20;
+
 // This configuration is for the Central Report Database (ReportCenterDB)
-// It stores Reports, Roles, Users, and Parameters.
 const centralDbConfig = {
     user: process.env.DB_USER,
     password: process.env.DB_PASSWORD,
     server: process.env.DB_SERVER,
     database: process.env.DB_DATABASE,
+    requestTimeout: REQUEST_TIMEOUT,
+    connectionTimeout: CONNECTION_TIMEOUT,
+    pool: { min: POOL_MIN, max: POOL_MAX, idleTimeoutMillis: 30000 },
     options: {
         instanceName: process.env.DB_INSTANCE || 'alpha',
         encrypt: false,
@@ -22,6 +30,9 @@ const envCompanyDbConfigs = {
         password: process.env.C1_DB_PASSWORD,
         server: process.env.C1_DB_SERVER,
         database: process.env.C1_DB_DATABASE,
+        requestTimeout: REQUEST_TIMEOUT,
+        connectionTimeout: CONNECTION_TIMEOUT,
+        pool: { min: POOL_MIN, max: POOL_MAX, idleTimeoutMillis: 30000 },
         options: { instanceName: process.env.C1_DB_INSTANCE || 'SONIC', encrypt: false, trustServerCertificate: true },
         label: 'SNI',
     },
@@ -30,6 +41,9 @@ const envCompanyDbConfigs = {
         password: process.env.C2_DB_PASSWORD,
         server: process.env.C2_DB_SERVER,
         database: process.env.C2_DB_DATABASE,
+        requestTimeout: REQUEST_TIMEOUT,
+        connectionTimeout: CONNECTION_TIMEOUT,
+        pool: { min: POOL_MIN, max: POOL_MAX, idleTimeoutMillis: 30000 },
         options: { instanceName: process.env.C2_DB_INSTANCE || 'GLINK', encrypt: false, trustServerCertificate: true },
         label: 'GRL',
     },
@@ -38,6 +52,9 @@ const envCompanyDbConfigs = {
         password: process.env.C3_DB_PASSWORD,
         server: process.env.C3_DB_SERVER,
         database: process.env.C3_DB_DATABASE,
+        requestTimeout: REQUEST_TIMEOUT,
+        connectionTimeout: CONNECTION_TIMEOUT,
+        pool: { min: POOL_MIN, max: POOL_MAX, idleTimeoutMillis: 30000 },
         options: { instanceName: process.env.C3_DB_INSTANCE || 'AUTOLOGIS', encrypt: false, trustServerCertificate: true },
         label: 'SALOG',
     }

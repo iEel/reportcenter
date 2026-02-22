@@ -50,7 +50,7 @@ export async function POST(request) {
         const result = await pool.request()
             .input('Username', sql.NVarChar(50), username)
             .query(`
-                SELECT u.UserId, u.Username, u.PasswordHash, u.FullName, u.CompanyId, u.RoleId, u.IsActive, r.RoleName
+                SELECT u.UserId, u.Username, u.PasswordHash, u.FullName, u.CompanyId, u.RoleId, u.IsActive, u.TokenVersion, r.RoleName
                 FROM Users u
                 LEFT JOIN Roles r ON u.RoleId = r.RoleId
                 WHERE u.Username = @Username
@@ -102,6 +102,7 @@ export async function POST(request) {
             roleName: user.RoleName,
             companyId: user.CompanyId,
             allowedCompanies: allowedCompanies,
+            tokenVersion: user.TokenVersion ?? 0,
         };
 
         const token = await signToken(tokenPayload);
