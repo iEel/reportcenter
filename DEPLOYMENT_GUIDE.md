@@ -63,10 +63,10 @@ pm2 startup systemd
 ## 4. Clone & Setup Project
 
 ```bash
-cd /opt
+cd /var/www
 sudo git clone https://github.com/iEel/reportcenter.git
-sudo chown -R $USER:$USER /opt/reportcenter
-cd /opt/reportcenter
+sudo chown -R $USER:$USER /var/www/reportcenter
+cd /var/www/reportcenter
 
 npm install
 ```
@@ -76,7 +76,7 @@ npm install
 ## 5. Configure Environment
 
 ```bash
-nano /opt/reportcenter/.env.local
+nano /var/www/reportcenter/.env.local
 ```
 
 ```env
@@ -123,6 +123,9 @@ SMTP_FROM=ReportCenter <report@yourcompany.com>
 # === Server Port ===
 PORT=4000
 
+# === Secure Cookie (ตั้งเป็น true เมื่อเข้าผ่าน HTTPS เช่น Cloudflare Tunnel) ===
+FORCE_HTTPS=false
+
 # === Cron Secret ===
 CRON_SECRET=your-cron-secret-here
 
@@ -135,12 +138,15 @@ AZURE_CLIENT_SECRET=your-client-secret
 > ⚠️ **สำคัญ**: เปลี่ยน `JWT_SECRET` และ `CRON_SECRET` เป็นค่าสุ่มที่ปลอดภัย  
 > ใช้ `openssl rand -base64 32` สร้างค่าสุ่ม
 
+> 💡 **`FORCE_HTTPS`**: ถ้าเข้าผ่าน HTTP (เช่น `http://192.168.x.x`) ให้ตั้งเป็น `false`  
+> ถ้าเข้าผ่าน HTTPS (เช่น Cloudflare Tunnel) ให้ตั้งเป็น `true`
+
 ---
 
 ## 6. Build & Start
 
 ```bash
-cd /opt/reportcenter
+cd /var/www/reportcenter
 
 # Run tests first
 npm run test
@@ -348,19 +354,19 @@ crontab -e
 ## 12. Update / Deploy New Version
 
 ```bash
-cd /opt/reportcenter && git pull && npm install && npm run build && pm2 restart reportcenter
+cd /var/www/reportcenter && git pull && npm install && npm run build && pm2 restart reportcenter
 ```
 
 ### Deploy Script
 
 ```bash
-nano /opt/reportcenter/deploy.sh
+nano /var/www/reportcenter/deploy.sh
 ```
 
 ```bash
 #!/bin/bash
 set -e
-cd /opt/reportcenter
+cd /var/www/reportcenter
 echo "🔄 Pulling latest code..."
 git pull origin master
 echo "📦 Installing dependencies..."
@@ -373,7 +379,7 @@ echo "✅ Deploy complete!"
 ```
 
 ```bash
-chmod +x /opt/reportcenter/deploy.sh
+chmod +x /var/www/reportcenter/deploy.sh
 ```
 
 ---
@@ -458,13 +464,13 @@ pm2 logs reportcenter | grep "Email"
 ## Quick Reference
 
 ```
-📁 /opt/reportcenter              — Project root
-📄 /opt/reportcenter/.env.local   — Environment config
-🚀 pm2 restart reportcenter       — Restart Next.js app
-🔄 sudo systemctl restart nginx   — Restart Nginx
-📋 pm2 logs reportcenter          — View logs
-🔄 /opt/reportcenter/deploy.sh    — One-click deploy
-🔒 sudo systemctl status cloudflared — Tunnel status
+📁 /var/www/reportcenter              — Project root
+📄 /var/www/reportcenter/.env.local   — Environment config
+🚀 pm2 restart reportcenter           — Restart Next.js app
+🔄 sudo systemctl restart nginx       — Restart Nginx
+📋 pm2 logs reportcenter              — View logs
+🔄 /var/www/reportcenter/deploy.sh    — One-click deploy
+🔒 sudo systemctl status cloudflared  — Tunnel status
 🌐 https://reportcenter.yourcompany.com — Access URL
 ☁️  https://one.dash.cloudflare.com     — Zero Trust Dashboard
 ```
