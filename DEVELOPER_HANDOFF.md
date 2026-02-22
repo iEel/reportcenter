@@ -1,6 +1,6 @@
 # ReportCenter — Developer Handoff
 
-> **Version:** 5.6  
+> **Version:** 5.7  
 > **Last Updated:** 2026-02-22  
 > **Tech Stack:** Next.js 16.1.6 + React 19 + Tailwind CSS 4 + MSSQL (mssql driver) + Microsoft Graph API (OAuth2) / Nodemailer (SMTP fallback) + @azure/msal-node
 
@@ -588,6 +588,28 @@ curl http://localhost:4000/api/cron/execute-schedules?secret=rc-cron-secret-2026
 - **Auto-create** — ถ้า table ยังไม่มี → สร้างอัตโนมัติ + seed จาก `.env`
 - **เพิ่มบริษัทใหม่:** INSERT เข้า table → restart → ใช้ได้ทันที (ไม่ต้องแก้ code)
 
+### Session Revocation (Token Version)
+- `Users` table มี `TokenVersion INT DEFAULT 0` (auto-create)
+- Login → JWT payload มี `tokenVersion`
+- `getSession()` ตรวจ `TokenVersion` + `IsActive` จาก DB ทุก request (cache 60 วิ)
+- Admin แก้ไข/disable user → `TokenVersion += 1` + `invalidateSessionCache()` → user ถูก logout ทันที
+
+### Query Timeout & Pool Config
+- `requestTimeout: 30s`, `connectionTimeout: 10s` — ป้องกัน server hang จาก slow query
+- `pool: { min: 2, max: 20, idleTimeoutMillis: 30000 }` — รองรับ concurrent users
+- ทุกค่าตั้งผ่าน `.env`: `DB_REQUEST_TIMEOUT`, `DB_CONNECTION_TIMEOUT`, `DB_POOL_MIN`, `DB_POOL_MAX`
+- Pool health check: ถ้า DB restart → auto-reconnect
+
+### Loading Skeletons
+- `LoadingSkeleton.tsx` — 5 variants: `card` (dashboard), `table`, `form`, `text`, `chart`
+- `loading.tsx` × 4 หน้า: dashboard, standard reports, admin/reports, admin/users
+- Pulse animation + dark mode support
+
+### Automated Tests (Vitest)
+- `npm run test` → `vitest run` (20 tests)
+- `npm run test:watch` → watch mode
+- Test files: `src/lib/__tests__/auth.test.js` (5), `password-rules.test.js` (10), `db.test.js` (5)
+
 ---
 
 ## 11. Scripts Reference
@@ -604,6 +626,12 @@ node scripts/create-company-databases.js
 
 # Create ActivityLogs table (if not exists)
 node scripts/create-activity-logs.js
+
+# Run automated tests
+npm run test
+
+# Run tests in watch mode
+npm run test:watch
 ```
 
 ---
@@ -640,6 +668,10 @@ node scripts/create-activity-logs.js
 - [x] Security hardening — admin checks, no hardcoded secrets, error hiding, input validation
 - [x] Dark mode — ครบทุกหน้าผ่าน `globals.css` comprehensive overrides
 - [x] Dynamic company database — `CompanyDatabases` table + auto-create + `.env` fallback
+- [x] Session revocation — `TokenVersion` + DB check + 60s cache
+- [x] Query timeout (30s) + Pool config (min:2/max:20) via `.env`
+- [x] Automated tests — Vitest, 20 tests (auth, password-rules, db)
+- [x] Loading skeletons — `LoadingSkeleton` component + 4 `loading.tsx` pages
 - [ ] Two-factor authentication (2FA)
 - [ ] PDF export support
 
