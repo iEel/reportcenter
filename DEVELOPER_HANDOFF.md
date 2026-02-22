@@ -1,6 +1,6 @@
 # ReportCenter — Developer Handoff
 
-> **Version:** 5.4  
+> **Version:** 5.5  
 > **Last Updated:** 2026-02-22  
 > **Tech Stack:** Next.js 16.1.6 + React 19 + Tailwind CSS 4 + MSSQL (mssql driver) + Microsoft Graph API (OAuth2) / Nodemailer (SMTP fallback) + @azure/msal-node
 
@@ -527,6 +527,8 @@ curl http://localhost:4000/api/cron/execute-schedules?secret=rc-cron-secret-2026
 - Shared validation: `src/lib/password-rules.js` (ใช้ทั้ง API + frontend)
 - หน้าเปลี่ยนรหัสผ่าน: แสดง checklist realtime (✓/✗ ทุกกฎ)
 - API `POST /api/auth/change-password` บังคับตรวจก่อนบันทึก
+- API `POST /api/admin/users` บังคับตรวจเมื่อสร้าง user ใหม่ (ค่าเริ่มต้น: `P@ssw0rd123`)
+- หน้าเพิ่มผู้ใช้: แสดง hint "ขั้นต่ำ 8 ตัว, ต้องมี A-Z, ตัวเลข, อักขระพิเศษ"
 
 ### Dark Mode
 - Toggle อยู่ที่ **Header** (🌙/☀️ ข้างระฆัง)
@@ -557,6 +559,17 @@ curl http://localhost:4000/api/cron/execute-schedules?secret=rc-cron-secret-2026
 - เมื่อ cron schedule ล้มเหลว → auto-insert `Notification` ให้ทุก Admin user
 - Type: `error`, แสดงชื่อ schedule + error message
 - Admin เห็นผ่านระฆัง 🔔 ที่ Header
+
+### Report Authorization (Role-Based Access)
+- **ทุก API ที่รับ `reportId`** เช็คสิทธิ์ `ReportRoleMapping` ก่อนดำเนินการ
+- Admin → bypass (เข้าถึงทุก report)
+- User ปกติ → ต้องมี `ReportRoleMapping` record ที่ match `ReportId` + `RoleId` → ถ้าไม่มี return **403**
+- APIs ที่บังคับ:
+  - `POST /api/reports/execute`
+  - `POST /api/reports/execute-async`
+  - `GET /api/reports/parameters`
+  - `GET /api/reports/search-param`
+- ป้องกัน user แก้ URL เดา reportId เพื่อเรียกใช้รายงานที่ไม่มีสิทธิ์
 
 ---
 
@@ -603,6 +616,7 @@ node scripts/create-activity-logs.js
 - [x] Job History page (re-download within 24h, auto-refresh)
 - [x] Bulk actions for admin (reports bulk delete + users bulk toggle)
 - [x] Schedule failure notifications (auto-notify admin users)
+- [x] Report authorization — ReportRoleMapping enforced on all execute/parameter APIs
 - [ ] Two-factor authentication (2FA)
 - [ ] PDF export support
 
