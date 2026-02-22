@@ -1,7 +1,7 @@
 import { NextResponse, NextRequest } from 'next/server';
 import { jwtVerify } from 'jose';
 
-const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET || 'rc-super-secret-key-2026');
+const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET);
 const COOKIE_NAME = 'rc_token';
 
 const publicPaths = ['/login', '/api/auth/login'];

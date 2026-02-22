@@ -7,6 +7,11 @@ export async function POST(request) {
     let pool;
     let transaction;
     try {
+        const session = await getSession(request);
+        if (!session || session.roleName?.toLowerCase() !== 'admin') {
+            return NextResponse.json({ success: false, message: 'Forbidden' }, { status: 403 });
+        }
+
         const body = await request.json();
         const { report, parameters } = body;
 

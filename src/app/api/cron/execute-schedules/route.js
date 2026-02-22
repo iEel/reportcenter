@@ -35,7 +35,7 @@ async function cleanupOldJobs() {
 }
 
 // Secret key to protect the cron endpoint from unauthorized access
-const CRON_SECRET = process.env.CRON_SECRET || 'rc-cron-secret-2026';
+const CRON_SECRET = process.env.CRON_SECRET;
 
 // Resolve relative date presets to actual dates
 function resolveRelativeDate(preset) {

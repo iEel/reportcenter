@@ -1,10 +1,16 @@
 import { NextResponse } from 'next/server';
 import sql from 'mssql';
 import { connectToCentralDB } from '@/lib/db';
+import { getSession } from '@/lib/auth';
 
 // GET: List all roles with their assigned reports
-export async function GET() {
+export async function GET(request) {
     try {
+        const session = await getSession(request);
+        if (!session || session.roleName?.toLowerCase() !== 'admin') {
+            return NextResponse.json({ success: false, message: 'Forbidden' }, { status: 403 });
+        }
+
         const pool = await connectToCentralDB();
 
         // Get all roles

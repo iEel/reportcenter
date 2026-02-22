@@ -3,9 +3,15 @@ import sql from 'mssql';
 import bcrypt from 'bcryptjs';
 import { connectToCentralDB } from '@/lib/db';
 import { validatePassword } from '@/lib/password-rules';
+import { getSession } from '@/lib/auth';
 
 export async function GET(request) {
     try {
+        const session = await getSession(request);
+        if (!session || session.roleName?.toLowerCase() !== 'admin') {
+            return NextResponse.json({ success: false, message: 'Forbidden' }, { status: 403 });
+        }
+
         const pool = await connectToCentralDB();
 
         // Fetch Users
