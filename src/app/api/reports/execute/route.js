@@ -149,6 +149,6 @@ export async function POST(request) {
 
     } catch (error) {
         console.error("Error executing report:", error);
-        return NextResponse.json({ success: false, message: "Failed to execute report query", error: error.message }, { status: 500 });
+        return NextResponse.json({ success: false, message: "เกิดข้อผิดพลาดในการรันรายงาน" }, { status: 500 });
     }
 }

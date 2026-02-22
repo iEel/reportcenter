@@ -57,11 +57,24 @@ export async function GET(request) {
 
 export async function POST(request) {
     try {
+        const session = await getSession(request);
+        if (!session || session.roleName?.toLowerCase() !== 'admin') {
+            return NextResponse.json({ success: false, message: 'Forbidden' }, { status: 403 });
+        }
+
         const body = await request.json();
         const { Username, PasswordHash, FullName, CompanyId, RoleId, IsActive, allowedCompanies } = body;
 
         if (!Username || !FullName) {
             return NextResponse.json({ success: false, message: "Username and FullName are required" }, { status: 400 });
+        }
+
+        // Input length validation
+        if (Username.length > 50) {
+            return NextResponse.json({ success: false, message: 'Username ต้องไม่เกิน 50 ตัวอักษร' }, { status: 400 });
+        }
+        if (FullName.length > 150) {
+            return NextResponse.json({ success: false, message: 'ชื่อต้องไม่เกิน 150 ตัวอักษร' }, { status: 400 });
         }
 
         const pool = await connectToCentralDB();
@@ -125,11 +138,21 @@ export async function POST(request) {
 
 export async function PUT(request) {
     try {
+        const session = await getSession(request);
+        if (!session || session.roleName?.toLowerCase() !== 'admin') {
+            return NextResponse.json({ success: false, message: 'Forbidden' }, { status: 403 });
+        }
+
         const body = await request.json();
         const { UserId, FullName, CompanyId, RoleId, IsActive, allowedCompanies } = body;
 
         if (!UserId || !FullName) {
             return NextResponse.json({ success: false, message: "UserId and FullName are required" }, { status: 400 });
+        }
+
+        // Input length validation
+        if (FullName.length > 150) {
+            return NextResponse.json({ success: false, message: 'ชื่อต้องไม่เกิน 150 ตัวอักษร' }, { status: 400 });
         }
 
         const pool = await connectToCentralDB();

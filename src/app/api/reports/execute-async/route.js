@@ -161,6 +161,6 @@ export async function POST(request) {
 
     } catch (error) {
         console.error('Execute-async error:', error);
-        return NextResponse.json({ success: false, message: error.message }, { status: 500 });
+        return NextResponse.json({ success: false, message: 'เกิดข้อผิดพลาดภายในเซิร์ฟเวอร์' }, { status: 500 });
     }
 }

@@ -58,10 +58,19 @@ export async function GET(request) {
 // POST: Create new role
 export async function POST(request) {
     try {
+        const session = await getSession(request);
+        if (!session || session.roleName?.toLowerCase() !== 'admin') {
+            return NextResponse.json({ success: false, message: 'Forbidden' }, { status: 403 });
+        }
+
         const { roleName, assignedReports } = await request.json();
 
         if (!roleName?.trim()) {
             return NextResponse.json({ success: false, message: 'กรุณาระบุชื่อ Role' }, { status: 400 });
+        }
+
+        if (roleName.trim().length > 50) {
+            return NextResponse.json({ success: false, message: 'ชื่อ Role ต้องไม่เกิน 50 ตัวอักษร' }, { status: 400 });
         }
 
         const pool = await connectToCentralDB();
@@ -102,6 +111,11 @@ export async function POST(request) {
 // PUT: Update role name and report mappings
 export async function PUT(request) {
     try {
+        const session = await getSession(request);
+        if (!session || session.roleName?.toLowerCase() !== 'admin') {
+            return NextResponse.json({ success: false, message: 'Forbidden' }, { status: 403 });
+        }
+
         const { roleId, roleName, assignedReports } = await request.json();
 
         if (!roleId || !roleName?.trim()) {
@@ -140,6 +154,11 @@ export async function PUT(request) {
 // DELETE: Delete role (only if no users assigned)
 export async function DELETE(request) {
     try {
+        const session = await getSession(request);
+        if (!session || session.roleName?.toLowerCase() !== 'admin') {
+            return NextResponse.json({ success: false, message: 'Forbidden' }, { status: 403 });
+        }
+
         const { searchParams } = new URL(request.url);
         const roleId = searchParams.get('roleId');
 
