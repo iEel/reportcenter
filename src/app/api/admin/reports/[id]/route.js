@@ -109,7 +109,7 @@ export async function PUT(request, props) {
                     IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = 'ReportParameters' AND COLUMN_NAME = 'LookupQuery')
                     ALTER TABLE ReportParameters ADD LookupQuery NVARCHAR(MAX) NULL;
                 `);
-            } catch { }
+            } catch (e) { console.warn('IsHeavy column check failed:', e.message); }
 
             // 4. Insert New Parameters
             if (parameters && parameters.length > 0) {
@@ -181,7 +181,7 @@ export async function PUT(request, props) {
                         .input('Details', sql.NVarChar(500), `แก้ไขรายงาน "${report.ReportName}"`)
                         .query(`INSERT INTO ActivityLogs (UserId, ReportId, ActionType, Details) VALUES (@UserId, @ReportId, @ActionType, @Details)`);
                 }
-            } catch { }
+            } catch (e) { console.warn('Report activity log failed:', e.message); }
 
             return NextResponse.json({ success: true, message: "Report updated successfully" });
 

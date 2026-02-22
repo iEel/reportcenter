@@ -119,7 +119,6 @@ export async function POST(request) {
 
         // 5. Log Activity (non-blocking, don't fail if table doesn't exist)
         try {
-            const session = await getSession(request);
             if (session) {
                 const actionType = exportAll ? 'EXPORT_EXCEL' : 'EXECUTE_REPORT';
                 const companyLabel = getCompanyLabel(companyId);

@@ -32,7 +32,7 @@ export async function GET(request) {
                 IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('Reports') AND name = 'IsHeavy')
                 ALTER TABLE Reports ADD IsHeavy BIT DEFAULT 0;
             `);
-        } catch { }
+        } catch (e) { console.warn('Favorites fetch failed:', e.message); }
 
         let result;
 

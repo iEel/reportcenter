@@ -41,7 +41,7 @@ export async function GET(request) {
                 IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = 'ReportParameters' AND COLUMN_NAME = 'LookupQuery')
                 ALTER TABLE ReportParameters ADD LookupQuery NVARCHAR(MAX) NULL;
             `);
-        } catch { }
+        } catch (e) { console.warn('LookupQuery column check failed:', e.message); }
 
         const query = `
             SELECT ParameterId, ParameterName, DisplayLabel, InputType, DropdownQuery, LookupQuery, OrderIndex 

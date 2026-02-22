@@ -209,7 +209,7 @@ export async function GET(request) {
                             LEFT JOIN Roles r ON u.RoleId = r.RoleId
                             WHERE r.RoleName = 'Admin'
                         `);
-                } catch { }
+                } catch (e) { console.warn('Schedule failure notification failed:', e.message); }
             }
         }
 

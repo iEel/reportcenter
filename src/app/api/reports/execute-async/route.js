@@ -153,7 +153,7 @@ export async function POST(request) {
                         .input('JobId', sql.Int, jobId)
                         .input('ErrorMessage', sql.NVarChar(500), error.message?.substring(0, 500))
                         .query('UPDATE ReportJobs SET Status = \'failed\', ErrorMessage = @ErrorMessage WHERE JobId = @JobId');
-                } catch { }
+                } catch (e) { console.warn('Activity log failed:', e.message); }
             }
         });
 

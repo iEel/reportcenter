@@ -29,7 +29,7 @@ export async function POST(request) {
                 if (row.SettingKey === 'rate_limit_window_minutes') cfg.windowMinutes = parseInt(row.SettingValue) || 15;
             }
             if (Object.keys(cfg).length > 0) configure(cfg);
-        } catch { }
+        } catch (e) { console.warn('Rate limit config load failed:', e.message); }
 
         // Rate limiting — get IP from headers
         const ip = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim()
@@ -113,7 +113,7 @@ export async function POST(request) {
                 .input('ActionType', sql.NVarChar(50), 'LOGIN')
                 .input('Details', sql.NVarChar(500), `${user.FullName} เข้าสู่ระบบ`)
                 .query(`INSERT INTO ActivityLogs (UserId, ActionType, Details) VALUES (@UserId, @ActionType, @Details)`);
-        } catch { }
+        } catch (e) { console.warn('Login activity log failed:', e.message); }
 
         // Set cookie
         const response = NextResponse.json({

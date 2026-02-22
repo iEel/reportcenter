@@ -352,7 +352,7 @@ export async function PATCH(request) {
                 .input('ActionType', sql.NVarChar(50), 'RUN_SCHEDULE')
                 .input('Details', sql.NVarChar(500), `รัน "${sched.ScheduleName}" แบบ Manual ได้ ${rows.length} แถว → ส่ง ${sched.EmailTo}`)
                 .query(`INSERT INTO ActivityLogs (UserId, ReportId, CompanyId, ActionType, Details) VALUES (@UserId, @ReportId, @CompanyId, @ActionType, @Details)`);
-        } catch { }
+        } catch (e) { console.warn('Schedule activity log failed:', e.message); }
 
         return NextResponse.json({ success: true, rowCount: rows.length, message: `ส่ง ${rows.length} รายการ ไปที่ ${sched.EmailTo} เรียบร้อย` });
 

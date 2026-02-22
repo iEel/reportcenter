@@ -15,7 +15,7 @@ export async function POST(request) {
                 .input('Details', sql.NVarChar(500), `${session.fullName} ออกจากระบบ`)
                 .query(`INSERT INTO ActivityLogs (UserId, ActionType, Details) VALUES (@UserId, @ActionType, @Details)`);
         }
-    } catch { }
+    } catch (e) { console.warn('Logout activity log failed:', e.message); }
 
     const response = NextResponse.json({
         success: true,

@@ -51,7 +51,7 @@ export async function POST(request) {
                     IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = 'ReportParameters' AND COLUMN_NAME = 'LookupQuery')
                     ALTER TABLE ReportParameters ADD LookupQuery NVARCHAR(MAX) NULL;
                 `);
-            } catch { }
+            } catch (e) { console.warn('IsHeavy column check failed:', e.message); }
 
             // 3. Insert Parameters if any
             if (parameters && parameters.length > 0) {
@@ -120,7 +120,7 @@ export async function POST(request) {
                         .input('Details', sql.NVarChar(500), `สร้างรายงาน "${report.ReportName}"`)
                         .query(`INSERT INTO ActivityLogs (UserId, ReportId, ActionType, Details) VALUES (@UserId, @ReportId, @ActionType, @Details)`);
                 }
-            } catch { }
+            } catch (e) { console.warn('Report activity log failed:', e.message); }
 
             return NextResponse.json({
                 success: true,
