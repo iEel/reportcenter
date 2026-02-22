@@ -1,6 +1,6 @@
 # ReportCenter — Developer Handoff
 
-> **Version:** 5.3  
+> **Version:** 5.4  
 > **Last Updated:** 2026-02-22  
 > **Tech Stack:** Next.js 16.1.6 + React 19 + Tailwind CSS 4 + MSSQL (mssql driver) + Microsoft Graph API (OAuth2) / Nodemailer (SMTP fallback) + @azure/msal-node
 
@@ -514,6 +514,50 @@ curl http://localhost:4000/api/cron/execute-schedules?secret=rc-cron-secret-2026
 - รายการ Favorites แสดงเป็น chips ด้านบนหน้ารายงาน
 - ข้อมูลเก็บใน `UserFavorites` table (auto-created)
 
+### Rate Limiting (Login)
+- **5 ครั้ง / 15 นาที** (default) — ตั้งค่าได้จากหน้า Admin Settings
+- ค่า config อ่านจาก `SystemSettings` table (`rate_limit_max_attempts`, `rate_limit_window_minutes`)
+- Implementation: `src/lib/rate-limit.js` → in-memory Map, cleanup ทุก 30 นาที
+- Login route (`/api/auth/login`) โหลด config จาก DB ทุกครั้ง → เรียก `configure()` → `checkRateLimit(ip)`
+- **หน้า Login UI:** เมื่อโดน rate limit (HTTP 429) → แสดง lockout banner + countdown timer + disabled inputs
+- **หน้า Admin Settings:** section "ความปลอดภัย (Security)" → ตั้งค่า Max Attempts + Window Minutes
+
+### Password Complexity
+- เปลี่ยนรหัสผ่านต้องมี: ≥8 ตัว, uppercase ≥1, ตัวเลข ≥1, special char ≥1
+- Shared validation: `src/lib/password-rules.js` (ใช้ทั้ง API + frontend)
+- หน้าเปลี่ยนรหัสผ่าน: แสดง checklist realtime (✓/✗ ทุกกฎ)
+- API `POST /api/auth/change-password` บังคับตรวจก่อนบันทึก
+
+### Dark Mode
+- Toggle อยู่ที่ **Header** (🌙/☀️ ข้างระฆัง)
+- ใช้ `ThemeProvider` (`src/components/providers/ThemeProvider.tsx`)
+- เก็บ state ใน `localStorage` key `rc-theme` → toggle `.dark` class บน `<html>`
+- Tailwind `dark:` variant classes applied ใน layout, AppLayout, dashboard, audit logs, job history
+
+### Dashboard Charts
+- `GET /api/dashboard/charts` → 4 datasets:
+  - **usagePerDay** (14 วัน) → CSS bar chart
+  - **topReports** (30 วัน) → horizontal progress bars
+  - **actionBreakdown** (30 วัน)
+  - **activeUsersToday** → live indicator
+- Charts render client-side ด้วย pure CSS (ไม่มี external chart library)
+
+### Job History Page
+- เมนู Sidebar: **"ประวัติการสร้างรายงาน"** (🕐) — ทุก user เห็น
+- Path: `/reports/job-history` → `GET /api/reports/job-history`
+- แสดง jobs ภายใน 24 ชม. — status (running/done/failed), re-download button
+- Running jobs banner แยกด้านบน
+- **Auto-refresh ทุก 10 วินาที**
+
+### Bulk Actions (Admin)
+- **หน้าจัดการรายงาน:** checkbox select-all + bulk delete → `DELETE /api/admin/reports/bulk` (transaction-safe)
+- **API จัดการผู้ใช้:** bulk toggle active/inactive → `PUT /api/admin/users/bulk`
+
+### Schedule Failure Notifications
+- เมื่อ cron schedule ล้มเหลว → auto-insert `Notification` ให้ทุก Admin user
+- Type: `error`, แสดงชื่อ schedule + error message
+- Admin เห็นผ่านระฆัง 🔔 ที่ Header
+
 ---
 
 ## 11. Scripts Reference
@@ -552,8 +596,15 @@ node scripts/create-activity-logs.js
 - [x] Environment validation on startup (`src/lib/env-check.js`)
 - [x] Test Email button on schedule page (`POST /api/admin/test-email`)
 - [x] Background Job system for heavy reports (IsHeavy toggle + async APIs + polling UI)
-- [ ] Password complexity rules enforcement
+- [x] Password complexity rules enforcement (min 8, uppercase, number, special char)
+- [x] Rate limiting on login (5 attempts / 15 min, admin-configurable)
+- [x] Dark mode toggle (ThemeProvider + localStorage + Tailwind dark:)
+- [x] Dashboard charts (usage per day + top reports + active users)
+- [x] Job History page (re-download within 24h, auto-refresh)
+- [x] Bulk actions for admin (reports bulk delete + users bulk toggle)
+- [x] Schedule failure notifications (auto-notify admin users)
 - [ ] Two-factor authentication (2FA)
+- [ ] PDF export support
 
 ---
 
