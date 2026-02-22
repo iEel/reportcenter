@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react";
-import { Save, RefreshCw, Settings, Building2, Globe, Loader2 } from "lucide-react";
+import { Save, RefreshCw, Settings, Building2, Globe, Loader2, ShieldAlert } from "lucide-react";
 
 interface Setting {
     SettingKey: string;
@@ -10,12 +10,14 @@ interface Setting {
     UpdatedAt: string;
 }
 
-const settingLabels: Record<string, { label: string; icon: any; group: string }> = {
+const settingLabels: Record<string, { label: string; icon: any; group: string; description?: string; type?: string }> = {
     'app_name': { label: 'ชื่อระบบ (Application Name)', icon: Globe, group: 'general' },
     'org_name': { label: 'ชื่อองค์กร (Organization Name)', icon: Globe, group: 'general' },
     'company_1_name': { label: 'บริษัทที่ 1', icon: Building2, group: 'company' },
     'company_2_name': { label: 'บริษัทที่ 2', icon: Building2, group: 'company' },
     'company_3_name': { label: 'บริษัทที่ 3', icon: Building2, group: 'company' },
+    'rate_limit_max_attempts': { label: 'จำนวนครั้งสูงสุดที่อนุญาต (Max Attempts)', icon: ShieldAlert, group: 'security', description: 'จำนวนครั้งที่อนุญาตให้ Login ผิดพลาดก่อนล็อกบัญชี', type: 'number' },
+    'rate_limit_window_minutes': { label: 'ระยะเวลาล็อก (Window Minutes)', icon: ShieldAlert, group: 'security', description: 'จำนวนนาทีที่ต้องรอก่อนลองใหม่', type: 'number' },
 };
 
 export default function AdminSettingsPage() {
@@ -68,6 +70,7 @@ export default function AdminSettingsPage() {
 
     const generalSettings = settings.filter(s => settingLabels[s.SettingKey]?.group === 'general');
     const companySettings = settings.filter(s => settingLabels[s.SettingKey]?.group === 'company');
+    const securitySettings = settings.filter(s => settingLabels[s.SettingKey]?.group === 'security');
     const otherSettings = settings.filter(s => !settingLabels[s.SettingKey]);
 
     return (
@@ -163,6 +166,42 @@ export default function AdminSettingsPage() {
                             })}
                         </div>
                     </div>
+
+                    {/* Security / Rate Limiting */}
+                    {securitySettings.length > 0 && (
+                        <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+                            <div className="px-6 py-4 border-b border-slate-100 bg-slate-50/50">
+                                <h2 className="font-semibold text-slate-800 flex items-center gap-2">
+                                    <ShieldAlert className="w-4 h-4 text-red-500" />
+                                    ความปลอดภัย (Security)
+                                </h2>
+                                <p className="text-xs text-slate-500 mt-1">กำหนดจำนวนครั้งและระยะเวลาล็อกเมื่อ Login ผิดพลาด (Rate Limiting)</p>
+                            </div>
+                            <div className="p-6 space-y-4">
+                                {securitySettings.map(s => {
+                                    const meta = settingLabels[s.SettingKey];
+                                    return (
+                                        <div key={s.SettingKey}>
+                                            <label className="block text-sm font-medium text-slate-700 mb-1">{meta?.label || s.SettingKey}</label>
+                                            {meta?.description && (
+                                                <p className="text-xs text-slate-400 mb-2">{meta.description}</p>
+                                            )}
+                                            <input
+                                                type={meta?.type || 'text'}
+                                                min={meta?.type === 'number' ? '1' : undefined}
+                                                value={s.SettingValue}
+                                                onChange={e => handleChange(s.SettingKey, e.target.value)}
+                                                className="w-full max-w-xs px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 text-sm transition-all"
+                                            />
+                                        </div>
+                                    );
+                                })}
+                                <div className="mt-2 p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-700">
+                                    ⚠️ การเปลี่ยนค่าจะมีผลทันทีหลังกดบันทึก — จะใช้งานตั้งแต่การ Login ครั้งถัดไป
+                                </div>
+                            </div>
+                        </div>
+                    )}
 
                     {/* Other/Custom Settings */}
                     {otherSettings.length > 0 && (

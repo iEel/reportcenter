@@ -3,7 +3,7 @@ import sql from 'mssql';
 import bcrypt from 'bcryptjs';
 import { connectToCentralDB } from '@/lib/db';
 import { signToken, COOKIE_NAME } from '@/lib/auth';
-import { checkRateLimit, recordFailedAttempt, clearAttempts } from '@/lib/rate-limit';
+import { checkRateLimit, recordFailedAttempt, clearAttempts, configure } from '@/lib/rate-limit';
 
 export async function POST(request) {
     try {
@@ -15,6 +15,21 @@ export async function POST(request) {
                 { status: 400 }
             );
         }
+
+        // Load rate limit config from DB
+        try {
+            const pool = await connectToCentralDB();
+            const cfgResult = await pool.request().query(`
+                SELECT SettingKey, SettingValue FROM SystemSettings
+                WHERE SettingKey IN ('rate_limit_max_attempts', 'rate_limit_window_minutes')
+            `);
+            const cfg = {};
+            for (const row of cfgResult.recordset) {
+                if (row.SettingKey === 'rate_limit_max_attempts') cfg.maxAttempts = parseInt(row.SettingValue) || 5;
+                if (row.SettingKey === 'rate_limit_window_minutes') cfg.windowMinutes = parseInt(row.SettingValue) || 15;
+            }
+            if (Object.keys(cfg).length > 0) configure(cfg);
+        } catch { }
 
         // Rate limiting — get IP from headers
         const ip = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim()

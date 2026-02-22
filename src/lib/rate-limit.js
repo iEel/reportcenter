@@ -1,9 +1,31 @@
 // Simple in-memory rate limiter for login attempts
-// Blocks IP after MAX_ATTEMPTS within WINDOW_MS
+// Config is loaded from SystemSettings DB and can be updated at runtime
 
 const attempts = new Map(); // key = IP, value = { count, firstAttempt }
-const MAX_ATTEMPTS = 5;
-const WINDOW_MS = 15 * 60 * 1000; // 15 minutes
+
+// Defaults (overridden by DB settings via configure())
+let MAX_ATTEMPTS = 5;
+let WINDOW_MS = 15 * 60 * 1000; // 15 minutes
+
+/**
+ * Configure rate limiting parameters (called from login route after reading DB)
+ * @param {{ maxAttempts?: number, windowMinutes?: number }} config
+ */
+export function configure(config) {
+    if (config.maxAttempts && config.maxAttempts > 0) {
+        MAX_ATTEMPTS = config.maxAttempts;
+    }
+    if (config.windowMinutes && config.windowMinutes > 0) {
+        WINDOW_MS = config.windowMinutes * 60 * 1000;
+    }
+}
+
+/**
+ * Get current config values (for API response)
+ */
+export function getConfig() {
+    return { maxAttempts: MAX_ATTEMPTS, windowMinutes: WINDOW_MS / 60000 };
+}
 
 /**
  * Check if an IP is rate-limited

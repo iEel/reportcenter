@@ -26,13 +26,30 @@ export async function GET() {
                 ('company_2_name', 'Grandlink Logistics (GRL)', 'ชื่อบริษัทที่ 2'),
                 ('company_3_name', 'Sonic Autologis (SALOG)', 'ชื่อบริษัทที่ 3'),
                 ('app_name', 'ReportCenter', 'ชื่อระบบ'),
-                ('org_name', 'Sonic Group', 'ชื่อองค์กร');
+                ('org_name', 'Sonic Group', 'ชื่อองค์กร'),
+                ('rate_limit_max_attempts', '5', 'จำนวนครั้งสูงสุดที่อนุญาต Login ผิดพลาด'),
+                ('rate_limit_window_minutes', '15', 'ระยะเวลาล็อก (นาที)');
             `);
         }
 
         const result = await pool.request().query(
             `SELECT SettingKey, SettingValue, Description, UpdatedAt FROM SystemSettings ORDER BY SettingKey`
         );
+
+        // Auto-seed rate limit settings if missing
+        const keys = result.recordset.map(r => r.SettingKey);
+        if (!keys.includes('rate_limit_max_attempts')) {
+            await pool.request().query(`
+                INSERT INTO SystemSettings (SettingKey, SettingValue, Description) VALUES
+                ('rate_limit_max_attempts', '5', 'จำนวนครั้งสูงสุดที่อนุญาต Login ผิดพลาด'),
+                ('rate_limit_window_minutes', '15', 'ระยะเวลาล็อก (นาที)');
+            `);
+            // Re-fetch after seeding
+            const updated = await pool.request().query(
+                `SELECT SettingKey, SettingValue, Description, UpdatedAt FROM SystemSettings ORDER BY SettingKey`
+            );
+            return NextResponse.json({ success: true, settings: updated.recordset });
+        }
 
         return NextResponse.json({ success: true, settings: result.recordset });
 
