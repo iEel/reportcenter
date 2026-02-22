@@ -2,9 +2,8 @@
 
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { Home, FileText, Database, Settings, LayoutTemplate, Users, LogOut, Lock, Menu, X, Calendar, Moon, Sun } from 'lucide-react';
+import { Home, FileText, Database, Settings, LayoutTemplate, Users, LogOut, Lock, Menu, X, Calendar } from 'lucide-react';
 import { useAuth } from '@/components/providers/AuthProvider';
-import { useTheme } from '@/components/providers/ThemeProvider';
 import { useState, useEffect } from 'react';
 
 const menus = [
@@ -26,7 +25,6 @@ export default function Sidebar() {
     const router = useRouter();
     const { user } = useAuth();
     const [mobileOpen, setMobileOpen] = useState(false);
-    const { theme, toggle: toggleTheme } = useTheme();
 
     const isAdmin = user?.roleName?.toLowerCase() === 'admin';
 
@@ -97,10 +95,6 @@ export default function Sidebar() {
             </div>
 
             <div className="p-4 border-t border-slate-800 space-y-2">
-                <button onClick={toggleTheme} className="flex items-center gap-3 px-3 py-2 rounded-lg w-full text-left transition-all duration-200 hover:bg-slate-800 text-slate-400 hover:text-white text-sm">
-                    {theme === 'dark' ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
-                    <span className="font-medium">{theme === 'dark' ? 'Light Mode' : 'Dark Mode'}</span>
-                </button>
                 <Link href="/change-password" className={`flex items-center gap-3 px-3 py-2 rounded-lg transition-all duration-200 group text-sm ${pathname === '/change-password' ? 'bg-blue-600/10 text-blue-400' : 'hover:bg-slate-800 text-slate-400 hover:text-white'
                     }`}>
                     <Lock className="w-4 h-4" />

@@ -3,6 +3,7 @@
 import { Bell, X, Check, CheckCheck, Moon, Sun } from 'lucide-react';
 import { useState, useEffect, useRef } from 'react';
 import { timeAgo } from '@/lib/dateUtils';
+import { useTheme } from '@/components/providers/ThemeProvider';
 
 interface Notification {
     NotificationId: number;
@@ -17,24 +18,10 @@ export default function Header() {
     const [notifications, setNotifications] = useState<Notification[]>([]);
     const [unreadCount, setUnreadCount] = useState(0);
     const [showPanel, setShowPanel] = useState(false);
-    const [darkMode, setDarkMode] = useState(false);
+    const { theme, toggle: toggleTheme } = useTheme();
     const panelRef = useRef<HTMLDivElement>(null);
 
-    // Dark mode init
-    useEffect(() => {
-        const saved = localStorage.getItem('rc_dark_mode');
-        if (saved === 'true') {
-            setDarkMode(true);
-            document.documentElement.classList.add('dark');
-        }
-    }, []);
 
-    const toggleDarkMode = () => {
-        const next = !darkMode;
-        setDarkMode(next);
-        document.documentElement.classList.toggle('dark', next);
-        localStorage.setItem('rc_dark_mode', next.toString());
-    };
 
     const fetchNotifications = async () => {
         try {
@@ -82,11 +69,11 @@ export default function Header() {
             <div className="flex items-center gap-2" ref={panelRef}>
                 {/* Dark Mode Toggle */}
                 <button
-                    onClick={toggleDarkMode}
+                    onClick={toggleTheme}
                     className="p-2 rounded-full hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-white"
-                    title={darkMode ? 'โหมดสว่าง' : 'โหมดมืด'}
+                    title={theme === 'dark' ? 'โหมดสว่าง' : 'โหมดมืด'}
                 >
-                    {darkMode ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
+                    {theme === 'dark' ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
                 </button>
 
                 {/* Notification Bell */}
