@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { Home, FileText, Database, Settings, LayoutTemplate, Users, LogOut, Lock, Menu, X, Calendar } from 'lucide-react';
+import { Home, FileText, Database, Settings, LayoutTemplate, Users, LogOut, Lock, Menu, X, Calendar, Clock } from 'lucide-react';
 import { useAuth } from '@/components/providers/AuthProvider';
 import { useState, useEffect } from 'react';
 
@@ -10,6 +10,7 @@ const menus = [
     { title: 'หน้าหลัก', path: '/', icon: Home, role: 'all' },
     { title: 'รายงานมาตรฐาน', path: '/reports/standard', icon: FileText, role: 'all', reportType: 1 },
     { title: 'รายงาน Template', path: '/reports/templates', icon: LayoutTemplate, role: 'all', reportType: 2 },
+    { title: 'ประวัติการสร้างรายงาน', path: '/reports/job-history', icon: Clock, role: 'all' },
 
     // Admin Only
     { title: 'จัดการรายงาน', path: '/admin/reports', icon: Database, role: 'admin' },
