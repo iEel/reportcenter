@@ -1,6 +1,6 @@
 # ReportCenter — Developer Handoff
 
-> **Version:** 5.5  
+> **Version:** 5.6  
 > **Last Updated:** 2026-02-22  
 > **Tech Stack:** Next.js 16.1.6 + React 19 + Tailwind CSS 4 + MSSQL (mssql driver) + Microsoft Graph API (OAuth2) / Nodemailer (SMTP fallback) + @azure/msal-node
 
@@ -530,11 +530,11 @@ curl http://localhost:4000/api/cron/execute-schedules?secret=rc-cron-secret-2026
 - API `POST /api/admin/users` บังคับตรวจเมื่อสร้าง user ใหม่ (ค่าเริ่มต้น: `P@ssw0rd123`)
 - หน้าเพิ่มผู้ใช้: แสดง hint "ขั้นต่ำ 8 ตัว, ต้องมี A-Z, ตัวเลข, อักขระพิเศษ"
 
-### Dark Mode
+### Dark Mode (ครบทุกหน้า)
 - Toggle อยู่ที่ **Header** (🌙/☀️ ข้างระฆัง)
 - ใช้ `ThemeProvider` (`src/components/providers/ThemeProvider.tsx`)
 - เก็บ state ใน `localStorage` key `rc-theme` → toggle `.dark` class บน `<html>`
-- Tailwind `dark:` variant classes applied ใน layout, AppLayout, dashboard, audit logs, job history
+- **ครอบคลุมทุกหน้าผ่าน `globals.css` overrides** (bg, text, border, inputs, tables, modals, hover, shadows)
 
 ### Dashboard Charts
 - `GET /api/dashboard/charts` → 4 datasets:
@@ -571,6 +571,23 @@ curl http://localhost:4000/api/cron/execute-schedules?secret=rc-cron-secret-2026
   - `GET /api/reports/search-param`
 - ป้องกัน user แก้ URL เดา reportId เพื่อเรียกใช้รายงานที่ไม่มีสิทธิ์
 
+### Security Hardening
+- **ลบ hardcoded credentials** — `db.js` ไม่มี default password/server แล้ว → บังคับ `.env`
+- **Admin role checks ครบทุก admin route** — GET/POST/PUT/DELETE ทุก function เช็ค `roleName === 'admin'`
+  - `admin/reports`, `admin/reports/[id]`, `admin/settings`, `admin/users`, `admin/roles`
+- **JWT Secret** — ไม่มี default fallback → บังคับตั้งใน `.env`
+- **CRON_SECRET** — ไม่มี default → บังคับตั้งใน `.env`
+- **Error messages** — ไม่ส่ง `error.message` กลับ client → ส่งแค่ generic error, log ไว้ server-side
+- **Input validation** — เช็คความยาว Username ≤50, FullName ≤150, RoleName ≤50
+- **`env-check.js`** — บังคับครบทุก env var (central DB + company DB + CRON_SECRET + JWT)
+- **`.env.example`** — template สำหรับ dev ใหม่
+
+### Dynamic Company Database (`CompanyDatabases` table)
+- ตารางใน Central DB: `CompanyId`, `CompanyName`, `CompanyLabel`, `DbUser`, `DbPassword`, `DbServer`, `DbName`, `DbInstance`, `IsActive`
+- `db.js` → `loadCompanyConfigs()` โหลดจาก table + cache ใน memory
+- **Auto-create** — ถ้า table ยังไม่มี → สร้างอัตโนมัติ + seed จาก `.env`
+- **เพิ่มบริษัทใหม่:** INSERT เข้า table → restart → ใช้ได้ทันที (ไม่ต้องแก้ code)
+
 ---
 
 ## 11. Scripts Reference
@@ -581,6 +598,9 @@ node scripts/hash-password.js MyPassword123
 
 # Update admin password in DB
 node scripts/update-admin-password.js
+
+# Create CompanyDatabases table and seed from .env
+node scripts/create-company-databases.js
 
 # Create ActivityLogs table (if not exists)
 node scripts/create-activity-logs.js
@@ -617,6 +637,9 @@ node scripts/create-activity-logs.js
 - [x] Bulk actions for admin (reports bulk delete + users bulk toggle)
 - [x] Schedule failure notifications (auto-notify admin users)
 - [x] Report authorization — ReportRoleMapping enforced on all execute/parameter APIs
+- [x] Security hardening — admin checks, no hardcoded secrets, error hiding, input validation
+- [x] Dark mode — ครบทุกหน้าผ่าน `globals.css` comprehensive overrides
+- [x] Dynamic company database — `CompanyDatabases` table + auto-create + `.env` fallback
 - [ ] Two-factor authentication (2FA)
 - [ ] PDF export support
 
