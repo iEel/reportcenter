@@ -514,6 +514,12 @@ curl http://localhost:4000/api/cron/execute-schedules?secret=rc-cron-secret-2026
 - รายการ Favorites แสดงเป็น chips ด้านบนหน้ารายงาน
 - ข้อมูลเก็บใน `UserFavorites` table (auto-created)
 
+### Clipboard Copy Fallback (Template Reports)
+- ปุ่ม **Copy Message** ที่หน้า Template Reports ใช้ `navigator.clipboard.writeText()` ซึ่งต้องการ **Secure Context (HTTPS)**
+- บน HTTP (เช่น dev server หรือ deploy บน intranet ไม่มี SSL) → `navigator.clipboard` จะเป็น `undefined`
+- **Fallback:** สร้าง `<textarea>` ชั่วคราว + `document.execCommand('copy')` → ทำงานได้ทั้ง HTTP และ HTTPS
+- Error handling: ถ้า copy ล้มเหลว → แสดง toast error แทนที่จะ crash
+
 ### Rate Limiting (Login)
 - **5 ครั้ง / 15 นาที** (default) — ตั้งค่าได้จากหน้า Admin Settings
 - ค่า config อ่านจาก `SystemSettings` table (`rate_limit_max_attempts`, `rate_limit_window_minutes`)

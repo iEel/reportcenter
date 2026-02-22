@@ -127,7 +127,7 @@ export default function TemplateReportPage() {
                 // Set the template text based on the selected report
                 const report = reports.find(r => r.ReportId.toString() === selectedReportId);
                 if (report) {
-                    setTemplateText(report.EmailTemplate || 'ยังไม่มีการตั้งค่า Template');
+                    setTemplateText(report.EmailTemplateContent || 'ยังไม่มีการตั้งค่า Template');
                 }
 
             } catch (error) {
@@ -201,9 +201,26 @@ export default function TemplateReportPage() {
 
     const handleCopy = async (id: number, dataRow: any) => {
         const text = generateMessage(dataRow);
-        await navigator.clipboard.writeText(text);
-        setCopiedId(id);
-        setTimeout(() => setCopiedId(null), 2000);
+        try {
+            if (navigator.clipboard && window.isSecureContext) {
+                await navigator.clipboard.writeText(text);
+            } else {
+                // Fallback for non-secure contexts (HTTP)
+                const textarea = document.createElement('textarea');
+                textarea.value = text;
+                textarea.style.position = 'fixed';
+                textarea.style.left = '-9999px';
+                document.body.appendChild(textarea);
+                textarea.select();
+                document.execCommand('copy');
+                document.body.removeChild(textarea);
+            }
+            setCopiedId(id);
+            setTimeout(() => setCopiedId(null), 2000);
+        } catch (err) {
+            console.error('Failed to copy:', err);
+            toast('ไม่สามารถคัดลอกข้อความได้', 'error');
+        }
     };
 
     // Calculate dynamic columns based on the first row of return data
@@ -287,8 +304,8 @@ export default function TemplateReportPage() {
             {/* Background Job Banner */}
             {activeJob && (
                 <div className={`flex items-center justify-between px-5 py-3 rounded-xl border shadow-sm animate-in slide-in-from-top-2 duration-300 ${activeJob.status === 'running' ? 'bg-blue-50 border-blue-200' :
-                        activeJob.status === 'done' ? 'bg-emerald-50 border-emerald-200' :
-                            'bg-red-50 border-red-200'
+                    activeJob.status === 'done' ? 'bg-emerald-50 border-emerald-200' :
+                        'bg-red-50 border-red-200'
                     }`}>
                     <div className="flex items-center gap-3">
                         {activeJob.status === 'running' && <Loader2 className="w-5 h-5 text-blue-600 animate-spin" />}
