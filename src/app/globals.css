@@ -77,45 +77,135 @@
     border-color: rgb(51 65 85 / 0.5);
   }
 
-  /* Dark mode overrides */
+  /* Dark mode overrides — comprehensive coverage for all pages */
   .dark body {
     background-color: #0f172a;
     color: #e2e8f0;
   }
 
+  /* Backgrounds */
   .dark .bg-white {
     background-color: #1e293b;
   }
 
+  .dark .bg-white\/80 {
+    background-color: rgb(30 41 59 / 0.8);
+  }
+
   .dark .bg-slate-50,
-  .dark .bg-slate-50\/50 {
+  .dark .bg-slate-50\/50,
+  .dark .bg-slate-100 {
     background-color: #1e293b;
   }
 
-  .dark .text-slate-900 {
+  .dark .bg-gray-50 {
+    background-color: #1e293b;
+  }
+
+  /* Hover backgrounds */
+  .dark .hover\:bg-slate-50:hover,
+  .dark .hover\:bg-slate-100:hover,
+  .dark .hover\:bg-gray-50:hover {
+    background-color: #334155;
+  }
+
+  /* Text colors */
+  .dark .text-slate-900,
+  .dark .text-gray-900 {
     color: #f1f5f9;
   }
 
-  .dark .text-slate-700 {
+  .dark .text-slate-800,
+  .dark .text-gray-800 {
+    color: #e2e8f0;
+  }
+
+  .dark .text-slate-700,
+  .dark .text-gray-700 {
     color: #cbd5e1;
   }
 
-  .dark .text-slate-600 {
+  .dark .text-slate-600,
+  .dark .text-gray-600 {
     color: #94a3b8;
   }
 
-  .dark .text-slate-500 {
+  .dark .text-slate-500,
+  .dark .text-gray-500 {
     color: #64748b;
   }
 
+  /* Borders */
   .dark .border-slate-200,
-  .dark .border-slate-100 {
+  .dark .border-slate-100,
+  .dark .border-gray-200 {
     border-color: #334155;
   }
 
+  .dark .border-slate-300,
+  .dark .border-gray-300 {
+    border-color: #475569;
+  }
+
+  .dark .divide-slate-200> :not([hidden])~ :not([hidden]),
+  .dark .divide-slate-100> :not([hidden])~ :not([hidden]) {
+    border-color: #334155;
+  }
+
+  /* Inputs & Selects */
+  .dark input,
+  .dark select,
+  .dark textarea {
+    background-color: #0f172a;
+    border-color: #334155;
+    color: #e2e8f0;
+  }
+
+  .dark input::placeholder,
+  .dark textarea::placeholder {
+    color: #475569;
+  }
+
+  .dark input:focus,
+  .dark select:focus,
+  .dark textarea:focus {
+    border-color: #3b82f6;
+  }
+
+  /* Shadows */
   .dark .shadow-sm,
-  .dark .shadow-md {
+  .dark .shadow-md,
+  .dark .shadow-lg {
     box-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.3);
+  }
+
+  .dark .shadow-xl,
+  .dark .shadow-2xl {
+    box-shadow: 0 4px 12px 0 rgb(0 0 0 / 0.4);
+  }
+
+  /* Tables */
+  .dark thead {
+    background-color: #1e293b;
+    color: #94a3b8;
+  }
+
+  .dark tbody tr {
+    border-color: #334155;
+  }
+
+  .dark tbody tr:hover {
+    background-color: rgba(51, 65, 85, 0.3);
+  }
+
+  /* Modal overlay */
+  .dark .bg-black\/50 {
+    background-color: rgba(0, 0, 0, 0.7);
+  }
+
+  /* Ring colors for light-themed rings */
+  .dark .ring-white {
+    --tw-ring-color: #1e293b;
   }
 }
 
