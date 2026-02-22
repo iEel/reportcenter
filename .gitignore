@@ -40,7 +40,7 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
-db.js
+/db.js
 
 # background job files
 /tmp/jobs/
