@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import sql from 'mssql';
-import { connectToCentralDB, connectToCompanyDB } from '@/lib/db';
+import { connectToCentralDB, connectToCompanyDB, getCompanyLabel } from '@/lib/db';
 import { getSession } from '@/lib/auth';
 
 export async function POST(request) {
@@ -122,9 +122,10 @@ export async function POST(request) {
             const session = await getSession(request);
             if (session) {
                 const actionType = exportAll ? 'EXPORT_EXCEL' : 'EXECUTE_REPORT';
+                const companyLabel = getCompanyLabel(companyId);
                 const details = exportAll
-                    ? `Export Excel "${reportName}" (บริษัท ${companyId}) ได้ ${totalRows} แถว`
-                    : `รัน "${reportName}" (บริษัท ${companyId}) ได้ ${totalRows} แถว`;
+                    ? `Export Excel "${reportName}" (${companyLabel}) ได้ ${totalRows.toLocaleString()} แถว`
+                    : `รัน "${reportName}" (${companyLabel}) ได้ ${totalRows.toLocaleString()} แถว`;
                 await centralPool.request()
                     .input('UserId', sql.Int, session.userId)
                     .input('ReportId', sql.Int, parseInt(reportId))
