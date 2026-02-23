@@ -106,14 +106,31 @@ export async function GET(request) {
                 if (schedule.Parameters) {
                     try {
                         const params = JSON.parse(schedule.Parameters);
-                        for (const [key, value] of Object.entries(params)) {
-                            // Resolve relative date presets (TODAY, MONTH_START, etc.)
-                            const resolved = resolveRelativeDate(value);
-                            resolvedParams[key] = resolved;
-                            request.input(key, resolved);
+                        const paramDefs = await pool.request()
+                            .input('ReportId', sql.Int, schedule.ReportId)
+                            .query('SELECT ParameterName, InputType FROM ReportParameters WHERE ReportId = @ReportId');
+
+                        for (const def of paramDefs.recordset) {
+                            const paramName = def.ParameterName.replace('@', '');
+                            let value = params[def.ParameterName];
+
+                            // Resolve relative date presets
+                            if (def.InputType === 'date' && typeof value === 'string') {
+                                value = resolveRelativeDate(value);
+                            }
+
+                            resolvedParams[paramName] = value;
+
+                            if (value !== undefined && value !== '') {
+                                if (def.InputType === 'date') request.input(paramName, sql.Date, value);
+                                else if (def.InputType === 'number') request.input(paramName, sql.Decimal, parseFloat(value));
+                                else request.input(paramName, sql.NVarChar(sql.MAX), value);
+                            } else {
+                                request.input(paramName, sql.NVarChar(sql.MAX), null);
+                            }
                         }
                     } catch (e) {
-                        console.warn(`Schedule ${schedule.ScheduleId}: invalid params JSON`);
+                        console.warn(`Schedule ${schedule.ScheduleId}: parameter binding error:`, e.message);
                     }
                 }
 
