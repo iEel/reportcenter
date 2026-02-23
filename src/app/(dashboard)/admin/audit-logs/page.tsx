@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { Activity, Download, Filter, ChevronLeft, ChevronRight, Loader2, Search } from "lucide-react";
-import { formatDate } from "@/lib/dateUtils";
+import { formatDateTime } from "@/lib/dateUtils";
 import * as xlsx from 'xlsx';
 
 const ACTION_COLORS: Record<string, string> = {
@@ -133,7 +133,7 @@ export default function AuditLogsPage() {
                     <table className="w-full text-sm">
                         <thead className="bg-slate-50 dark:bg-slate-700/50 text-slate-600 dark:text-slate-300">
                             <tr>
-                                <th className="px-4 py-3 text-left font-medium">เวลา</th>
+                                <th className="px-4 py-3 text-left font-medium">วันที่</th>
                                 <th className="px-4 py-3 text-left font-medium">ผู้ใช้</th>
                                 <th className="px-4 py-3 text-left font-medium">ประเภท</th>
                                 <th className="px-4 py-3 text-left font-medium">รายละเอียด</th>
@@ -142,7 +142,7 @@ export default function AuditLogsPage() {
                         <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
                             {logs.map(log => (
                                 <tr key={log.LogId} className="hover:bg-slate-50 dark:hover:bg-slate-700/30 transition-colors">
-                                    <td className="px-4 py-3 text-slate-500 dark:text-slate-400 whitespace-nowrap">{formatDate(log.CreatedAt)}</td>
+                                    <td className="px-4 py-3 text-slate-500 dark:text-slate-400 whitespace-nowrap">{formatDateTime(log.CreatedAt)}</td>
                                     <td className="px-4 py-3 font-medium text-slate-800 dark:text-slate-200">{log.UserName || '-'}</td>
                                     <td className="px-4 py-3">
                                         <span className={`px-2.5 py-1 rounded-full text-xs font-semibold ${ACTION_COLORS[log.ActionType] || 'bg-slate-100 text-slate-600'}`}>
