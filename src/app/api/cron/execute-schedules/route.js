@@ -40,7 +40,13 @@ const CRON_SECRET = process.env.CRON_SECRET;
 // Resolve relative date presets to actual dates
 function resolveRelativeDate(preset) {
     const now = new Date();
-    const fmt = (d) => d.toISOString().split('T')[0]; // YYYY-MM-DD
+    // Use local-time getters instead of toISOString() to avoid UTC shift
+    const fmt = (d) => {
+        const y = d.getFullYear();
+        const m = String(d.getMonth() + 1).padStart(2, '0');
+        const day = String(d.getDate()).padStart(2, '0');
+        return `${y}-${m}-${day}`;
+    };
 
     switch (preset) {
         case 'TODAY': return fmt(now);
@@ -50,7 +56,7 @@ function resolveRelativeDate(preset) {
         case 'PREV_MONTH_START': return fmt(new Date(now.getFullYear(), now.getMonth() - 1, 1));
         case 'PREV_MONTH_END': return fmt(new Date(now.getFullYear(), now.getMonth(), 0));
         case 'YEAR_START': return fmt(new Date(now.getFullYear(), 0, 1));
-        default: return preset; // Return as-is if not a preset
+        default: return preset;
     }
 }
 
@@ -146,7 +152,7 @@ export async function GET(request) {
                 // 3. Send email
                 const companyNames = { 1: 'Sonic Interfreight (SNI)', 2: 'Grandlink Logistics (GRL)', 3: 'Sonic Autologis (SALOG)' };
                 const companyName = companyNames[schedule.CompanyId] || `Company ${schedule.CompanyId}`;
-                const dateStr = now.toLocaleDateString('th-TH', { day: '2-digit', month: '2-digit', year: 'numeric' });
+                const dateStr = new Date().toLocaleDateString('th-TH', { day: '2-digit', month: '2-digit', year: 'numeric' });
                 const subject = schedule.EmailSubject
                     ? schedule.EmailSubject.replace('{date}', dateStr).replace('{report}', schedule.ReportName)
                     : `[ReportCenter] ${schedule.ReportName} - ${companyName} - ${dateStr}`;
