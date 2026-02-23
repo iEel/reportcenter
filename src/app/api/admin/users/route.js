@@ -128,6 +128,15 @@ export async function POST(request) {
             }
         }
 
+        // Audit log
+        try {
+            await pool.request()
+                .input('UserId', sql.Int, session.userId)
+                .input('ActionType', sql.NVarChar(50), 'CREATE_USER')
+                .input('Details', sql.NVarChar(500), `สร้างผู้ใช้ "${Username}" (${FullName}), Role: ${RoleId}`)
+                .query(`INSERT INTO ActivityLogs (UserId, ActionType, Details) VALUES (@UserId, @ActionType, @Details)`);
+        } catch (e) { console.warn('Audit log failed:', e.message); }
+
         return NextResponse.json({ success: true, message: "User created successfully" });
 
     } catch (error) {
@@ -187,6 +196,15 @@ export async function PUT(request) {
                     .query('INSERT INTO UserCompanyMapping (UserId, CompanyId) VALUES (@UserId, @CompanyId)');
             }
         }
+
+        // Audit log
+        try {
+            await pool.request()
+                .input('LogUserId', sql.Int, session.userId)
+                .input('ActionType', sql.NVarChar(50), 'UPDATE_USER')
+                .input('Details', sql.NVarChar(500), `แก้ไขผู้ใช้ #${UserId} (${FullName}), Active=${IsActive}, Role=${RoleId}`)
+                .query(`INSERT INTO ActivityLogs (UserId, ActionType, Details) VALUES (@LogUserId, @ActionType, @Details)`);
+        } catch (e) { console.warn('Audit log failed:', e.message); }
 
         return NextResponse.json({ success: true, message: "User updated successfully" });
 

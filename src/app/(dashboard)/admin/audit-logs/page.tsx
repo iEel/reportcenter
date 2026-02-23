@@ -8,11 +8,20 @@ import * as xlsx from 'xlsx';
 const ACTION_COLORS: Record<string, string> = {
     LOGIN: 'bg-blue-100 text-blue-700',
     LOGOUT: 'bg-slate-100 text-slate-700',
+    LOGIN_FAIL: 'bg-red-100 text-red-700',
     EXECUTE_REPORT: 'bg-emerald-100 text-emerald-700',
     EXPORT_EXCEL: 'bg-amber-100 text-amber-700',
     CREATE_REPORT: 'bg-purple-100 text-purple-700',
     UPDATE_REPORT: 'bg-indigo-100 text-indigo-700',
     RUN_SCHEDULE: 'bg-orange-100 text-orange-700',
+    CREATE_SCHEDULE: 'bg-teal-100 text-teal-700',
+    UPDATE_SCHEDULE: 'bg-cyan-100 text-cyan-700',
+    DELETE_SCHEDULE: 'bg-rose-100 text-rose-700',
+    CRON_SUCCESS: 'bg-lime-100 text-lime-700',
+    CRON_FAIL: 'bg-red-100 text-red-700',
+    CREATE_USER: 'bg-violet-100 text-violet-700',
+    UPDATE_USER: 'bg-fuchsia-100 text-fuchsia-700',
+    CHANGE_PASSWORD: 'bg-sky-100 text-sky-700',
 };
 
 export default function AuditLogsPage() {

@@ -151,6 +151,17 @@ export async function POST(request) {
                 VALUES (@ReportId, @ScheduleName, @Frequency, @DayOfWeek, @DayOfMonth, @RunTime, @CompanyId, @Parameters, @EmailTo, @EmailCc, @EmailSubject, @NextRunAt, @CreatedBy)
             `);
 
+        // Audit log
+        try {
+            await pool.request()
+                .input('UserId', sql.Int, user.userId)
+                .input('ReportId', sql.Int, reportId)
+                .input('CompanyId', sql.Int, companyId)
+                .input('ActionType', sql.NVarChar(50), 'CREATE_SCHEDULE')
+                .input('Details', sql.NVarChar(500), `สร้างกำหนดการ "${scheduleName}" (${frequency} ${runTime})`)
+                .query(`INSERT INTO ActivityLogs (UserId, ReportId, CompanyId, ActionType, Details) VALUES (@UserId, @ReportId, @CompanyId, @ActionType, @Details)`);
+        } catch (e) { console.warn('Audit log failed:', e.message); }
+
         return NextResponse.json({ success: true });
     } catch (error) {
         console.error('Schedules POST error:', error);
@@ -200,6 +211,15 @@ export async function PUT(request) {
                 WHERE ScheduleId = @ScheduleId
             `);
 
+        // Audit log
+        try {
+            await pool.request()
+                .input('UserId', sql.Int, user.userId)
+                .input('ActionType', sql.NVarChar(50), 'UPDATE_SCHEDULE')
+                .input('Details', sql.NVarChar(500), `แก้ไขกำหนดการ #${scheduleId} "${scheduleName}" (${frequency} ${runTime}, active=${isActive})`)
+                .query(`INSERT INTO ActivityLogs (UserId, ActionType, Details) VALUES (@UserId, @ActionType, @Details)`);
+        } catch (e) { console.warn('Audit log failed:', e.message); }
+
         return NextResponse.json({ success: true });
     } catch (error) {
         console.error('Schedules PUT error:', error);
@@ -225,6 +245,15 @@ export async function DELETE(request) {
         await pool.request()
             .input('ScheduleId', sql.Int, scheduleId)
             .query('DELETE FROM ReportSchedules WHERE ScheduleId = @ScheduleId');
+
+        // Audit log
+        try {
+            await pool.request()
+                .input('UserId', sql.Int, user.userId)
+                .input('ActionType', sql.NVarChar(50), 'DELETE_SCHEDULE')
+                .input('Details', sql.NVarChar(500), `ลบกำหนดการ #${scheduleId}`)
+                .query(`INSERT INTO ActivityLogs (UserId, ActionType, Details) VALUES (@UserId, @ActionType, @Details)`);
+        } catch (e) { console.warn('Audit log failed:', e.message); }
 
         return NextResponse.json({ success: true });
     } catch (error) {

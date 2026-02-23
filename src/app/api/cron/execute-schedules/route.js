@@ -211,6 +211,16 @@ export async function GET(request) {
 
                 results.push({ scheduleId: schedule.ScheduleId, name: schedule.ScheduleName, status: 'success', rows: data.length });
 
+                // Audit log: cron success
+                try {
+                    await pool.request()
+                        .input('ReportId', sql.Int, schedule.ReportId)
+                        .input('CompanyId', sql.Int, schedule.CompanyId)
+                        .input('ActionType', sql.NVarChar(50), 'CRON_SUCCESS')
+                        .input('Details', sql.NVarChar(500), `Cron สำเร็จ: "${schedule.ScheduleName}" (${data.length} แถว)`)
+                        .query(`INSERT INTO ActivityLogs (ReportId, CompanyId, ActionType, Details) VALUES (@ReportId, @CompanyId, @ActionType, @Details)`);
+                } catch (e) { /* ignore */ }
+
             } catch (err) {
                 console.error(`Schedule ${schedule.ScheduleId} failed:`, err);
 
@@ -226,6 +236,16 @@ export async function GET(request) {
                     `);
 
                 results.push({ scheduleId: schedule.ScheduleId, name: schedule.ScheduleName, status: 'failed', error: err.message });
+
+                // Audit log: cron failure
+                try {
+                    await pool.request()
+                        .input('ReportId', sql.Int, schedule.ReportId)
+                        .input('CompanyId', sql.Int, schedule.CompanyId)
+                        .input('ActionType', sql.NVarChar(50), 'CRON_FAIL')
+                        .input('Details', sql.NVarChar(500), `Cron ล้มเหลว: "${schedule.ScheduleName}" - ${err.message?.substring(0, 200)}`)
+                        .query(`INSERT INTO ActivityLogs (ReportId, CompanyId, ActionType, Details) VALUES (@ReportId, @CompanyId, @ActionType, @Details)`);
+                } catch (e2) { /* ignore */ }
 
                 // Create notification for admin users about the failure
                 try {

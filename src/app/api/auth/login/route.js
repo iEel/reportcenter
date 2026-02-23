@@ -58,6 +58,13 @@ export async function POST(request) {
 
         if (result.recordset.length === 0) {
             recordFailedAttempt(ip);
+            // Audit: failed login
+            try {
+                await pool.request()
+                    .input('ActionType', sql.NVarChar(50), 'LOGIN_FAIL')
+                    .input('Details', sql.NVarChar(500), `Login ล้มเหลว: username="${username}" IP=${ip} (ไม่พบผู้ใช้)`)
+                    .query(`INSERT INTO ActivityLogs (ActionType, Details) VALUES (@ActionType, @Details)`);
+            } catch (e) { /* ignore */ }
             return NextResponse.json(
                 { success: false, message: 'Username หรือ Password ไม่ถูกต้อง' },
                 { status: 401 }
@@ -78,6 +85,14 @@ export async function POST(request) {
         if (!isValid) {
             recordFailedAttempt(ip);
             const remaining = rateCheck.remaining - 1;
+            // Audit: wrong password
+            try {
+                await pool.request()
+                    .input('UserId', sql.Int, user.UserId)
+                    .input('ActionType', sql.NVarChar(50), 'LOGIN_FAIL')
+                    .input('Details', sql.NVarChar(500), `Login ล้มเหลว: username="${username}" IP=${ip} (รหัสผ่านผิด, เหลือ ${remaining} ครั้ง)`)
+                    .query(`INSERT INTO ActivityLogs (UserId, ActionType, Details) VALUES (@UserId, @ActionType, @Details)`);
+            } catch (e) { /* ignore */ }
             return NextResponse.json(
                 { success: false, message: `Username หรือ Password ไม่ถูกต้อง${remaining <= 2 ? ` (เหลืออีก ${remaining} ครั้ง)` : ''}` },
                 { status: 401 }

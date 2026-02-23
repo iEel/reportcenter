@@ -48,6 +48,15 @@ export async function PUT(request) {
             .input('PasswordHash', sql.NVarChar(255), hashedNew)
             .query('UPDATE Users SET PasswordHash = @PasswordHash WHERE UserId = @UserId');
 
+        // Audit log
+        try {
+            await pool.request()
+                .input('UserId', sql.Int, session.userId)
+                .input('ActionType', sql.NVarChar(50), 'CHANGE_PASSWORD')
+                .input('Details', sql.NVarChar(500), `เปลี่ยนรหัสผ่าน`)
+                .query(`INSERT INTO ActivityLogs (UserId, ActionType, Details) VALUES (@UserId, @ActionType, @Details)`);
+        } catch (e) { console.warn('Audit log failed:', e.message); }
+
         return NextResponse.json({ success: true, message: 'เปลี่ยนรหัสผ่านสำเร็จ' });
 
     } catch (error) {
