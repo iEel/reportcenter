@@ -1,7 +1,7 @@
 # ReportCenter — Developer Handoff
 
-> **Version:** 5.7  
-> **Last Updated:** 2026-02-22  
+> **Version:** 5.8  
+> **Last Updated:** 2026-02-23  
 > **Tech Stack:** Next.js 16.1.6 + React 19 + Tailwind CSS 4 + MSSQL (mssql driver) + Microsoft Graph API (OAuth2) / Nodemailer (SMTP fallback) + @azure/msal-node
 
 ---
@@ -173,7 +173,7 @@ UserCompanyMapping (UserId, CompanyId)
 | `ReportParameters`   | Dynamic parameters (date, text, number)      |
 | `ReportRoleMapping`  | Many-to-many: which roles can see which report |
 | `UserCompanyMapping` | Many-to-many: which users can access which company DBs |
-| `ActivityLogs`       | Audit trail: who ran which report, when      |
+| `ActivityLogs`       | Audit trail: all system actions + change diff (ChangeData JSON) |
 | `UserFavorites`      | User's pinned/favorite reports (auto-created) |
 | `Notifications`      | In-app notification messages (auto-created)  |
 | `SystemSettings`     | Key-value config (company names, app settings)|
@@ -213,6 +213,11 @@ RunTime NVARCHAR(5), CompanyId INT, Parameters NVARCHAR(MAX) NULL,
 EmailTo NVARCHAR(500), EmailCc NVARCHAR(500) NULL, EmailSubject NVARCHAR(300) NULL,
 IsActive BIT, LastRunAt DATETIME NULL, LastRunStatus NVARCHAR(20) NULL,
 NextRunAt DATETIME NULL, CreatedBy INT, CreatedAt/UpdatedAt DATETIME
+
+-- ActivityLogs
+LogId INT PK IDENTITY, UserId INT NULL, ReportId INT NULL, CompanyId INT NULL,
+ActionType NVARCHAR(50), Details NVARCHAR(MAX), ChangeData NVARCHAR(MAX) NULL (JSON: old/new values),
+CreatedAt DATETIME DEFAULT GETDATE()
 ```
 
 ---
@@ -223,10 +228,10 @@ NextRunAt DATETIME NULL, CreatedBy INT, CreatedAt/UpdatedAt DATETIME
 
 | Method | Path                        | Description                          |
 |--------|-----------------------------|--------------------------------------|
-| POST   | `/api/auth/login`           | Login, returns JWT cookie + logs LOGIN activity |
+| POST   | `/api/auth/login`           | Login, returns JWT cookie + logs LOGIN/LOGIN_FAIL activity |
 | POST   | `/api/auth/logout`          | Clear JWT cookie + logs LOGOUT activity          |
 | GET    | `/api/auth/me`              | Get current user + allowedCompanies  |
-| PUT    | `/api/auth/change-password` | Change password (verify current first) |
+| PUT    | `/api/auth/change-password` | Change password (verify current first) + logs CHANGE_PASSWORD |
 
 ### Reports (User-facing)
 
@@ -249,17 +254,17 @@ NextRunAt DATETIME NULL, CreatedBy INT, CreatedAt/UpdatedAt DATETIME
 | PUT    | `/api/admin/reports/[id]`    | Update report + roles             |
 | DELETE | `/api/admin/reports/[id]`    | Soft-delete (IsActive=0)          |
 | GET    | `/api/admin/users`           | List users + roles + allowedCompanies |
-| POST   | `/api/admin/users`           | Create user (bcrypt hash) + company mappings |
-| PUT    | `/api/admin/users`           | Update user + company mappings    |
-| GET    | `/api/admin/audit-logs`      | Paginated audit logs (?page=&limit=) |
+| POST   | `/api/admin/users`           | Create user (bcrypt hash) + company mappings + logs CREATE_USER |
+| PUT    | `/api/admin/users`           | Update user + company mappings + logs UPDATE_USER |
+| GET    | `/api/admin/audit-logs`      | Paginated audit logs + ChangeData JSON (?page=&limit=) |
 | GET    | `/api/admin/roles`           | List roles + user count + assigned reports |
 | POST   | `/api/admin/roles`           | Create role + report mappings    |
 | PUT    | `/api/admin/roles`           | Update role name + report mappings |
 | DELETE | `/api/admin/roles?roleId=`   | Delete role (blocked if users assigned) |
 | GET    | `/api/admin/schedules`       | List all schedules + report/user info |
-| POST   | `/api/admin/schedules`       | Create schedule (auto-calculates NextRunAt) |
-| PUT    | `/api/admin/schedules`       | Update schedule / toggle active   |
-| DELETE | `/api/admin/schedules?scheduleId=` | Delete schedule              |
+| POST   | `/api/admin/schedules`       | Create schedule + logs CREATE_SCHEDULE |
+| PUT    | `/api/admin/schedules`       | Update schedule + logs UPDATE_SCHEDULE |
+| DELETE | `/api/admin/schedules?scheduleId=` | Delete schedule + logs DELETE_SCHEDULE |
 | PATCH  | `/api/admin/schedules`       | Manual trigger: run schedule immediately → email |
 | GET    | `/api/admin/settings`        | Get all settings                  |
 | PUT    | `/api/admin/settings`        | Update settings                   |
@@ -653,7 +658,7 @@ npm run test:watch
 - [x] Email via Azure AD MSAL → Microsoft Graph API (`src/lib/email.js`)
 - [x] Dashboard schedule status card (active/failed/nextRun)
 - [x] Manual trigger for schedules (⚡ Zap button)
-- [x] Detailed activity logging (LOGIN, LOGOUT, EXECUTE, EXPORT, CREATE/UPDATE_REPORT, RUN_SCHEDULE)
+- [x] Comprehensive audit logging (16 ActionTypes including change diff tracking)
 - [x] Conditional sidebar menus based on user's available report types
 - [x] TemplateEditor component (click-to-insert, preview mode)
 - [x] Parameter Typeahead search (LookupQuery + TypeaheadInput + auto-execute on select)
@@ -685,19 +690,36 @@ npm run test:watch
 
 ## 13. Activity Logging
 
-### Logged Actions
+### Logged Actions (16 ActionTypes)
 
 | ActionType | Endpoint | Notes |
 |------------|----------|-------|
 | `LOGIN` | `/api/auth/login` | On successful login |
+| `LOGIN_FAIL` | `/api/auth/login` | Failed login (includes IP + username for brute force detection) |
 | `LOGOUT` | `/api/auth/logout` | Before clearing cookie |
+| `CHANGE_PASSWORD` | `/api/auth/change-password` | After successful password change |
 | `EXECUTE_REPORT` | `/api/reports/execute` | On paginated/normal execution |
 | `EXPORT_EXCEL` | `/api/reports/execute` | When `exportAll=true` |
 | `CREATE_REPORT` | `/api/admin/reports` POST | After transaction commit |
-| `UPDATE_REPORT` | `/api/admin/reports/[id]` PUT | After transaction commit |
+| `UPDATE_REPORT` | `/api/admin/reports/[id]` PUT | With `ChangeData` JSON (old→new diff) |
 | `RUN_SCHEDULE` | `/api/admin/schedules` PATCH | Manual trigger |
+| `CREATE_SCHEDULE` | `/api/admin/schedules` POST | New schedule created |
+| `UPDATE_SCHEDULE` | `/api/admin/schedules` PUT | Schedule modified |
+| `DELETE_SCHEDULE` | `/api/admin/schedules` DELETE | Schedule removed |
+| `CRON_SUCCESS` | `/api/cron/execute-schedules` | Cron job completed successfully |
+| `CRON_FAIL` | `/api/cron/execute-schedules` | Cron job failed (includes error message) |
+| `CREATE_USER` | `/api/admin/users` POST | New user created |
+| `UPDATE_USER` | `/api/admin/users` PUT | User modified |
 
 All logging is **non-blocking** (wrapped in try/catch) — logging failure never breaks the main operation.
+
+### Change Diff Tracking (ChangeData)
+- `UPDATE_REPORT` logs store a `ChangeData` JSON column with full old→new values for every changed field
+- Fields tracked: ชื่อรายงาน, คำอธิบาย, ประเภท, คำสั่ง SQL, Email Template, สาธารณะ, สถานะ, รายงานหนัก
+- UI: Audit Trail page (👁️ icon) → modal with **line-level diff** (LCS algorithm)
+  - Short values: ~~old~~ → new (inline)
+  - Long values (SQL): line-by-line diff with red (−removed) / green (+added) highlighting
+- `ChangeData` column is `NVARCHAR(MAX)`, auto-created if missing
 
 ---
 

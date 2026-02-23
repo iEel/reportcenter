@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react";
-import { Activity, Download, Filter, ChevronLeft, ChevronRight, Loader2, Search } from "lucide-react";
+import { Activity, Download, Filter, ChevronLeft, ChevronRight, Loader2, Search, Eye, X, ArrowRight } from "lucide-react";
 import { formatDateTime } from "@/lib/dateUtils";
 import * as xlsx from 'xlsx';
 
@@ -30,6 +30,7 @@ export default function AuditLogsPage() {
     const [totalRows, setTotalRows] = useState(0);
     const [page, setPage] = useState(1);
     const [pageSize] = useState(30);
+    const [selectedLog, setSelectedLog] = useState<any>(null);
 
     // Filters
     const [actionType, setActionType] = useState('');
@@ -70,7 +71,7 @@ export default function AuditLogsPage() {
     const handleExport = () => {
         if (logs.length === 0) return;
         const exportData = logs.map(l => ({
-            'เวลา': l.CreatedAt,
+            'วันที่': l.CreatedAt,
             'ผู้ใช้': l.UserName,
             'ประเภท': l.ActionType,
             'รายละเอียด': l.Details,
@@ -80,6 +81,95 @@ export default function AuditLogsPage() {
         const wb = xlsx.utils.book_new();
         xlsx.utils.book_append_sheet(wb, ws, 'Audit Logs');
         xlsx.writeFile(wb, `audit_logs_${new Date().toISOString().split('T')[0]}.xlsb`, { bookType: 'xlsb' });
+    };
+
+    const parseChangeData = (raw: string | null) => {
+        if (!raw) return null;
+        try { return JSON.parse(raw); } catch { return null; }
+    };
+
+    // Line-level diff: returns array of { type: 'same'|'removed'|'added', text: string }
+    const computeLineDiff = (oldText: string, newText: string) => {
+        const oldLines = oldText.split('\n');
+        const newLines = newText.split('\n');
+
+        // Simple LCS-based diff
+        const m = oldLines.length, n = newLines.length;
+        const dp: number[][] = Array.from({ length: m + 1 }, () => Array(n + 1).fill(0));
+        for (let i = 1; i <= m; i++)
+            for (let j = 1; j <= n; j++)
+                dp[i][j] = oldLines[i - 1] === newLines[j - 1] ? dp[i - 1][j - 1] + 1 : Math.max(dp[i - 1][j], dp[i][j - 1]);
+
+        // Backtrack to build diff
+        const result: { type: string; text: string }[] = [];
+        let i = m, j = n;
+        const stack: { type: string; text: string }[] = [];
+        while (i > 0 || j > 0) {
+            if (i > 0 && j > 0 && oldLines[i - 1] === newLines[j - 1]) {
+                stack.push({ type: 'same', text: oldLines[i - 1] });
+                i--; j--;
+            } else if (j > 0 && (i === 0 || dp[i][j - 1] >= dp[i - 1][j])) {
+                stack.push({ type: 'added', text: newLines[j - 1] });
+                j--;
+            } else {
+                stack.push({ type: 'removed', text: oldLines[i - 1] });
+                i--;
+            }
+        }
+        stack.reverse();
+        return stack;
+    };
+
+    // Render diff for a field
+    const renderDiff = (oldVal: any, newVal: any) => {
+        // Boolean values
+        if (typeof oldVal === 'boolean' || typeof newVal === 'boolean') {
+            return (
+                <div className="flex items-center gap-3 p-3">
+                    <span className="px-3 py-1.5 bg-red-100 text-red-700 rounded-lg font-semibold text-sm line-through">{oldVal ? 'ใช่' : 'ไม่ใช่'}</span>
+                    <ArrowRight className="w-4 h-4 text-slate-400" />
+                    <span className="px-3 py-1.5 bg-emerald-100 text-emerald-700 rounded-lg font-semibold text-sm">{newVal ? 'ใช่' : 'ไม่ใช่'}</span>
+                </div>
+            );
+        }
+
+        const oldStr = String(oldVal || '');
+        const newStr = String(newVal || '');
+
+        // Short values: simple side-by-side
+        if (!oldStr.includes('\n') && !newStr.includes('\n') && oldStr.length < 120) {
+            return (
+                <div className="flex items-center gap-3 p-3 flex-wrap">
+                    <span className="px-3 py-1.5 bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400 rounded-lg text-sm font-mono line-through">{oldStr || '(ว่าง)'}</span>
+                    <ArrowRight className="w-4 h-4 text-slate-400 shrink-0" />
+                    <span className="px-3 py-1.5 bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400 rounded-lg text-sm font-mono">{newStr || '(ว่าง)'}</span>
+                </div>
+            );
+        }
+
+        // Long/multiline values: line-level diff with highlights
+        const diff = computeLineDiff(oldStr, newStr);
+        return (
+            <div className="p-3 max-h-80 overflow-y-auto">
+                <pre className="text-xs font-mono leading-6 whitespace-pre-wrap break-all">
+                    {diff.map((line, idx) => (
+                        <div
+                            key={idx}
+                            className={
+                                line.type === 'removed' ? 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400' :
+                                    line.type === 'added' ? 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400' :
+                                        'text-slate-500 dark:text-slate-500'
+                            }
+                        >
+                            <span className="inline-block w-5 text-right mr-2 opacity-50 select-none">
+                                {line.type === 'removed' ? '−' : line.type === 'added' ? '+' : ' '}
+                            </span>
+                            {line.text || ' '}
+                        </div>
+                    ))}
+                </pre>
+            </div>
+        );
     };
 
     return (
@@ -137,6 +227,7 @@ export default function AuditLogsPage() {
                                 <th className="px-4 py-3 text-left font-medium">ผู้ใช้</th>
                                 <th className="px-4 py-3 text-left font-medium">ประเภท</th>
                                 <th className="px-4 py-3 text-left font-medium">รายละเอียด</th>
+                                <th className="px-4 py-3 text-center font-medium w-16"></th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
@@ -150,6 +241,17 @@ export default function AuditLogsPage() {
                                         </span>
                                     </td>
                                     <td className="px-4 py-3 text-slate-600 dark:text-slate-300 max-w-md truncate">{log.Details}</td>
+                                    <td className="px-4 py-3 text-center">
+                                        {log.ChangeData && (
+                                            <button
+                                                onClick={() => setSelectedLog(log)}
+                                                className="p-1.5 rounded-lg text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/30 transition-colors"
+                                                title="ดูรายละเอียดการเปลี่ยนแปลง"
+                                            >
+                                                <Eye className="w-4 h-4" />
+                                            </button>
+                                        )}
+                                    </td>
                                 </tr>
                             ))}
                         </tbody>
@@ -165,6 +267,54 @@ export default function AuditLogsPage() {
                     </div>
                 )}
             </div>
+
+            {/* Change Detail Modal */}
+            {selectedLog && (() => {
+                const changeData = parseChangeData(selectedLog.ChangeData);
+                return (
+                    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm" onClick={() => setSelectedLog(null)}>
+                        <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl w-full max-w-3xl max-h-[85vh] flex flex-col mx-4" onClick={e => e.stopPropagation()}>
+                            {/* Modal Header */}
+                            <div className="p-5 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between">
+                                <div>
+                                    <h2 className="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                                        <Eye className="w-5 h-5 text-blue-500" />
+                                        รายละเอียดการเปลี่ยนแปลง
+                                    </h2>
+                                    <p className="text-sm text-slate-500 mt-0.5">
+                                        {formatDateTime(selectedLog.CreatedAt)} — {selectedLog.UserName}
+                                    </p>
+                                </div>
+                                <button onClick={() => setSelectedLog(null)} className="p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors">
+                                    <X className="w-5 h-5 text-slate-500" />
+                                </button>
+                            </div>
+
+                            {/* Modal Body */}
+                            <div className="p-5 overflow-y-auto flex-1 space-y-4">
+                                {changeData ? Object.entries(changeData).map(([field, values]: [string, any]) => (
+                                    <div key={field} className="rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden">
+                                        <div className="px-4 py-2.5 bg-slate-50 dark:bg-slate-700/50 font-semibold text-sm text-slate-700 dark:text-slate-300">
+                                            {field}
+                                        </div>
+                                        {renderDiff(values.old, values.new)}
+                                    </div>
+                                )) : (
+                                    <p className="text-sm text-slate-500">ไม่มีข้อมูลการเปลี่ยนแปลง</p>
+                                )}
+                            </div>
+
+                            {/* Legend */}
+                            <div className="px-5 py-3 border-t border-slate-200 dark:border-slate-700 flex items-center gap-4 text-[11px]">
+                                <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded bg-red-100 border border-red-200"></span> ลบออก</span>
+                                <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded bg-emerald-100 border border-emerald-200"></span> เพิ่มใหม่</span>
+                                <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded bg-slate-100 border border-slate-200"></span> ไม่เปลี่ยน</span>
+                            </div>
+                        </div>
+                    </div>
+                );
+            })()}
         </div>
     );
 }
+

@@ -1,7 +1,7 @@
 # ReportCenter — Deployment Guide (Ubuntu Server + Cloudflare Zero Trust)
 
 > **Target OS:** Ubuntu 22.04 LTS / 24.04 LTS  
-> **Last Updated:** 2026-02-22
+> **Last Updated:** 2026-02-23
 
 ---
 

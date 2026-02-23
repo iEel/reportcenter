@@ -20,6 +20,14 @@ export async function GET(request) {
 
         const pool = await connectToCentralDB();
 
+        // Auto-add ChangeData column if missing
+        try {
+            await pool.request().query(`
+                IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = 'ActivityLogs' AND COLUMN_NAME = 'ChangeData')
+                ALTER TABLE ActivityLogs ADD ChangeData NVARCHAR(MAX) NULL;
+            `);
+        } catch (e) { /* ignore */ }
+
         // Build WHERE clause
         let where = 'WHERE 1=1';
         const req = pool.request();
@@ -61,7 +69,7 @@ export async function GET(request) {
         req2.input('PageSize', sql.Int, pageSize);
 
         const result = await req2.query(`
-            SELECT a.LogId, a.UserId, a.ReportId, a.CompanyId, a.ActionType, a.Details, a.CreatedAt,
+            SELECT a.LogId, a.UserId, a.ReportId, a.CompanyId, a.ActionType, a.Details, a.ChangeData, a.CreatedAt,
                    u.FullName AS UserName
             FROM ActivityLogs a
             LEFT JOIN Users u ON a.UserId = u.UserId
