@@ -48,26 +48,39 @@ async function ensureTable(pool) {
     } catch (e) { /* columns may already exist */ }
 }
 
+// Helper: shift a Date so its UTC components represent Bangkok time (UTC+7).
+// The mssql driver (useUTC: true by default) stores getUTC*() values,
+// so the UTC components must equal the intended Bangkok time.
+const BANGKOK_OFFSET_MS = 7 * 60 * 60 * 1000;
+function toBangkokDate(d = new Date()) {
+    return new Date(d.getTime() + BANGKOK_OFFSET_MS);
+}
+
 function calculateNextRun(frequency, runTime, dayOfWeek, dayOfMonth) {
-    const now = new Date();
+    const nowBangkok = toBangkokDate();
+
     const [hour, minute] = runTime.split(':').map(Number);
-    let next = new Date(now);
-    next.setHours(hour, minute, 0, 0);
+
+    // Build "next run" in Bangkok time (using UTC methods so server TZ doesn't interfere)
+    let next = new Date(nowBangkok);
+    next.setUTCHours(hour, minute, 0, 0);
 
     if (frequency === 'daily') {
-        if (next <= now) next.setDate(next.getDate() + 1);
+        if (next <= nowBangkok) next.setUTCDate(next.getUTCDate() + 1);
     } else if (frequency === 'weekly') {
-        const currentDay = now.getDay();
+        const currentDay = nowBangkok.getUTCDay();
         let daysUntil = (dayOfWeek - currentDay + 7) % 7;
-        if (daysUntil === 0 && next <= now) daysUntil = 7;
-        next.setDate(now.getDate() + daysUntil);
+        if (daysUntil === 0 && next <= nowBangkok) daysUntil = 7;
+        next.setUTCDate(nowBangkok.getUTCDate() + daysUntil);
     } else if (frequency === 'monthly') {
-        next.setDate(dayOfMonth);
-        if (next <= now) {
-            next.setMonth(next.getMonth() + 1);
-            next.setDate(dayOfMonth);
+        next.setUTCDate(dayOfMonth);
+        if (next <= nowBangkok) {
+            next.setUTCMonth(next.getUTCMonth() + 1);
+            next.setUTCDate(dayOfMonth);
         }
     }
+
+    // Return as-is — UTC components already represent Bangkok time
     return next;
 }
 
@@ -340,7 +353,7 @@ export async function PATCH(request) {
         // Update schedule status
         await pool.request()
             .input('ScheduleId', sql.Int, scheduleId)
-            .input('Now', sql.DateTime, new Date())
+            .input('Now', sql.DateTime, toBangkokDate())
             .query(`UPDATE ReportSchedules SET LastRunAt = @Now, LastRunStatus = 'SUCCESS' WHERE ScheduleId = @ScheduleId`);
 
         // Log activity
