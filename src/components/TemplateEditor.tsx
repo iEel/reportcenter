@@ -17,8 +17,13 @@ export default function TemplateEditor({ value, onChange, sqlQuery }: TemplateEd
     const availableFields = useMemo(() => {
         if (!sqlQuery) return [];
         try {
-            // Match columns from SELECT ... FROM
-            const selectMatch = sqlQuery.match(/SELECT\s+([\s\S]*?)\s+FROM/i);
+            // Strip SQL comments to prevent false FROM matches (e.g. "-- Detail from TableX")
+            const cleanSql = sqlQuery
+                .replace(/--[^\n]*/g, '')           // Remove single-line comments
+                .replace(/\/\*[\s\S]*?\*\//g, '');  // Remove block comments
+
+            // Match columns from SELECT ... FROM (first occurrence)
+            const selectMatch = cleanSql.match(/SELECT\s+([\s\S]*?)\s+FROM\b/i);
             if (!selectMatch) return [];
 
             const selectClause = selectMatch[1];
@@ -26,23 +31,43 @@ export default function TemplateEditor({ value, onChange, sqlQuery }: TemplateEd
             // Handle SELECT *
             if (selectClause.trim() === '*') return [];
 
-            // Split by comma, handle aliases
-            const columns = selectClause.split(',').map(col => {
+            // Parenthesis-aware comma split: only split at top-level commas
+            const parts: string[] = [];
+            let depth = 0;
+            let current = '';
+            for (const ch of selectClause) {
+                if (ch === '(') depth++;
+                else if (ch === ')') depth--;
+                else if (ch === ',' && depth === 0) {
+                    parts.push(current.trim());
+                    current = '';
+                    continue;
+                }
+                current += ch;
+            }
+            if (current.trim()) parts.push(current.trim());
+
+            // Extract column name or alias from each part
+            const columns = parts.map(col => {
                 const trimmed = col.trim();
 
-                // Handle: ColumnName AS Alias or ColumnName Alias
-                const asMatch = trimmed.match(/\bAS\s+\[?(\w+)\]?$/i) || trimmed.match(/\s+\[?(\w+)\]?$/);
-                if (asMatch) return asMatch[1];
+                // Handle: ... AS [Alias] or ... AS Alias
+                const asMatch = trimmed.match(/\bAS\s+\[?([^\]\s]+)\]?\s*$/i);
+                if (asMatch) return asMatch[1].trim();
 
-                // Handle: table.ColumnName
-                const dotMatch = trimmed.match(/\.(\w+)$/);
+                // Simple column: just a word or [word]
+                const simpleMatch = trimmed.match(/^\[?(\w+)\]?$/);
+                if (simpleMatch) return simpleMatch[1];
+
+                // table.Column
+                const dotMatch = trimmed.match(/\.(\w+)\s*$/);
                 if (dotMatch) return dotMatch[1];
 
-                // Handle: [ColumnName]
-                const bracketMatch = trimmed.match(/^\[?(\w+)\]?$/);
-                if (bracketMatch) return bracketMatch[1];
+                // Expression without AS — last word after ) might be implicit alias
+                const implicitAlias = trimmed.match(/\)\s+\[?(\w+)\]?\s*$/);
+                if (implicitAlias) return implicitAlias[1];
 
-                // Fallback: use as-is if it's a simple name
+                // Fallback: if simple name
                 if (/^\w+$/.test(trimmed)) return trimmed;
 
                 return null;
@@ -148,8 +173,8 @@ export default function TemplateEditor({ value, onChange, sqlQuery }: TemplateEd
                                             key={field}
                                             onClick={() => insertField(field)}
                                             className={`w-full text-left px-2.5 py-2 rounded-lg text-xs font-mono transition-all flex items-center gap-2 group ${isUsed
-                                                    ? 'bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100'
-                                                    : 'bg-white text-slate-600 border border-slate-200 hover:bg-blue-50 hover:text-blue-600 hover:border-blue-300'
+                                                ? 'bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100'
+                                                : 'bg-white text-slate-600 border border-slate-200 hover:bg-blue-50 hover:text-blue-600 hover:border-blue-300'
                                                 }`}
                                         >
                                             {isUsed ? (
