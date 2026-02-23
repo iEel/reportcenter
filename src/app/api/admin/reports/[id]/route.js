@@ -180,17 +180,17 @@ export async function PUT(request, props) {
 
             await transaction.commit();
 
-            // Build change summary
+            // Build change summary with old→new values
             const changes = [];
-            if (oldReport.ReportName !== report.ReportName) changes.push('ชื่อรายงาน');
-            if ((oldReport.Description || '') !== (report.Description || '')) changes.push('คำอธิบาย');
-            if (oldReport.ReportType !== (report.ReportType || 1)) changes.push('ประเภท');
-            if ((oldReport.TSqlQuery || '') !== (report.TSqlQuery || '')) changes.push('คำสั่ง SQL');
-            if ((oldReport.EmailTemplateContent || '') !== (report.EmailTemplateContent || '')) changes.push('Email Template');
-            if (!!oldReport.IsPublic !== !!report.IsPublic) changes.push('สาธารณะ');
-            if (!!oldReport.IsActive !== !!(report.IsActive !== undefined ? report.IsActive : true)) changes.push('สถานะ');
-            if (!!oldReport.IsHeavy !== !!report.IsHeavy) changes.push('รายงานหนัก');
-            const changeSummary = changes.length > 0 ? ` [แก้ไข: ${changes.join(', ')}]` : '';
+            if (oldReport.ReportName !== report.ReportName) changes.push(`ชื่อ: "${oldReport.ReportName}" → "${report.ReportName}"`);
+            if ((oldReport.Description || '') !== (report.Description || '')) changes.push(`คำอธิบาย: "${oldReport.Description || '-'}" → "${report.Description || '-'}"`);
+            if (oldReport.ReportType !== (report.ReportType || 1)) changes.push(`ประเภท: ${oldReport.ReportType} → ${report.ReportType || 1}`);
+            if ((oldReport.TSqlQuery || '') !== (report.TSqlQuery || '')) changes.push(`SQL เปลี่ยน (${(oldReport.TSqlQuery || '').length}→${(report.TSqlQuery || '').length} ตัวอักษร)`);
+            if ((oldReport.EmailTemplateContent || '') !== (report.EmailTemplateContent || '')) changes.push(`Email Template เปลี่ยน`);
+            if (!!oldReport.IsPublic !== !!report.IsPublic) changes.push(`สาธารณะ: ${oldReport.IsPublic ? 'ใช่' : 'ไม่'} → ${report.IsPublic ? 'ใช่' : 'ไม่'}`);
+            if (!!oldReport.IsActive !== !!(report.IsActive !== undefined ? report.IsActive : true)) changes.push(`สถานะ: ${oldReport.IsActive ? 'เปิด' : 'ปิด'} → ${report.IsActive ? 'เปิด' : 'ปิด'}`);
+            if (!!oldReport.IsHeavy !== !!report.IsHeavy) changes.push(`รายงานหนัก: ${oldReport.IsHeavy ? 'ใช่' : 'ไม่'} → ${report.IsHeavy ? 'ใช่' : 'ไม่'}`);
+            const changeSummary = changes.length > 0 ? ` | ${changes.join(', ')}` : '';
 
             // Log activity
             try {
@@ -200,7 +200,7 @@ export async function PUT(request, props) {
                         .input('UserId', sql.Int, session.userId)
                         .input('ReportId', sql.Int, parseInt(id))
                         .input('ActionType', sql.NVarChar(50), 'UPDATE_REPORT')
-                        .input('Details', sql.NVarChar(500), `แก้ไขรายงาน "${report.ReportName}"${changeSummary}`)
+                        .input('Details', sql.NVarChar(sql.MAX), `แก้ไขรายงาน "${report.ReportName}"${changeSummary}`)
                         .query(`INSERT INTO ActivityLogs (UserId, ReportId, ActionType, Details) VALUES (@UserId, @ReportId, @ActionType, @Details)`);
                 }
             } catch (e) { console.warn('Report activity log failed:', e.message); }
