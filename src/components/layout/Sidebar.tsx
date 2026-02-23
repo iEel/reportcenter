@@ -63,6 +63,27 @@ export default function Sidebar() {
 
     const sidebarContent = (
         <>
+            {/* Inline scrollbar styles — guaranteed to load */}
+            <style>{`
+                .sidebar-scroll::-webkit-scrollbar {
+                    width: 4px;
+                }
+                .sidebar-scroll::-webkit-scrollbar-track {
+                    background: transparent;
+                }
+                .sidebar-scroll::-webkit-scrollbar-thumb {
+                    background: rgba(100, 116, 139, 0.25);
+                    border-radius: 9999px;
+                }
+                .sidebar-scroll::-webkit-scrollbar-thumb:hover {
+                    background: rgba(148, 163, 184, 0.5);
+                }
+                .sidebar-scroll {
+                    scrollbar-width: thin;
+                    scrollbar-color: rgba(100, 116, 139, 0.25) transparent;
+                }
+            `}</style>
+
             <div className="p-6 flex items-center gap-3">
                 <div className="w-8 h-8 rounded-lg bg-blue-600 flex items-center justify-center text-white font-bold shadow-lg shadow-blue-500/50">
                     RC
