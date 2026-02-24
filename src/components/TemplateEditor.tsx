@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useRef, useMemo, useCallback } from "react";
-import { Code, Eye, Edit3, MousePointerClick, CheckCircle2, Bold, Underline, Italic, Strikethrough, List, Minus } from "lucide-react";
+import { Code, Eye, Edit3, MousePointerClick, CheckCircle2, Bold, Underline, Italic, Strikethrough, Minus, Type, Sparkles } from "lucide-react";
 
 interface TemplateEditorProps {
     value: string;
@@ -17,21 +17,16 @@ export default function TemplateEditor({ value, onChange, sqlQuery }: TemplateEd
     const availableFields = useMemo(() => {
         if (!sqlQuery) return [];
         try {
-            // Strip SQL comments to prevent false FROM matches (e.g. "-- Detail from TableX")
             const cleanSql = sqlQuery
-                .replace(/--[^\n]*/g, '')           // Remove single-line comments
-                .replace(/\/\*[\s\S]*?\*\//g, '');  // Remove block comments
+                .replace(/--[^\n]*/g, '')
+                .replace(/\/\*[\s\S]*?\*\//g, '');
 
-            // Match columns from SELECT ... FROM (first occurrence)
             const selectMatch = cleanSql.match(/SELECT\s+([\s\S]*?)\s+FROM\b/i);
             if (!selectMatch) return [];
 
             const selectClause = selectMatch[1];
-
-            // Handle SELECT *
             if (selectClause.trim() === '*') return [];
 
-            // Parenthesis-aware comma split: only split at top-level commas
             const parts: string[] = [];
             let depth = 0;
             let current = '';
@@ -47,60 +42,42 @@ export default function TemplateEditor({ value, onChange, sqlQuery }: TemplateEd
             }
             if (current.trim()) parts.push(current.trim());
 
-            // Extract column name or alias from each part
             const columns = parts.map(col => {
                 const trimmed = col.trim();
-
-                // Handle: ... AS [Alias] or ... AS Alias
                 const asMatch = trimmed.match(/\bAS\s+\[?([^\]\s]+)\]?\s*$/i);
                 if (asMatch) return asMatch[1].trim();
-
-                // Simple column: just a word or [word]
                 const simpleMatch = trimmed.match(/^\[?(\w+)\]?$/);
                 if (simpleMatch) return simpleMatch[1];
-
-                // table.Column
                 const dotMatch = trimmed.match(/\.(\w+)\s*$/);
                 if (dotMatch) return dotMatch[1];
-
-                // Expression without AS — last word after ) might be implicit alias
                 const implicitAlias = trimmed.match(/\)\s+\[?(\w+)\]?\s*$/);
                 if (implicitAlias) return implicitAlias[1];
-
-                // Fallback: if simple name
                 if (/^\w+$/.test(trimmed)) return trimmed;
-
                 return null;
             }).filter(Boolean) as string[];
 
-            // Dedupe
             return [...new Set(columns)];
         } catch {
             return [];
         }
     }, [sqlQuery]);
 
-    // Which fields are already used in the template
     const usedFields = useMemo(() => {
         const matches = value.match(/\{\{(\w+)\}\}/g) || [];
         return new Set(matches.map(m => m.replace(/[{}]/g, '')));
     }, [value]);
 
-    // Insert field at cursor position
     const insertField = useCallback((fieldName: string) => {
         const textarea = textareaRef.current;
         if (!textarea) {
             onChange(value + `{{${fieldName}}}`);
             return;
         }
-
         const start = textarea.selectionStart;
         const end = textarea.selectionEnd;
         const tag = `{{${fieldName}}}`;
         const newValue = value.substring(0, start) + tag + value.substring(end);
         onChange(newValue);
-
-        // Restore cursor position after the inserted tag
         requestAnimationFrame(() => {
             textarea.focus();
             const newPos = start + tag.length;
@@ -108,11 +85,9 @@ export default function TemplateEditor({ value, onChange, sqlQuery }: TemplateEd
         });
     }, [value, onChange]);
 
-    // Wrap selected text with formatting markers, or insert placeholder
     const applyFormat = useCallback((prefix: string, suffix: string, placeholder: string) => {
         const textarea = textareaRef.current;
         if (!textarea) return;
-
         const start = textarea.selectionStart;
         const end = textarea.selectionEnd;
         const selected = value.substring(start, end);
@@ -122,12 +97,10 @@ export default function TemplateEditor({ value, onChange, sqlQuery }: TemplateEd
         let newCursorEnd: number;
 
         if (selected) {
-            // Wrap selection
             newValue = value.substring(0, start) + prefix + selected + suffix + value.substring(end);
             newCursorStart = start + prefix.length;
             newCursorEnd = newCursorStart + selected.length;
         } else {
-            // Insert placeholder
             newValue = value.substring(0, start) + prefix + placeholder + suffix + value.substring(end);
             newCursorStart = start + prefix.length;
             newCursorEnd = newCursorStart + placeholder.length;
@@ -140,59 +113,47 @@ export default function TemplateEditor({ value, onChange, sqlQuery }: TemplateEd
         });
     }, [value, onChange]);
 
-    // Format buttons config
-    const formatButtons = [
-        { icon: Bold, label: 'ตัวหนา', prefix: '*', suffix: '*', placeholder: 'ข้อความตัวหนา', shortcut: 'Ctrl+B' },
-        { icon: Underline, label: 'ขีดเส้นใต้', prefix: '_', suffix: '_', placeholder: 'ข้อความขีดเส้นใต้', shortcut: 'Ctrl+U' },
-        { icon: Italic, label: 'ตัวเอียง', prefix: '~', suffix: '~', placeholder: 'ข้อความตัวเอียง', shortcut: 'Ctrl+I' },
-        { icon: Strikethrough, label: 'ขีดฆ่า', prefix: '~~', suffix: '~~', placeholder: 'ข้อความขีดฆ่า', shortcut: '' },
-    ];
-
-    // Handle keyboard shortcuts
     const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
         if (!e.ctrlKey && !e.metaKey) return;
-
         switch (e.key.toLowerCase()) {
             case 'b':
                 e.preventDefault();
-                applyFormat('*', '*', 'ข้อความตัวหนา');
+                applyFormat('*', '*', 'ข้อความ');
                 break;
             case 'u':
                 e.preventDefault();
-                applyFormat('_', '_', 'ข้อความขีดเส้นใต้');
+                applyFormat('_', '_', 'ข้อความ');
                 break;
             case 'i':
                 e.preventDefault();
-                applyFormat('~', '~', 'ข้อความตัวเอียง');
+                applyFormat('~', '~', 'ข้อความ');
                 break;
         }
     }, [applyFormat]);
 
-    // Preview: replace formatting markers + {{Field}} with styled HTML
     const previewHtml = useMemo(() => {
         let html = value
             .replace(/&/g, '&amp;')
             .replace(/</g, '&lt;')
             .replace(/>/g, '&gt;');
 
-        // Apply formatting (order matters: strikethrough first since it uses ~~)
         html = html
-            .replace(/~~(.+?)~~/g, '<s class="text-slate-400">$1</s>')
+            .replace(/~~(.+?)~~/g, '<s>$1</s>')
             .replace(/\*(.+?)\*/g, '<strong>$1</strong>')
             .replace(/_(.+?)_/g, '<u>$1</u>')
             .replace(/~(.+?)~/g, '<em>$1</em>');
 
-        // Line breaks
+        html = html.replace(/───+/g, '<hr class="border-slate-200 dark:border-slate-600 my-1"/>');
         html = html.replace(/\n/g, '<br/>');
-
-        // Field placeholders
-        html = html.replace(/\{\{(\w+)\}\}/g, '<span style="background:#dbeafe;color:#1d4ed8;padding:2px 6px;border-radius:4px;font-weight:600;font-size:13px;">[$1]</span>');
-
+        html = html.replace(
+            /\{\{(\w+)\}\}/g,
+            '<span style="background:#dbeafe;color:#1d4ed8;padding:1px 5px;border-radius:4px;font-weight:600;font-size:13px;">[$1]</span>'
+        );
         return html;
     }, [value]);
 
     return (
-        <div className="flex flex-col h-full min-h-[500px] animate-in fade-in duration-300">
+        <div className="flex flex-col h-full min-h-[660px] animate-in fade-in duration-300">
             {/* Header */}
             <div className="p-4 border-b border-slate-100 dark:border-slate-700 flex items-center justify-between bg-slate-50 dark:bg-slate-800">
                 <div className="flex items-center gap-2 text-blue-600 dark:text-blue-400 font-medium text-sm">
@@ -202,15 +163,13 @@ export default function TemplateEditor({ value, onChange, sqlQuery }: TemplateEd
                 <div className="flex items-center gap-1 bg-slate-100 dark:bg-slate-700 rounded-lg p-0.5">
                     <button
                         onClick={() => setMode('edit')}
-                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all ${mode === 'edit' ? 'bg-white dark:bg-slate-600 text-blue-600 dark:text-blue-400 shadow-sm' : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300'
-                            }`}
+                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all ${mode === 'edit' ? 'bg-white dark:bg-slate-600 text-blue-600 dark:text-blue-400 shadow-sm' : 'text-slate-500 dark:text-slate-400 hover:text-slate-700'}`}
                     >
                         <Edit3 className="w-3 h-3" /> แก้ไข
                     </button>
                     <button
                         onClick={() => setMode('preview')}
-                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all ${mode === 'preview' ? 'bg-white dark:bg-slate-600 text-blue-600 dark:text-blue-400 shadow-sm' : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300'
-                            }`}
+                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all ${mode === 'preview' ? 'bg-white dark:bg-slate-600 text-blue-600 dark:text-blue-400 shadow-sm' : 'text-slate-500 dark:text-slate-400 hover:text-slate-700'}`}
                     >
                         <Eye className="w-3 h-3" /> ตัวอย่าง
                     </button>
@@ -220,7 +179,7 @@ export default function TemplateEditor({ value, onChange, sqlQuery }: TemplateEd
             {mode === 'edit' ? (
                 <div className="flex flex-1 min-h-0">
                     {/* Left: Available Fields */}
-                    <div className="w-52 shrink-0 border-r border-slate-100 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/50 flex flex-col">
+                    <div className="w-44 shrink-0 border-r border-slate-100 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/50 flex flex-col">
                         <div className="px-3 py-2.5 border-b border-slate-100 dark:border-slate-700">
                             <p className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest flex items-center gap-1.5">
                                 <MousePointerClick className="w-3 h-3" /> ฟิลด์ที่ใช้ได้
@@ -245,8 +204,8 @@ export default function TemplateEditor({ value, onChange, sqlQuery }: TemplateEd
                                             key={field}
                                             onClick={() => insertField(field)}
                                             className={`w-full text-left px-2.5 py-2 rounded-lg text-xs font-mono transition-all flex items-center gap-2 group ${isUsed
-                                                ? 'bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800 hover:bg-emerald-100 dark:hover:bg-emerald-900/50'
-                                                : 'bg-white dark:bg-slate-700 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-600 hover:bg-blue-50 dark:hover:bg-blue-900/30 hover:text-blue-600 dark:hover:text-blue-400 hover:border-blue-300 dark:hover:border-blue-700'
+                                                ? 'bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800 hover:bg-emerald-100'
+                                                : 'bg-white dark:bg-slate-700 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 hover:text-blue-600 hover:border-blue-300'
                                                 }`}
                                         >
                                             {isUsed ? (
@@ -272,18 +231,23 @@ export default function TemplateEditor({ value, onChange, sqlQuery }: TemplateEd
                     {/* Right: Toolbar + Textarea */}
                     <div className="flex-1 flex flex-col bg-white dark:bg-slate-900">
                         {/* Formatting Toolbar */}
-                        <div className="flex items-center gap-1 px-3 py-2 border-b border-slate-100 dark:border-slate-700 bg-white dark:bg-slate-800">
-                            {formatButtons.map((btn) => (
+                        <div className="flex items-center px-3 py-1.5 border-b border-slate-100 dark:border-slate-700 bg-white dark:bg-slate-800 gap-0.5">
+                            {[
+                                { icon: Bold, tip: 'ตัวหนา (Ctrl+B)', pre: '*', suf: '*', ph: 'ข้อความ' },
+                                { icon: Italic, tip: 'ตัวเอียง (Ctrl+I)', pre: '~', suf: '~', ph: 'ข้อความ' },
+                                { icon: Underline, tip: 'ขีดเส้นใต้ (Ctrl+U)', pre: '_', suf: '_', ph: 'ข้อความ' },
+                                { icon: Strikethrough, tip: 'ขีดฆ่า', pre: '~~', suf: '~~', ph: 'ข้อความ' },
+                            ].map((btn) => (
                                 <button
-                                    key={btn.label}
-                                    onClick={() => applyFormat(btn.prefix, btn.suffix, btn.placeholder)}
-                                    className="p-1.5 rounded-md text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700 hover:text-slate-700 dark:hover:text-slate-300 transition-colors"
-                                    title={`${btn.label}${btn.shortcut ? ` (${btn.shortcut})` : ''}`}
+                                    key={btn.tip}
+                                    onClick={() => applyFormat(btn.pre, btn.suf, btn.ph)}
+                                    className="p-1.5 rounded text-slate-400 dark:text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-700 hover:text-slate-700 dark:hover:text-slate-300 transition-colors"
+                                    title={btn.tip}
                                 >
                                     <btn.icon className="w-4 h-4" />
                                 </button>
                             ))}
-                            <div className="w-px h-5 bg-slate-200 dark:bg-slate-600 mx-1" />
+                            <div className="w-px h-4 bg-slate-200 dark:bg-slate-600 mx-1" />
                             <button
                                 onClick={() => {
                                     const textarea = textareaRef.current;
@@ -297,23 +261,20 @@ export default function TemplateEditor({ value, onChange, sqlQuery }: TemplateEd
                                         textarea.setSelectionRange(newPos, newPos);
                                     });
                                 }}
-                                className="p-1.5 rounded-md text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700 hover:text-slate-700 dark:hover:text-slate-300 transition-colors"
+                                className="p-1.5 rounded text-slate-400 dark:text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-700 hover:text-slate-700 dark:hover:text-slate-300 transition-colors"
                                 title="เส้นแบ่ง"
                             >
                                 <Minus className="w-4 h-4" />
                             </button>
-                            <div className="flex-1" />
-                            <span className="text-[10px] text-slate-400 dark:text-slate-500 hidden sm:block">
-                                *ตัวหนา* &nbsp; _ขีดเส้นใต้_ &nbsp; ~ตัวเอียง~
-                            </span>
                         </div>
 
+                        {/* Textarea */}
                         <textarea
                             ref={textareaRef}
                             value={value}
                             onChange={e => onChange(e.target.value)}
                             onKeyDown={handleKeyDown}
-                            className="w-full flex-1 min-h-[400px] bg-transparent p-4 focus:outline-none resize-none text-sm leading-relaxed text-slate-800 dark:text-slate-200 placeholder:text-slate-400 dark:placeholder:text-slate-600"
+                            className="w-full flex-1 min-h-[600px] bg-transparent p-4 focus:outline-none resize-none text-sm leading-relaxed text-slate-800 dark:text-slate-200 placeholder:text-slate-400 dark:placeholder:text-slate-600"
                             placeholder={"เรียนคุณลูกค้า {{CustomerName}},\n\nทางเราขอแจ้งรายการออเดอร์หมายเลข *{{DocNo}}* ลงวันที่ {{DocDate}}\nมียอดรวม _{{TotalAmount}}_ บาท\n\n───────────────\nขอบคุณที่ใช้บริการครับ"}
                             spellCheck={false}
                         />
@@ -337,27 +298,11 @@ export default function TemplateEditor({ value, onChange, sqlQuery }: TemplateEd
                         )}
                     </div>
 
-                    {/* Formatting Legend */}
-                    <div className="max-w-lg mx-auto mt-4 p-4 bg-slate-50 dark:bg-slate-800/50 rounded-xl border border-slate-200 dark:border-slate-700">
-                        <p className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">วิธีจัดรูปแบบ</p>
-                        <div className="grid grid-cols-2 gap-2 text-xs text-slate-600 dark:text-slate-400">
-                            <div className="flex items-center gap-2">
-                                <code className="px-1.5 py-0.5 bg-white dark:bg-slate-700 rounded text-[11px] border border-slate-200 dark:border-slate-600">*ข้อความ*</code>
-                                <span>→ <strong>ตัวหนา</strong></span>
-                            </div>
-                            <div className="flex items-center gap-2">
-                                <code className="px-1.5 py-0.5 bg-white dark:bg-slate-700 rounded text-[11px] border border-slate-200 dark:border-slate-600">_ข้อความ_</code>
-                                <span>→ <u>ขีดเส้นใต้</u></span>
-                            </div>
-                            <div className="flex items-center gap-2">
-                                <code className="px-1.5 py-0.5 bg-white dark:bg-slate-700 rounded text-[11px] border border-slate-200 dark:border-slate-600">~ข้อความ~</code>
-                                <span>→ <em>ตัวเอียง</em></span>
-                            </div>
-                            <div className="flex items-center gap-2">
-                                <code className="px-1.5 py-0.5 bg-white dark:bg-slate-700 rounded text-[11px] border border-slate-200 dark:border-slate-600">~~ข้อความ~~</code>
-                                <span>→ <s>ขีดฆ่า</s></span>
-                            </div>
-                        </div>
+                    {/* Formatting hint */}
+                    <div className="max-w-lg mx-auto mt-3 flex items-center justify-center gap-4 text-[10px] text-slate-400 dark:text-slate-500">
+                        <span><code className="bg-slate-100 dark:bg-slate-700 px-1 rounded">*ตัวหนา*</code> → <strong>ตัวหนา</strong></span>
+                        <span><code className="bg-slate-100 dark:bg-slate-700 px-1 rounded">_ขีดเส้นใต้_</code> → <u>ขีดเส้นใต้</u></span>
+                        <span><code className="bg-slate-100 dark:bg-slate-700 px-1 rounded">~ตัวเอียง~</code> → <em>ตัวเอียง</em></span>
                     </div>
                 </div>
             )}

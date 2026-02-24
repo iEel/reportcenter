@@ -159,7 +159,7 @@ export default function EditReportPage() {
     }
 
     return (
-        <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500 max-w-5xl mx-auto">
+        <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500 max-w-7xl mx-auto">
             {/* Header */}
             <div className="flex items-center justify-between">
                 <div className="flex items-center gap-4">
