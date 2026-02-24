@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react";
-import { Plus, Search, Edit, Shield, User, Building, RefreshCw, X, Save, Loader2, Check, Eye, EyeOff, UserCheck, UserX, Trash2 } from "lucide-react";
+import { Plus, Search, Edit, Shield, User, Building, RefreshCw, X, Save, Loader2, Check, Eye, EyeOff, UserCheck, UserX, Trash2, KeyRound } from "lucide-react";
 import { useToast } from "@/components/providers/ToastProvider";
 import { useConfirm } from "@/components/providers/ConfirmProvider";
 
@@ -41,6 +41,13 @@ export default function AdminUsersPage() {
     const [isSaving, setIsSaving] = useState(false);
     const [editMode, setEditMode] = useState(false);
     const [showPassword, setShowPassword] = useState(false);
+
+    // Reset Password Modal
+    const [isResetPwOpen, setIsResetPwOpen] = useState(false);
+    const [resetPwUser, setResetPwUser] = useState<any>(null);
+    const [resetPwValue, setResetPwValue] = useState('');
+    const [showResetPw, setShowResetPw] = useState(false);
+    const [isResetting, setIsResetting] = useState(false);
 
     const [formData, setFormData] = useState({
         UserId: '',
@@ -209,6 +216,39 @@ export default function AdminUsersPage() {
             }
         } catch {
             toast('ไม่สามารถเชื่อมต่อเซิร์ฟเวอร์ได้', 'error');
+        }
+    };
+
+    const handleOpenResetPw = (user: any) => {
+        setResetPwUser(user);
+        setResetPwValue('');
+        setShowResetPw(false);
+        setIsResetPwOpen(true);
+    };
+
+    const handleResetPassword = async () => {
+        if (!resetPwValue.trim()) {
+            toast('กรุณากรอกรหัสผ่านใหม่', 'error');
+            return;
+        }
+        setIsResetting(true);
+        try {
+            const res = await fetch('/api/admin/users/reset-password', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ userId: resetPwUser.UserId, newPassword: resetPwValue })
+            });
+            const data = await res.json();
+            if (data.success) {
+                toast(data.message || 'รีเซ็ตรหัสผ่านสำเร็จ', 'success');
+                setIsResetPwOpen(false);
+            } else {
+                toast(data.message || 'เกิดข้อผิดพลาด', 'error');
+            }
+        } catch {
+            toast('ไม่สามารถเชื่อมต่อเซิร์ฟเวอร์ได้', 'error');
+        } finally {
+            setIsResetting(false);
         }
     };
 
@@ -403,6 +443,13 @@ export default function AdminUsersPage() {
                                     <td className="px-6 py-4 text-right">
                                         <div className="flex items-center justify-end gap-1.5">
                                             <button
+                                                onClick={() => handleOpenResetPw(user)}
+                                                className="p-2 bg-amber-50 dark:bg-amber-900/20 hover:bg-amber-100 dark:hover:bg-amber-900/40 text-amber-600 dark:text-amber-400 rounded-lg transition-colors"
+                                                title="รีเซ็ตรหัสผ่าน"
+                                            >
+                                                <KeyRound className="w-4 h-4" />
+                                            </button>
+                                            <button
                                                 onClick={() => handleOpenEditModal(user)}
                                                 className="p-2 bg-blue-50 dark:bg-blue-900/30 hover:bg-blue-100 dark:hover:bg-blue-900/50 text-blue-600 dark:text-blue-400 rounded-lg transition-colors"
                                                 title="แก้ไข"
@@ -411,7 +458,7 @@ export default function AdminUsersPage() {
                                             </button>
                                             <button
                                                 onClick={() => handleDeleteUser(user)}
-                                                className="p-2 bg-red-50 dark:bg-red-900/20 hover:bg-red-100 dark:hover:bg-red-900/40 text-red-500 dark:text-red-400 rounded-lg transition-colors opacity-0 group-hover:opacity-100"
+                                                className="p-2 bg-red-50 dark:bg-red-900/20 hover:bg-red-100 dark:hover:bg-red-900/40 text-red-500 dark:text-red-400 rounded-lg transition-colors"
                                                 title="ลบผู้ใช้"
                                             >
                                                 <Trash2 className="w-4 h-4" />
@@ -426,179 +473,247 @@ export default function AdminUsersPage() {
             </div>
 
             {/* Modal */}
-            {isModalOpen && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm animate-in fade-in">
-                    <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-xl w-full max-w-lg overflow-hidden animate-in zoom-in-95 duration-200 max-h-[90vh] flex flex-col">
+            {
+                isModalOpen && (
+                    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm animate-in fade-in">
+                        <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-xl w-full max-w-lg overflow-hidden animate-in zoom-in-95 duration-200 max-h-[90vh] flex flex-col">
 
-                        {/* Modal Header */}
-                        <div className="px-6 py-4 border-b border-slate-100 dark:border-slate-700 flex items-center justify-between bg-gradient-to-r from-blue-600 to-blue-700">
-                            <h3 className="font-bold text-lg text-white flex items-center gap-2">
-                                <User className="w-5 h-5" />
-                                {editMode ? 'แก้ไขข้อมูลผู้ใช้' : 'เพิ่มผู้ใช้ใหม่'}
-                            </h3>
-                            <button onClick={() => setIsModalOpen(false)} className="text-white/70 hover:text-white transition-colors p-1 hover:bg-white/10 rounded-lg">
-                                <X className="w-5 h-5" />
-                            </button>
-                        </div>
+                            {/* Modal Header */}
+                            <div className="px-6 py-4 border-b border-slate-100 dark:border-slate-700 flex items-center justify-between bg-gradient-to-r from-blue-600 to-blue-700">
+                                <h3 className="font-bold text-lg text-white flex items-center gap-2">
+                                    <User className="w-5 h-5" />
+                                    {editMode ? 'แก้ไขข้อมูลผู้ใช้' : 'เพิ่มผู้ใช้ใหม่'}
+                                </h3>
+                                <button onClick={() => setIsModalOpen(false)} className="text-white/70 hover:text-white transition-colors p-1 hover:bg-white/10 rounded-lg">
+                                    <X className="w-5 h-5" />
+                                </button>
+                            </div>
 
-                        {/* Modal Body */}
-                        <div className="p-6 space-y-5 overflow-y-auto flex-1">
+                            {/* Modal Body */}
+                            <div className="p-6 space-y-5 overflow-y-auto flex-1">
 
-                            {/* Section: Account */}
-                            <div>
-                                <h4 className="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-3">ข้อมูลบัญชี</h4>
-                                <div className="space-y-3">
-                                    {!editMode && (
+                                {/* Section: Account */}
+                                <div>
+                                    <h4 className="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-3">ข้อมูลบัญชี</h4>
+                                    <div className="space-y-3">
+                                        {!editMode && (
+                                            <div>
+                                                <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                                                    Username <span className="text-red-500">*</span>
+                                                </label>
+                                                <input
+                                                    type="text"
+                                                    value={formData.Username}
+                                                    onChange={e => setFormData({ ...formData, Username: e.target.value })}
+                                                    className="w-full px-3 py-2.5 border border-slate-200 dark:border-slate-600 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 bg-white dark:bg-slate-700 dark:text-white text-sm"
+                                                    placeholder="เช่น jsmith"
+                                                />
+                                            </div>
+                                        )}
                                         <div>
                                             <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                                                Username <span className="text-red-500">*</span>
+                                                ชื่อ-นามสกุล <span className="text-red-500">*</span>
                                             </label>
                                             <input
                                                 type="text"
-                                                value={formData.Username}
-                                                onChange={e => setFormData({ ...formData, Username: e.target.value })}
+                                                value={formData.FullName}
+                                                onChange={e => setFormData({ ...formData, FullName: e.target.value })}
                                                 className="w-full px-3 py-2.5 border border-slate-200 dark:border-slate-600 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 bg-white dark:bg-slate-700 dark:text-white text-sm"
-                                                placeholder="เช่น jsmith"
+                                                placeholder="เช่น John Smith"
                                             />
                                         </div>
-                                    )}
-                                    <div>
-                                        <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                                            ชื่อ-นามสกุล <span className="text-red-500">*</span>
-                                        </label>
-                                        <input
-                                            type="text"
-                                            value={formData.FullName}
-                                            onChange={e => setFormData({ ...formData, FullName: e.target.value })}
-                                            className="w-full px-3 py-2.5 border border-slate-200 dark:border-slate-600 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 bg-white dark:bg-slate-700 dark:text-white text-sm"
-                                            placeholder="เช่น John Smith"
-                                        />
-                                    </div>
-                                    {!editMode && (
-                                        <div>
-                                            <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">รหัสผ่านเริ่มต้น</label>
-                                            <div className="relative">
-                                                <input
-                                                    type={showPassword ? 'text' : 'password'}
-                                                    value={formData.PasswordHash}
-                                                    onChange={e => setFormData({ ...formData, PasswordHash: e.target.value })}
-                                                    className="w-full px-3 py-2.5 pr-10 border border-slate-200 dark:border-slate-600 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 bg-white dark:bg-slate-700 dark:text-white text-sm"
-                                                    placeholder="(ค่าเริ่มต้น: P@ssw0rd123)"
-                                                />
-                                                <button
-                                                    type="button"
-                                                    onClick={() => setShowPassword(!showPassword)}
-                                                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
-                                                >
-                                                    {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                                                </button>
-                                            </div>
-                                            <p className="text-xs text-slate-400 mt-1">ขั้นต่ำ 8 ตัว, ต้องมี A-Z, ตัวเลข, อักขระพิเศษ</p>
-                                        </div>
-                                    )}
-                                </div>
-                            </div>
-
-                            {/* Section: Permissions */}
-                            <div>
-                                <h4 className="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-3">สิทธิ์การใช้งาน</h4>
-                                <div className="space-y-3">
-                                    <div>
-                                        <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                                            Role <span className="text-red-500">*</span>
-                                        </label>
-                                        <select
-                                            value={formData.RoleId}
-                                            onChange={e => setFormData({ ...formData, RoleId: e.target.value })}
-                                            className="w-full px-3 py-2.5 border border-slate-200 dark:border-slate-600 rounded-xl bg-white dark:bg-slate-700 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 text-sm"
-                                        >
-                                            <option value="">-- เลือก Role --</option>
-                                            {roles.map(r => (
-                                                <option key={r.RoleId} value={r.RoleId}>{r.RoleName}</option>
-                                            ))}
-                                        </select>
-                                    </div>
-
-                                    <div>
-                                        <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-2">
-                                            บริษัทที่เข้าถึงได้ <span className="text-red-500">*</span>
-                                        </label>
-                                        <div className="grid gap-2">
-                                            {companies.map(company => {
-                                                const isChecked = formData.allowedCompanies.includes(company.id);
-                                                const colors = companyColorMap[company.color];
-                                                return (
-                                                    <label
-                                                        key={company.id}
-                                                        className={`flex items-center gap-3 cursor-pointer border rounded-xl p-3 transition-all ${isChecked
-                                                            ? `${colors.bg} ${colors.border} ${colors.text} shadow-sm`
-                                                            : 'border-slate-200 dark:border-slate-600 hover:border-slate-300 dark:hover:border-slate-500 bg-white dark:bg-slate-700'
-                                                            }`}
+                                        {!editMode && (
+                                            <div>
+                                                <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">รหัสผ่านเริ่มต้น</label>
+                                                <div className="relative">
+                                                    <input
+                                                        type={showPassword ? 'text' : 'password'}
+                                                        value={formData.PasswordHash}
+                                                        onChange={e => setFormData({ ...formData, PasswordHash: e.target.value })}
+                                                        className="w-full px-3 py-2.5 pr-10 border border-slate-200 dark:border-slate-600 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 bg-white dark:bg-slate-700 dark:text-white text-sm"
+                                                        placeholder="(ค่าเริ่มต้น: P@ssw0rd123)"
+                                                    />
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => setShowPassword(!showPassword)}
+                                                        className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
                                                     >
-                                                        <div className={`w-5 h-5 rounded border-2 flex items-center justify-center flex-shrink-0 transition-all ${isChecked ? 'bg-blue-600 border-blue-600' : 'border-slate-300 dark:border-slate-500'
-                                                            }`}>
-                                                            {isChecked && <Check className="w-3 h-3 text-white" />}
-                                                        </div>
-                                                        <Building className="w-4 h-4 flex-shrink-0" />
-                                                        <div className="flex-1 min-w-0">
-                                                            <p className="text-sm font-medium dark:text-white">{company.id}. {company.name}</p>
-                                                            <p className="text-xs opacity-70">{company.short}</p>
-                                                        </div>
-                                                        <input
-                                                            type="checkbox"
-                                                            checked={isChecked}
-                                                            onChange={() => toggleCompany(company.id)}
-                                                            className="sr-only"
-                                                        />
-                                                    </label>
-                                                );
-                                            })}
+                                                        {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                                                    </button>
+                                                </div>
+                                                <p className="text-xs text-slate-400 mt-1">ขั้นต่ำ 8 ตัว, ต้องมี A-Z, ตัวเลข, อักขระพิเศษ</p>
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+
+                                {/* Section: Permissions */}
+                                <div>
+                                    <h4 className="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-3">สิทธิ์การใช้งาน</h4>
+                                    <div className="space-y-3">
+                                        <div>
+                                            <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                                                Role <span className="text-red-500">*</span>
+                                            </label>
+                                            <select
+                                                value={formData.RoleId}
+                                                onChange={e => setFormData({ ...formData, RoleId: e.target.value })}
+                                                className="w-full px-3 py-2.5 border border-slate-200 dark:border-slate-600 rounded-xl bg-white dark:bg-slate-700 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 text-sm"
+                                            >
+                                                <option value="">-- เลือก Role --</option>
+                                                {roles.map(r => (
+                                                    <option key={r.RoleId} value={r.RoleId}>{r.RoleName}</option>
+                                                ))}
+                                            </select>
+                                        </div>
+
+                                        <div>
+                                            <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-2">
+                                                บริษัทที่เข้าถึงได้ <span className="text-red-500">*</span>
+                                            </label>
+                                            <div className="grid gap-2">
+                                                {companies.map(company => {
+                                                    const isChecked = formData.allowedCompanies.includes(company.id);
+                                                    const colors = companyColorMap[company.color];
+                                                    return (
+                                                        <label
+                                                            key={company.id}
+                                                            className={`flex items-center gap-3 cursor-pointer border rounded-xl p-3 transition-all ${isChecked
+                                                                ? `${colors.bg} ${colors.border} ${colors.text} shadow-sm`
+                                                                : 'border-slate-200 dark:border-slate-600 hover:border-slate-300 dark:hover:border-slate-500 bg-white dark:bg-slate-700'
+                                                                }`}
+                                                        >
+                                                            <div className={`w-5 h-5 rounded border-2 flex items-center justify-center flex-shrink-0 transition-all ${isChecked ? 'bg-blue-600 border-blue-600' : 'border-slate-300 dark:border-slate-500'
+                                                                }`}>
+                                                                {isChecked && <Check className="w-3 h-3 text-white" />}
+                                                            </div>
+                                                            <Building className="w-4 h-4 flex-shrink-0" />
+                                                            <div className="flex-1 min-w-0">
+                                                                <p className="text-sm font-medium dark:text-white">{company.id}. {company.name}</p>
+                                                                <p className="text-xs opacity-70">{company.short}</p>
+                                                            </div>
+                                                            <input
+                                                                type="checkbox"
+                                                                checked={isChecked}
+                                                                onChange={() => toggleCompany(company.id)}
+                                                                className="sr-only"
+                                                            />
+                                                        </label>
+                                                    );
+                                                })}
+                                            </div>
                                         </div>
                                     </div>
                                 </div>
+
+                                {/* Section: Status */}
+                                <div>
+                                    <h4 className="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-3">สถานะ</h4>
+                                    <label className={`flex items-center gap-3 cursor-pointer border rounded-xl p-3.5 transition-all ${formData.IsActive
+                                        ? 'bg-emerald-50 dark:bg-emerald-900/20 border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300'
+                                        : 'bg-slate-50 dark:bg-slate-700 border-slate-200 dark:border-slate-600'
+                                        }`}>
+                                        <div className={`w-10 h-6 rounded-full relative transition-all ${formData.IsActive ? 'bg-emerald-500' : 'bg-slate-300 dark:bg-slate-600'}`}>
+                                            <div className={`w-5 h-5 rounded-full bg-white shadow-sm absolute top-0.5 transition-all ${formData.IsActive ? 'left-[18px]' : 'left-0.5'}`}></div>
+                                        </div>
+                                        <span className="text-sm font-medium dark:text-white">{formData.IsActive ? 'เปิดใช้งาน (Active)' : 'ระงับบัญชี (Inactive)'}</span>
+                                        <input
+                                            type="checkbox"
+                                            checked={formData.IsActive}
+                                            onChange={e => setFormData({ ...formData, IsActive: e.target.checked })}
+                                            className="sr-only"
+                                        />
+                                    </label>
+                                </div>
                             </div>
 
-                            {/* Section: Status */}
-                            <div>
-                                <h4 className="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-3">สถานะ</h4>
-                                <label className={`flex items-center gap-3 cursor-pointer border rounded-xl p-3.5 transition-all ${formData.IsActive
-                                    ? 'bg-emerald-50 dark:bg-emerald-900/20 border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300'
-                                    : 'bg-slate-50 dark:bg-slate-700 border-slate-200 dark:border-slate-600'
-                                    }`}>
-                                    <div className={`w-10 h-6 rounded-full relative transition-all ${formData.IsActive ? 'bg-emerald-500' : 'bg-slate-300 dark:bg-slate-600'}`}>
-                                        <div className={`w-5 h-5 rounded-full bg-white shadow-sm absolute top-0.5 transition-all ${formData.IsActive ? 'left-[18px]' : 'left-0.5'}`}></div>
-                                    </div>
-                                    <span className="text-sm font-medium dark:text-white">{formData.IsActive ? 'เปิดใช้งาน (Active)' : 'ระงับบัญชี (Inactive)'}</span>
-                                    <input
-                                        type="checkbox"
-                                        checked={formData.IsActive}
-                                        onChange={e => setFormData({ ...formData, IsActive: e.target.checked })}
-                                        className="sr-only"
-                                    />
-                                </label>
+                            {/* Modal Footer */}
+                            <div className="px-6 py-4 bg-slate-50 dark:bg-slate-800 border-t border-slate-100 dark:border-slate-700 flex justify-end gap-3">
+                                <button
+                                    onClick={() => setIsModalOpen(false)}
+                                    className="px-5 py-2.5 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 font-medium rounded-xl transition-colors"
+                                >
+                                    ยกเลิก
+                                </button>
+                                <button
+                                    onClick={handleSaveUser}
+                                    disabled={isSaving}
+                                    className="px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-xl flex items-center gap-2 transition-all active:scale-95 disabled:opacity-70 shadow-md shadow-blue-500/30"
+                                >
+                                    {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                                    {isSaving ? 'กำลังบันทึก...' : 'บันทึกข้อมูล'}
+                                </button>
                             </div>
                         </div>
+                    </div>
+                )
+            }
 
-                        {/* Modal Footer */}
+            {/* Reset Password Modal */}
+            {isResetPwOpen && resetPwUser && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm animate-in fade-in">
+                    <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-xl w-full max-w-sm overflow-hidden animate-in zoom-in-95 duration-200">
+                        <div className="px-6 py-4 border-b border-slate-100 dark:border-slate-700 flex items-center justify-between bg-gradient-to-r from-amber-500 to-amber-600">
+                            <h3 className="font-bold text-lg text-white flex items-center gap-2">
+                                <KeyRound className="w-5 h-5" />
+                                รีเซ็ตรหัสผ่าน
+                            </h3>
+                            <button onClick={() => setIsResetPwOpen(false)} className="text-white/70 hover:text-white transition-colors p-1 hover:bg-white/10 rounded-lg">
+                                <X className="w-5 h-5" />
+                            </button>
+                        </div>
+                        <div className="p-6 space-y-4">
+                            <div className="text-center">
+                                <div className={`w-12 h-12 mx-auto rounded-full bg-gradient-to-br ${getAvatarColor(resetPwUser.FullName)} flex items-center justify-center text-white font-bold text-lg shadow-md`}>
+                                    {resetPwUser.FullName?.charAt(0)?.toUpperCase() || 'U'}
+                                </div>
+                                <p className="mt-2 font-semibold text-slate-900 dark:text-white">{resetPwUser.FullName}</p>
+                                <p className="text-xs text-slate-400 font-mono">@{resetPwUser.Username}</p>
+                            </div>
+                            <div>
+                                <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                                    รหัสผ่านใหม่ <span className="text-red-500">*</span>
+                                </label>
+                                <div className="relative">
+                                    <input
+                                        type={showResetPw ? 'text' : 'password'}
+                                        value={resetPwValue}
+                                        onChange={e => setResetPwValue(e.target.value)}
+                                        className="w-full px-3 py-2.5 pr-10 border border-slate-200 dark:border-slate-600 rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 bg-white dark:bg-slate-700 dark:text-white text-sm"
+                                        placeholder="ใส่รหัสผ่านใหม่"
+                                        autoFocus
+                                        onKeyDown={e => { if (e.key === 'Enter') handleResetPassword(); }}
+                                    />
+                                    <button
+                                        type="button"
+                                        onClick={() => setShowResetPw(!showResetPw)}
+                                        className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
+                                    >
+                                        {showResetPw ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                                    </button>
+                                </div>
+                                <p className="text-xs text-slate-400 mt-1.5">ขั้นต่ำ 8 ตัว, ต้องมี A-Z, ตัวเลข, อักขระพิเศษ</p>
+                            </div>
+                        </div>
                         <div className="px-6 py-4 bg-slate-50 dark:bg-slate-800 border-t border-slate-100 dark:border-slate-700 flex justify-end gap-3">
                             <button
-                                onClick={() => setIsModalOpen(false)}
+                                onClick={() => setIsResetPwOpen(false)}
                                 className="px-5 py-2.5 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 font-medium rounded-xl transition-colors"
                             >
                                 ยกเลิก
                             </button>
                             <button
-                                onClick={handleSaveUser}
-                                disabled={isSaving}
-                                className="px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-xl flex items-center gap-2 transition-all active:scale-95 disabled:opacity-70 shadow-md shadow-blue-500/30"
+                                onClick={handleResetPassword}
+                                disabled={isResetting}
+                                className="px-6 py-2.5 bg-amber-500 hover:bg-amber-600 text-white font-medium rounded-xl flex items-center gap-2 transition-all active:scale-95 disabled:opacity-70 shadow-md shadow-amber-500/30"
                             >
-                                {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-                                {isSaving ? 'กำลังบันทึก...' : 'บันทึกข้อมูล'}
+                                {isResetting ? <Loader2 className="w-4 h-4 animate-spin" /> : <KeyRound className="w-4 h-4" />}
+                                {isResetting ? 'กำลังรีเซ็ต...' : 'รีเซ็ตรหัสผ่าน'}
                             </button>
                         </div>
                     </div>
                 </div>
             )}
-        </div>
+        </div >
     );
 }
