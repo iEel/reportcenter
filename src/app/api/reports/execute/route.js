@@ -144,16 +144,33 @@ export async function POST(request) {
             if (session) {
                 const actionType = exportAll ? 'EXPORT_EXCEL' : 'EXECUTE_REPORT';
                 const companyLabel = getCompanyLabel(companyId);
+
+                // Build parameter summary for details
+                let paramSummary = '';
+                if (parameters && Object.keys(parameters).length > 0) {
+                    const paramParts = Object.entries(parameters)
+                        .filter(([, v]) => v !== undefined && v !== null && v !== '')
+                        .map(([k, v]) => `${k}=${v}`);
+                    if (paramParts.length > 0) paramSummary = ` | ${paramParts.join(', ')}`;
+                }
+
                 const details = exportAll
-                    ? `Export Excel "${reportName}" (${companyLabel}) ได้ ${totalRows.toLocaleString()} แถว`
-                    : `รัน "${reportName}" (${companyLabel}) ได้ ${totalRows.toLocaleString()} แถว`;
+                    ? `Export Excel "${reportName}" (${companyLabel}) ได้ ${totalRows.toLocaleString()} แถว${paramSummary}`
+                    : `รัน "${reportName}" (${companyLabel}) ได้ ${totalRows.toLocaleString()} แถว${paramSummary}`;
+
+                // Store full parameter data in ChangeData for detailed audit
+                const changeData = parameters && Object.keys(parameters).length > 0
+                    ? JSON.stringify({ parameters })
+                    : null;
+
                 await centralPool.request()
                     .input('UserId', sql.Int, session.userId)
                     .input('ReportId', sql.Int, parseInt(reportId))
                     .input('CompanyId', sql.Int, parseInt(companyId))
                     .input('ActionType', sql.NVarChar(50), actionType)
-                    .input('Details', sql.NVarChar(500), details)
-                    .query(`INSERT INTO ActivityLogs (UserId, ReportId, CompanyId, ActionType, Details) VALUES (@UserId, @ReportId, @CompanyId, @ActionType, @Details)`);
+                    .input('Details', sql.NVarChar(sql.MAX), details)
+                    .input('ChangeData', sql.NVarChar(sql.MAX), changeData)
+                    .query(`INSERT INTO ActivityLogs (UserId, ReportId, CompanyId, ActionType, Details, ChangeData) VALUES (@UserId, @ReportId, @CompanyId, @ActionType, @Details, @ChangeData)`);
             }
         } catch (logErr) {
             // Silently fail — logging should never break execution
