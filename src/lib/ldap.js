@@ -196,84 +196,123 @@ export async function ldapLookup(username) {
  * @returns {{ success, users: Array<{username, fullName, email, department}>, error? }}
  */
 export async function ldapSearchUsers(query) {
-    const config = await getLdapConfig();
+    try {
+        const config = await getLdapConfig();
 
-    if (!config.enabled) {
-        return { success: false, error: 'LDAP ไม่ได้เปิดใช้งาน' };
-    }
-    if (!config.url || !config.domain || !config.baseDN) {
-        return { success: false, error: 'LDAP ยังไม่ได้ตั้งค่าครบ' };
-    }
-    if (!config.bindDN || !config.bindPassword) {
-        return { success: false, error: 'ไม่ได้ตั้งค่า Service Account ใน .env' };
-    }
+        if (!config.enabled) {
+            return { success: false, error: 'LDAP ไม่ได้เปิดใช้งาน' };
+        }
+        if (!config.url || !config.domain || !config.baseDN) {
+            return { success: false, error: 'LDAP ยังไม่ได้ตั้งค่าครบ' };
+        }
+        if (!config.bindDN || !config.bindPassword) {
+            return { success: false, error: 'ไม่ได้ตั้งค่า Service Account ใน .env' };
+        }
 
-    const client = createClient(config.url);
+        // Escape LDAP special characters
+        const safeQuery = query.replace(/[\\*()\x00/]/g, '');
+        if (!safeQuery || safeQuery.length < 2) {
+            return { success: true, users: [] };
+        }
 
-    return new Promise((resolve) => {
-        client.on('error', (err) => {
-            resolve({ success: false, error: `ไม่สามารถเชื่อมต่อ: ${err.message}` });
-        });
+        const client = createClient(config.url);
 
-        client.bind(config.bindDN, config.bindPassword, (bindErr) => {
-            if (bindErr) {
-                client.unbind(() => { });
-                return resolve({ success: false, error: `Bind ล้มเหลว: ${bindErr.message}` });
-            }
+        return new Promise((resolve) => {
+            let resolved = false;
+            const safeResolve = (val) => { if (!resolved) { resolved = true; resolve(val); } };
 
-            // Wildcard search: matches sAMAccountName or displayName
-            const safeQuery = query.replace(/[\\*()]/g, '');
-            const searchFilter = `(&(objectClass=user)(objectCategory=person)(|(sAMAccountName=*${safeQuery}*)(displayName=*${safeQuery}*)))`;
-            const searchOpts = {
-                scope: 'sub',
-                filter: searchFilter,
-                attributes: ['sAMAccountName', 'displayName', 'mail', 'employeeID', 'company', 'distinguishedName'],
-                sizeLimit: 10,
-            };
+            // Timeout safety
+            const timeout = setTimeout(() => {
+                try { client.unbind(() => { }); } catch (e) { }
+                safeResolve({ success: false, error: 'LDAP search timeout' });
+            }, 10000);
 
-            client.search(config.baseDN, searchOpts, (searchErr, res) => {
-                if (searchErr) {
-                    client.unbind(() => { });
-                    return resolve({ success: false, error: `Search ล้มเหลว: ${searchErr.message}` });
+            client.on('error', (err) => {
+                clearTimeout(timeout);
+                safeResolve({ success: false, error: `ไม่สามารถเชื่อมต่อ: ${err.message}` });
+            });
+
+            client.bind(config.bindDN, config.bindPassword, (bindErr) => {
+                if (bindErr) {
+                    clearTimeout(timeout);
+                    try { client.unbind(() => { }); } catch (e) { }
+                    return safeResolve({ success: false, error: `Bind ล้มเหลว: ${bindErr.message}` });
                 }
 
-                const users = [];
+                // Simpler filter — only search sAMAccountName to avoid ldapjs parse issues
+                const searchFilter = `(sAMAccountName=*${safeQuery}*)`;
+                const searchOpts = {
+                    scope: 'sub',
+                    filter: searchFilter,
+                    attributes: ['sAMAccountName', 'displayName', 'mail', 'employeeID', 'company', 'distinguishedName'],
+                    sizeLimit: 10,
+                };
 
-                res.on('searchEntry', (entry) => {
-                    const attrs = {};
-                    const pojo = entry.pojo || entry;
-                    if (pojo.attributes) {
-                        for (const attr of pojo.attributes) {
-                            attrs[attr.type] = attr.values?.[0] || '';
+                try {
+                    client.search(config.baseDN, searchOpts, (searchErr, res) => {
+                        if (searchErr) {
+                            clearTimeout(timeout);
+                            try { client.unbind(() => { }); } catch (e) { }
+                            return safeResolve({ success: false, error: `Search ล้มเหลว: ${searchErr.message}` });
                         }
-                    }
 
-                    const dn = attrs['distinguishedName'] || entry.dn?.toString() || '';
-                    const { department, branch } = parseDistinguishedName(dn);
+                        const users = [];
 
-                    users.push({
-                        username: attrs['sAMAccountName'] || '',
-                        fullName: attrs['displayName'] || '',
-                        email: attrs['mail'] || '',
-                        employeeId: attrs['employeeID'] || '',
-                        company: attrs['company'] || '',
-                        department,
-                        branch,
+                        res.on('searchEntry', (entry) => {
+                            try {
+                                const attrs = {};
+                                const pojo = entry.pojo || entry;
+                                if (pojo.attributes) {
+                                    for (const attr of pojo.attributes) {
+                                        attrs[attr.type] = attr.values?.[0] || '';
+                                    }
+                                }
+
+                                const dn = attrs['distinguishedName'] || entry.dn?.toString() || '';
+                                const { department, branch } = parseDistinguishedName(dn);
+
+                                users.push({
+                                    username: attrs['sAMAccountName'] || '',
+                                    fullName: attrs['displayName'] || '',
+                                    email: attrs['mail'] || '',
+                                    employeeId: attrs['employeeID'] || '',
+                                    company: attrs['company'] || '',
+                                    department,
+                                    branch,
+                                });
+                            } catch (e) {
+                                console.warn('Error parsing LDAP entry:', e.message);
+                            }
+                        });
+
+                        res.on('error', (err) => {
+                            clearTimeout(timeout);
+                            try { client.unbind(() => { }); } catch (e) { }
+                            // Size limit exceeded is not a real error — just return what we have
+                            if (err.code === 4 || err.message?.includes('Size Limit')) {
+                                safeResolve({ success: true, users });
+                            } else {
+                                safeResolve({ success: false, error: `Search error: ${err.message}` });
+                            }
+                        });
+
+                        res.on('end', () => {
+                            clearTimeout(timeout);
+                            try { client.unbind(() => { }); } catch (e) { }
+                            safeResolve({ success: true, users });
+                        });
                     });
-                });
-
-                res.on('error', (err) => {
-                    client.unbind(() => { });
-                    resolve({ success: false, error: `Search error: ${err.message}` });
-                });
-
-                res.on('end', () => {
-                    client.unbind(() => { });
-                    resolve({ success: true, users });
-                });
+                } catch (filterErr) {
+                    clearTimeout(timeout);
+                    try { client.unbind(() => { }); } catch (e) { }
+                    safeResolve({ success: false, error: `Filter error: ${filterErr.message}` });
+                }
             });
         });
-    });
+    } catch (err) {
+        console.error('ldapSearchUsers fatal error:', err);
+        return { success: false, error: `Error: ${err.message}` };
+    }
 }
 
 /**
