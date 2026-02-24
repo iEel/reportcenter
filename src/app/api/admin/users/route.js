@@ -141,6 +141,9 @@ export async function POST(request) {
                 );
             }
             hashedPassword = await bcrypt.hash(rawPassword, 10);
+        } else {
+            // AD user: set placeholder (column is NOT NULL, but value is never used for auth)
+            hashedPassword = 'LDAP_AUTH';
         }
 
         // Insert user
