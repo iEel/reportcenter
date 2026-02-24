@@ -368,8 +368,10 @@ export default function AdminUsersPage() {
     };
 
     const filteredUsers = users.filter(u => {
-        const matchSearch = u.Username?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-            u.FullName?.toLowerCase().includes(searchQuery.toLowerCase());
+        const q = searchQuery.toLowerCase();
+        const matchSearch = u.Username?.toLowerCase().includes(q) ||
+            u.FullName?.toLowerCase().includes(q) ||
+            u.EmployeeId?.toLowerCase().includes(q);
         const matchRole = !filterRole || u.RoleId?.toString() === filterRole;
         const matchStatus = !filterStatus ||
             (filterStatus === 'active' && u.IsActive) ||
@@ -449,7 +451,7 @@ export default function AdminUsersPage() {
                         <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
                         <input
                             type="text"
-                            placeholder="ค้นหาชื่อผู้ใช้..."
+                            placeholder="ค้นหาชื่อผู้ใช้ / รหัสพนักงาน..."
                             value={searchQuery}
                             onChange={e => { setSearchQuery(e.target.value); resetPage(); }}
                             className="w-full pl-9 pr-4 py-2 border border-slate-200 dark:border-slate-600 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors bg-white dark:bg-slate-700 dark:text-white font-medium"
