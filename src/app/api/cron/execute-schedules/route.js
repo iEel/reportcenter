@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import sql from 'mssql';
 import { connectToCentralDB, connectToCompanyDB } from '@/lib/db';
 import { sendMail } from '@/lib/email';
+import { validateQuery } from '@/lib/sql-validator';
 import * as xlsx from 'xlsx';
 import fs from 'fs';
 import path from 'path';
@@ -138,6 +139,14 @@ export async function GET(request) {
                     } catch (e) {
                         console.warn(`Schedule ${schedule.ScheduleId}: parameter binding error:`, e.message);
                     }
+                }
+
+                // SQL Security Validation
+                const queryValidation = validateQuery(schedule.TSqlQuery);
+                if (!queryValidation.safe) {
+                    console.warn(`Schedule ${schedule.ScheduleId}: BLOCKED — ${queryValidation.reason}`);
+                    results.push({ scheduleId: schedule.ScheduleId, reportName: schedule.ReportName, status: 'blocked', reason: queryValidation.reason });
+                    continue;
                 }
 
                 const queryResult = await request.query(schedule.TSqlQuery);

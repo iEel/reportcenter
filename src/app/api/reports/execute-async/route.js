@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import sql from 'mssql';
 import { connectToCentralDB, connectToCompanyDB } from '@/lib/db';
 import { getSession } from '@/lib/auth';
+import { validateQuery } from '@/lib/sql-validator';
 import * as xlsx from 'xlsx';
 import fs from 'fs';
 import path from 'path';
@@ -66,6 +67,23 @@ export async function POST(request) {
         }
 
         const { TSqlQuery: tSqlQuery, ReportName: reportName } = reportResult.recordset[0];
+
+        // SQL Security Validation
+        const validation = validateQuery(tSqlQuery);
+        if (!validation.safe) {
+            try {
+                await centralPool.request()
+                    .input('UserId', sql.Int, session.userId)
+                    .input('ReportId', sql.Int, parseInt(reportId))
+                    .input('ActionType', sql.NVarChar(50), 'BLOCKED_QUERY')
+                    .input('Details', sql.NVarChar(500), `ถูกบล็อก (async): "${reportName}" — ${validation.reason}`)
+                    .query(`INSERT INTO ActivityLogs (UserId, ReportId, ActionType, Details) VALUES (@UserId, @ReportId, @ActionType, @Details)`);
+            } catch (e) { /* ignore */ }
+            return NextResponse.json({
+                success: false,
+                message: `คำสั่ง SQL ถูกบล็อก: ${validation.reason}`
+            }, { status: 403 });
+        }
 
         // Get expected params
         const paramResult = await centralPool.request()

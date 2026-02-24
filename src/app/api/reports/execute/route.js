@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import sql from 'mssql';
 import { connectToCentralDB, connectToCompanyDB, getCompanyLabel } from '@/lib/db';
 import { getSession } from '@/lib/auth';
+import { validateQuery } from '@/lib/sql-validator';
 
 export async function POST(request) {
     try {
@@ -24,6 +25,27 @@ export async function POST(request) {
 
         const tSqlQuery = reportResult.recordset[0].TSqlQuery;
         const reportName = reportResult.recordset[0].ReportName;
+
+        // 1.1 SQL Security Validation — block dangerous queries
+        const validation = validateQuery(tSqlQuery);
+        if (!validation.safe) {
+            // Log blocked attempt
+            try {
+                const sess = await getSession(request);
+                if (sess) {
+                    await centralPool.request()
+                        .input('UserId', sql.Int, sess.userId)
+                        .input('ReportId', sql.Int, parseInt(reportId))
+                        .input('ActionType', sql.NVarChar(50), 'BLOCKED_QUERY')
+                        .input('Details', sql.NVarChar(500), `ถูกบล็อก: "${reportName}" — ${validation.reason}`)
+                        .query(`INSERT INTO ActivityLogs (UserId, ReportId, ActionType, Details) VALUES (@UserId, @ReportId, @ActionType, @Details)`);
+                }
+            } catch (e) { /* ignore log errors */ }
+            return NextResponse.json({
+                success: false,
+                message: `คำสั่ง SQL ถูกบล็อกเนื่องจากมีคำสั่งที่ไม่อนุญาต: ${validation.reason}`
+            }, { status: 403 });
+        }
 
         // 1.5 Authorization — check user's role has access to this report
         const session = await getSession(request);
