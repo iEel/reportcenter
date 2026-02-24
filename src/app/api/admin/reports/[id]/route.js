@@ -152,30 +152,32 @@ export async function PUT(request, props) {
                 await paramStmt.unprepare();
             }
 
-            // 4. Update Role Mappings
-            await transaction.request()
-                .input('ReportId', sql.Int, parseInt(id))
-                .query('DELETE FROM ReportRoleMapping WHERE ReportId = @ReportId');
+            // 4. Update Role Mappings — only if Roles is explicitly provided
+            if (report.Roles !== undefined) {
+                await transaction.request()
+                    .input('ReportId', sql.Int, parseInt(id))
+                    .query('DELETE FROM ReportRoleMapping WHERE ReportId = @ReportId');
 
-            if (!report.IsPublic && report.Roles && report.Roles.length > 0) {
-                const roleStmt = new sql.PreparedStatement(transaction);
-                roleStmt.input('ReportId', sql.Int);
-                roleStmt.input('RoleId', sql.Int);
+                if (!report.IsPublic && report.Roles && report.Roles.length > 0) {
+                    const roleStmt = new sql.PreparedStatement(transaction);
+                    roleStmt.input('ReportId', sql.Int);
+                    roleStmt.input('RoleId', sql.Int);
 
-                const roleQuery = `
-                    INSERT INTO ReportRoleMapping (ReportId, RoleId)
-                    VALUES (@ReportId, @RoleId);
-                `;
+                    const roleQuery = `
+                        INSERT INTO ReportRoleMapping (ReportId, RoleId)
+                        VALUES (@ReportId, @RoleId);
+                    `;
 
-                await roleStmt.prepare(roleQuery);
+                    await roleStmt.prepare(roleQuery);
 
-                for (let i = 0; i < report.Roles.length; i++) {
-                    await roleStmt.execute({
-                        ReportId: parseInt(id),
-                        RoleId: parseInt(report.Roles[i])
-                    });
+                    for (let i = 0; i < report.Roles.length; i++) {
+                        await roleStmt.execute({
+                            ReportId: parseInt(id),
+                            RoleId: parseInt(report.Roles[i])
+                        });
+                    }
+                    await roleStmt.unprepare();
                 }
-                await roleStmt.unprepare();
             }
 
             await transaction.commit();
@@ -192,16 +194,36 @@ export async function PUT(request, props) {
             if (!!oldReport.IsHeavy !== !!report.IsHeavy) changes.push(`รายงานหนัก: ${oldReport.IsHeavy ? 'ใช่' : 'ไม่'} → ${report.IsHeavy ? 'ใช่' : 'ไม่'}`);
             const changeSummary = changes.length > 0 ? ` | ${changes.join(', ')}` : '';
 
-            // Log activity
+            // Log activity with full change data
             try {
                 const session = await getSession(request);
                 if (session) {
+                    // Auto-add ChangeData column if missing
+                    try {
+                        await pool.request().query(`
+                            IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = 'ActivityLogs' AND COLUMN_NAME = 'ChangeData')
+                            ALTER TABLE ActivityLogs ADD ChangeData NVARCHAR(MAX) NULL;
+                        `);
+                    } catch (e) { /* ignore */ }
+
+                    // Build change data JSON with old→new for each changed field
+                    const changeData = {};
+                    if (oldReport.ReportName !== report.ReportName) changeData['ชื่อรายงาน'] = { old: oldReport.ReportName, new: report.ReportName };
+                    if ((oldReport.Description || '') !== (report.Description || '')) changeData['คำอธิบาย'] = { old: oldReport.Description || '', new: report.Description || '' };
+                    if (oldReport.ReportType !== (report.ReportType || 1)) changeData['ประเภท'] = { old: oldReport.ReportType, new: report.ReportType || 1 };
+                    if ((oldReport.TSqlQuery || '') !== (report.TSqlQuery || '')) changeData['คำสั่ง SQL'] = { old: oldReport.TSqlQuery || '', new: report.TSqlQuery || '' };
+                    if ((oldReport.EmailTemplateContent || '') !== (report.EmailTemplateContent || '')) changeData['Email Template'] = { old: oldReport.EmailTemplateContent || '', new: report.EmailTemplateContent || '' };
+                    if (!!oldReport.IsPublic !== !!report.IsPublic) changeData['สาธารณะ'] = { old: !!oldReport.IsPublic, new: !!report.IsPublic };
+                    if (!!oldReport.IsActive !== !!(report.IsActive !== undefined ? report.IsActive : true)) changeData['สถานะ'] = { old: !!oldReport.IsActive, new: !!report.IsActive };
+                    if (!!oldReport.IsHeavy !== !!report.IsHeavy) changeData['รายงานหนัก'] = { old: !!oldReport.IsHeavy, new: !!report.IsHeavy };
+
                     await pool.request()
                         .input('UserId', sql.Int, session.userId)
                         .input('ReportId', sql.Int, parseInt(id))
                         .input('ActionType', sql.NVarChar(50), 'UPDATE_REPORT')
                         .input('Details', sql.NVarChar(sql.MAX), `แก้ไขรายงาน "${report.ReportName}"${changeSummary}`)
-                        .query(`INSERT INTO ActivityLogs (UserId, ReportId, ActionType, Details) VALUES (@UserId, @ReportId, @ActionType, @Details)`);
+                        .input('ChangeData', sql.NVarChar(sql.MAX), Object.keys(changeData).length > 0 ? JSON.stringify(changeData) : null)
+                        .query(`INSERT INTO ActivityLogs (UserId, ReportId, ActionType, Details, ChangeData) VALUES (@UserId, @ReportId, @ActionType, @Details, @ChangeData)`);
                 }
             } catch (e) { console.warn('Report activity log failed:', e.message); }
 
