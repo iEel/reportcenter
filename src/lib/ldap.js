@@ -1,51 +1,11 @@
 /**
  * LDAP Integration Library
- * 
- * All LDAP operations are delegated to ldap-worker.cjs which runs as a 
- * separate Node.js process. This avoids Next.js Turbopack bundling 
- * ldapjs (which corrupts its BER parser in production builds).
+ * Direct ldapjs import — requires building with webpack (not Turbopack)
+ * to properly externalize ldapjs via serverExternalPackages in next.config.ts
  */
 
 import { connectToCentralDB } from './db';
-
-/**
- * Call the LDAP worker process.
- * Uses exec() with a command string so Turbopack cannot trace the file path.
- * Arguments are base64-encoded to avoid shell escaping issues.
- */
-function callWorker(action, args) {
-    return new Promise((resolve) => {
-        // Dynamic import to prevent Turbopack from analyzing child_process usage
-        import('child_process').then(({ exec }) => {
-            const argsB64 = Buffer.from(JSON.stringify(args)).toString('base64');
-            // Use exec with string command — Turbopack can't trace this
-            const cmd = `node ldap-worker.cjs ${action} ${argsB64}`;
-
-            exec(cmd, {
-                cwd: process.cwd(),
-                timeout: 15000,
-                maxBuffer: 1024 * 1024,
-            }, (error, stdout, stderr) => {
-                if (error) {
-                    console.error(`LDAP worker error (${action}):`, error.message);
-                    if (stderr) console.error('LDAP worker stderr:', stderr);
-                    resolve({ success: false, error: `Worker error: ${error.message}` });
-                    return;
-                }
-
-                try {
-                    const result = JSON.parse(stdout);
-                    resolve(result);
-                } catch (parseErr) {
-                    console.error('LDAP worker parse error, stdout:', stdout);
-                    resolve({ success: false, error: 'Invalid response from LDAP worker' });
-                }
-            });
-        }).catch(err => {
-            resolve({ success: false, error: `Cannot load child_process: ${err.message}` });
-        });
-    });
-}
+import ldap from 'ldapjs';
 
 /**
  * Read LDAP configuration from SystemSettings + .env
@@ -78,6 +38,64 @@ export async function getLdapConfig() {
 }
 
 /**
+ * Create an LDAP client with timeout
+ */
+function createClient(url) {
+    return ldap.createClient({
+        url: [url],
+        connectTimeout: 5000,
+        timeout: 10000,
+        strictDN: false,
+    });
+}
+
+/**
+ * Parse OU from Distinguished Name
+ */
+function parseDistinguishedName(dn) {
+    let department = '';
+    let branch = '';
+    if (!dn) return { department, branch };
+    const ouMatches = dn.match(/OU=([^,]+)/gi);
+    if (ouMatches && ouMatches.length > 0) {
+        const ous = ouMatches.map(m => m.replace(/OU=/i, ''));
+        if (ous.length >= 2) {
+            department = ous[0] || '';
+            branch = ous[1] || '';
+        } else if (ous.length === 1) {
+            department = ous[0] || '';
+        }
+    }
+    return { department, branch };
+}
+
+/**
+ * Parse an LDAP search entry into a user object
+ */
+function parseEntry(entry) {
+    const attrs = {};
+    const pojo = entry.pojo || entry;
+    if (pojo.attributes) {
+        for (const attr of pojo.attributes) {
+            if (attr.type) {
+                attrs[attr.type] = attr.values?.[0] || '';
+            }
+        }
+    }
+    const dn = attrs['distinguishedName'] || (entry.dn ? entry.dn.toString() : '');
+    const { department, branch } = parseDistinguishedName(dn);
+    return {
+        username: attrs['sAMAccountName'] || '',
+        fullName: attrs['displayName'] || '',
+        email: attrs['mail'] || '',
+        employeeId: attrs['employeeID'] || '',
+        company: attrs['company'] || '',
+        department,
+        branch,
+    };
+}
+
+/**
  * Authenticate a user via LDAP bind (for login)
  */
 export async function ldapBind(username, password) {
@@ -85,9 +103,15 @@ export async function ldapBind(username, password) {
     if (!config.enabled) return { success: false, error: 'LDAP ไม่ได้เปิดใช้งาน' };
     if (!config.url || !config.domain) return { success: false, error: 'LDAP ยังไม่ได้ตั้งค่าครบ' };
 
-    return callWorker('bind', {
-        config: { url: config.url, domain: config.domain, password },
-        username,
+    const upn = `${username}@${config.domain}`;
+    const client = createClient(config.url);
+
+    return new Promise((resolve) => {
+        client.on('error', () => resolve({ success: false, error: 'ไม่สามารถเชื่อมต่อ LDAP ได้' }));
+        client.bind(upn, password, (err) => {
+            client.unbind(() => { });
+            resolve(err ? { success: false, error: `Bind ล้มเหลว: ${err.message}` } : { success: true });
+        });
     });
 }
 
@@ -100,9 +124,28 @@ export async function ldapLookup(username) {
     if (!config.url || !config.domain || !config.baseDN) return { success: false, error: 'LDAP ยังไม่ได้ตั้งค่าครบ' };
     if (!config.bindDN || !config.bindPassword) return { success: false, error: 'ไม่ได้ตั้งค่า Service Account ใน .env' };
 
-    return callWorker('lookup', {
-        config: { url: config.url, domain: config.domain, baseDN: config.baseDN, bindDN: config.bindDN, bindPassword: config.bindPassword },
-        username,
+    const client = createClient(config.url);
+
+    return new Promise((resolve) => {
+        client.on('error', (err) => resolve({ success: false, error: `ไม่สามารถเชื่อมต่อ: ${err.message}` }));
+
+        client.bind(config.bindDN, config.bindPassword, (bindErr) => {
+            if (bindErr) { client.unbind(() => { }); return resolve({ success: false, error: `Bind ล้มเหลว: ${bindErr.message}` }); }
+
+            const searchFilter = `(sAMAccountName=${username.replace(/[\\*()\x00]/g, '')})`;
+            client.search(config.baseDN, { scope: 'sub', filter: searchFilter }, (searchErr, res) => {
+                if (searchErr) { client.unbind(() => { }); return resolve({ success: false, error: `Search ล้มเหลว: ${searchErr.message}` }); }
+
+                let found = false;
+                let userData = {};
+
+                res.on('searchEntry', (entry) => {
+                    try { found = true; userData = { success: true, ...parseEntry(entry) }; } catch (e) { }
+                });
+                res.on('error', () => { client.unbind(() => { }); resolve(found ? userData : { success: false, error: 'Search error' }); });
+                res.on('end', () => { client.unbind(() => { }); resolve(found ? userData : { success: false, error: 'ไม่พบ user ใน AD' }); });
+            });
+        });
     });
 }
 
@@ -115,9 +158,35 @@ export async function ldapSearchUsers(query) {
     if (!config.url || !config.domain || !config.baseDN) return { success: false, error: 'LDAP ยังไม่ได้ตั้งค่าครบ' };
     if (!config.bindDN || !config.bindPassword) return { success: false, error: 'ไม่ได้ตั้งค่า Service Account ใน .env' };
 
-    return callWorker('search', {
-        config: { url: config.url, domain: config.domain, baseDN: config.baseDN, bindDN: config.bindDN, bindPassword: config.bindPassword },
-        query,
+    const safeQuery = query.replace(/[\\*()\x00/]/g, '');
+    if (!safeQuery || safeQuery.length < 2) return { success: true, users: [] };
+
+    const client = createClient(config.url);
+
+    return new Promise((resolve) => {
+        let resolved = false;
+        const safeResolve = (val) => { if (!resolved) { resolved = true; resolve(val); } };
+
+        const timeout = setTimeout(() => {
+            try { client.destroy(); } catch (e) { }
+            safeResolve({ success: false, error: 'LDAP search timeout' });
+        }, 10000);
+
+        client.on('error', (err) => { clearTimeout(timeout); safeResolve({ success: false, error: `ไม่สามารถเชื่อมต่อ: ${err.message}` }); });
+
+        client.bind(config.bindDN, config.bindPassword, (bindErr) => {
+            if (bindErr) { clearTimeout(timeout); try { client.destroy(); } catch (e) { } return safeResolve({ success: false, error: `Bind ล้มเหลว: ${bindErr.message}` }); }
+
+            const searchFilter = `(sAMAccountName=*${safeQuery}*)`;
+            client.search(config.baseDN, { scope: 'sub', filter: searchFilter, sizeLimit: 10 }, (searchErr, res) => {
+                if (searchErr) { clearTimeout(timeout); try { client.destroy(); } catch (e) { } return safeResolve({ success: false, error: `Search ล้มเหลว: ${searchErr.message}` }); }
+
+                const users = [];
+                res.on('searchEntry', (entry) => { try { users.push(parseEntry(entry)); } catch (e) { } });
+                res.on('error', (err) => { clearTimeout(timeout); try { client.destroy(); } catch (e) { } safeResolve(err.code === 4 ? { success: true, users } : { success: false, error: `Error: ${err.message}` }); });
+                res.on('end', () => { clearTimeout(timeout); try { client.destroy(); } catch (e) { } safeResolve({ success: true, users }); });
+            });
+        });
     });
 }
 
@@ -129,7 +198,13 @@ export async function testLdapConnection() {
     if (!config.url || !config.domain || !config.baseDN) return { success: false, error: 'LDAP ยังไม่ได้ตั้งค่าครบ' };
     if (!config.bindDN || !config.bindPassword) return { success: false, error: 'ไม่ได้ตั้งค่า Service Account ใน .env' };
 
-    return callWorker('test', {
-        config: { url: config.url, bindDN: config.bindDN, bindPassword: config.bindPassword },
+    const client = createClient(config.url);
+
+    return new Promise((resolve) => {
+        client.on('error', (err) => resolve({ success: false, error: `ไม่สามารถเชื่อมต่อ: ${err.message}` }));
+        client.bind(config.bindDN, config.bindPassword, (err) => {
+            client.unbind(() => { });
+            resolve(err ? { success: false, error: `Bind ล้มเหลว: ${err.message}` } : { success: true });
+        });
     });
 }
