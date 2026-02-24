@@ -42,13 +42,21 @@ export async function GET(request) {
             `SELECT SettingKey, SettingValue, Description, UpdatedAt FROM SystemSettings ORDER BY SettingKey`
         );
 
-        // Auto-seed rate limit settings if missing
+        // Auto-seed rate limit + idle timeout settings if missing
         const keys = result.recordset.map(r => r.SettingKey);
+        const seedSettings = [];
         if (!keys.includes('rate_limit_max_attempts')) {
+            seedSettings.push("('rate_limit_max_attempts', '5', 'จำนวนครั้งสูงสุดที่อนุญาต Login ผิดพลาด')");
+            seedSettings.push("('rate_limit_window_minutes', '15', 'ระยะเวลาล็อก (นาที)')");
+        }
+        if (!keys.includes('session_idle_timeout_minutes')) {
+            seedSettings.push("('session_idle_timeout_minutes', '30', 'ระยะเวลาไม่ใช้งานก่อนออกจากระบบอัตโนมัติ (นาที) — 0 = ปิดใช้งาน')");
+        }
+
+        if (seedSettings.length > 0) {
             await pool.request().query(`
                 INSERT INTO SystemSettings (SettingKey, SettingValue, Description) VALUES
-                ('rate_limit_max_attempts', '5', 'จำนวนครั้งสูงสุดที่อนุญาต Login ผิดพลาด'),
-                ('rate_limit_window_minutes', '15', 'ระยะเวลาล็อก (นาที)');
+                ${seedSettings.join(',\n                ')}
             `);
             // Re-fetch after seeding
             const updated = await pool.request().query(

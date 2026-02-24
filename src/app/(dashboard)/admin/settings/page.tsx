@@ -18,6 +18,7 @@ const settingLabels: Record<string, { label: string; icon: any; group: string; d
     'company_3_name': { label: 'บริษัทที่ 3', icon: Building2, group: 'company' },
     'rate_limit_max_attempts': { label: 'จำนวนครั้งสูงสุดที่อนุญาต (Max Attempts)', icon: ShieldAlert, group: 'security', description: 'จำนวนครั้งที่อนุญาตให้ Login ผิดพลาดก่อนล็อกบัญชี', type: 'number' },
     'rate_limit_window_minutes': { label: 'ระยะเวลาล็อก (Window Minutes)', icon: ShieldAlert, group: 'security', description: 'จำนวนนาทีที่ต้องรอก่อนลองใหม่', type: 'number' },
+    'session_idle_timeout_minutes': { label: 'หมดเวลาไม่ใช้งาน (Idle Timeout)', icon: ShieldAlert, group: 'security', description: 'ระยะเวลา (นาที) ที่ไม่มีกิจกรรมก่อนออกจากระบบอัตโนมัติ — ตั้ง 0 เพื่อปิดใช้งาน', type: 'number' },
 };
 
 export default function AdminSettingsPage() {
@@ -175,7 +176,7 @@ export default function AdminSettingsPage() {
                                     <ShieldAlert className="w-4 h-4 text-red-500" />
                                     ความปลอดภัย (Security)
                                 </h2>
-                                <p className="text-xs text-slate-500 mt-1">กำหนดจำนวนครั้งและระยะเวลาล็อกเมื่อ Login ผิดพลาด (Rate Limiting)</p>
+                                <p className="text-xs text-slate-500 mt-1">กำหนด Rate Limiting (Login ผิดพลาด) และ Idle Timeout (ออกจากระบบเมื่อไม่ใช้งาน)</p>
                             </div>
                             <div className="p-6 space-y-4">
                                 {securitySettings.map(s => {
