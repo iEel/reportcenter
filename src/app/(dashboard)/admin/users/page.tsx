@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect, useRef } from "react";
-import { Plus, Search, Edit, Shield, User, Building, RefreshCw, X, Save, Loader2, Check, Eye, EyeOff, UserCheck, UserX, Trash2, KeyRound, ChevronLeft, ChevronRight, Link2, Search as SearchIcon } from "lucide-react";
+import { Plus, Search, Edit, Shield, User, Building, RefreshCw, X, Save, Loader2, Check, Eye, EyeOff, UserCheck, UserX, Trash2, KeyRound, ChevronLeft, ChevronRight, Link2, Search as SearchIcon, XCircle } from "lucide-react";
 import { useToast } from "@/components/providers/ToastProvider";
 import { useConfirm } from "@/components/providers/ConfirmProvider";
 
@@ -648,11 +648,14 @@ export default function AdminUsersPage() {
                     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm animate-in fade-in">
                         <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-xl w-full max-w-lg overflow-hidden animate-in zoom-in-95 duration-200 max-h-[90vh] flex flex-col">
 
-                            {/* Modal Header */}
-                            <div className="px-6 py-4 border-b border-slate-100 dark:border-slate-700 flex items-center justify-between bg-gradient-to-r from-blue-600 to-blue-700">
+                            {/* Modal Header — gradient changes for AD vs local */}
+                            <div className={`px-6 py-4 border-b flex items-center justify-between ${isAdUser
+                                ? 'bg-gradient-to-r from-indigo-600 to-indigo-700 border-indigo-500'
+                                : 'bg-gradient-to-r from-blue-600 to-blue-700 border-blue-500'
+                                }`}>
                                 <h3 className="font-bold text-lg text-white flex items-center gap-2">
-                                    <User className="w-5 h-5" />
-                                    {editMode ? 'แก้ไขข้อมูลผู้ใช้' : 'เพิ่มผู้ใช้ใหม่'}
+                                    {isAdUser ? <Link2 className="w-5 h-5" /> : <User className="w-5 h-5" />}
+                                    {editMode ? 'แก้ไขข้อมูลผู้ใช้' : isAdUser ? 'เพิ่มผู้ใช้ AD' : 'เพิ่มผู้ใช้ใหม่'}
                                 </h3>
                                 <button onClick={() => setIsModalOpen(false)} className="text-white/70 hover:text-white transition-colors p-1 hover:bg-white/10 rounded-lg">
                                     <X className="w-5 h-5" />
@@ -664,28 +667,48 @@ export default function AdminUsersPage() {
 
                                 {/* AD Toggle (only for new users) */}
                                 {!editMode && (
-                                    <div className="flex items-center justify-between p-3 bg-indigo-50 dark:bg-indigo-900/20 border border-indigo-200 dark:border-indigo-800 rounded-xl">
-                                        <div className="flex items-center gap-2">
-                                            <Link2 className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
-                                            <span className="text-sm font-medium text-indigo-700 dark:text-indigo-300">บัญชี AD (Active Directory)</span>
+                                    <div className={`flex items-center justify-between p-3.5 rounded-xl border transition-all ${isAdUser
+                                        ? 'bg-indigo-50 dark:bg-indigo-900/20 border-indigo-200 dark:border-indigo-800'
+                                        : 'bg-slate-50 dark:bg-slate-700/50 border-slate-200 dark:border-slate-600'
+                                        }`}>
+                                        <div className="flex items-center gap-3">
+                                            <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${isAdUser
+                                                ? 'bg-indigo-100 dark:bg-indigo-900/40'
+                                                : 'bg-slate-200 dark:bg-slate-600'
+                                                }`}>
+                                                <Link2 className={`w-4 h-4 ${isAdUser ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-500 dark:text-slate-400'}`} />
+                                            </div>
+                                            <div>
+                                                <span className={`text-sm font-semibold ${isAdUser ? 'text-indigo-700 dark:text-indigo-300' : 'text-slate-700 dark:text-slate-300'}`}>
+                                                    บัญชี Active Directory
+                                                </span>
+                                                <p className="text-xs text-slate-400">เชื่อมต่อกับ AD ไม่ต้องตั้งรหัสผ่าน</p>
+                                            </div>
                                         </div>
                                         <button
                                             onClick={() => {
                                                 const newVal = !isAdUser;
                                                 setIsAdUser(newVal);
-                                                setFormData(prev => ({ ...prev, AuthType: newVal ? 'ldap' : 'local', Email: '', EmployeeId: '', ADCompany: '', Department: '', Branch: '' }));
+                                                setFormData(prev => ({ ...prev, AuthType: newVal ? 'ldap' : 'local', Email: '', EmployeeId: '', ADCompany: '', Department: '', Branch: '', FullName: newVal ? '' : prev.FullName }));
                                                 setAdLookupError('');
+                                                setAdSuggestions([]);
+                                                setShowSuggestions(false);
                                             }}
-                                            className={`relative w-11 h-6 rounded-full transition-colors duration-200 ${isAdUser ? 'bg-indigo-600' : 'bg-slate-300 dark:bg-slate-600'}`}
+                                            className={`relative w-12 h-7 rounded-full transition-all duration-300 ${isAdUser ? 'bg-indigo-600 shadow-lg shadow-indigo-500/30' : 'bg-slate-300 dark:bg-slate-600'}`}
                                         >
-                                            <div className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow-md transition-transform duration-200 ${isAdUser ? 'translate-x-5.5 left-auto right-0.5' : 'left-0.5'}`} />
+                                            <div className={`absolute top-0.5 w-6 h-6 bg-white rounded-full shadow-md transition-all duration-300 ${isAdUser ? 'left-5.5' : 'left-0.5'}`} />
                                         </button>
                                     </div>
                                 )}
 
                                 {/* Section: Account */}
                                 <div>
-                                    <h4 className="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-3">ข้อมูลบัญชี</h4>
+                                    <div className="flex items-center gap-2 mb-3">
+                                        <div className="w-6 h-6 bg-blue-100 dark:bg-blue-900/30 rounded-md flex items-center justify-center">
+                                            <User className="w-3 h-3 text-blue-600 dark:text-blue-400" />
+                                        </div>
+                                        <h4 className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">ข้อมูลบัญชี</h4>
+                                    </div>
                                     <div className="space-y-3">
                                         {!editMode && (
                                             <div className="relative">
@@ -713,22 +736,28 @@ export default function AdminUsersPage() {
 
                                                         {/* Autocomplete Dropdown */}
                                                         {isAdUser && showSuggestions && adSuggestions.length > 0 && (
-                                                            <div className="absolute z-50 w-full mt-1 bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-xl shadow-xl max-h-60 overflow-y-auto">
+                                                            <div className="absolute z-50 w-full mt-1 bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-xl shadow-2xl max-h-64 overflow-y-auto">
+                                                                <div className="px-3 py-1.5 bg-slate-50 dark:bg-slate-600 border-b border-slate-200 dark:border-slate-500 rounded-t-xl">
+                                                                    <p className="text-[10px] text-slate-400 font-medium uppercase tracking-wide">ผลการค้นหา ({adSuggestions.length} รายการ)</p>
+                                                                </div>
                                                                 {adSuggestions.map((user, idx) => (
                                                                     <button
                                                                         key={idx}
                                                                         type="button"
                                                                         onMouseDown={(e) => { e.preventDefault(); handleSelectAdUser(user); }}
-                                                                        className="w-full text-left px-4 py-3 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 transition-colors border-b border-slate-100 dark:border-slate-600 last:border-0"
+                                                                        className="w-full text-left px-4 py-3 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 transition-colors border-b border-slate-100 dark:border-slate-600 last:border-0 group"
                                                                     >
-                                                                        <div className="flex items-center justify-between">
-                                                                            <div>
-                                                                                <p className="text-sm font-semibold text-slate-800 dark:text-white">{user.fullName || user.username}</p>
+                                                                        <div className="flex items-center gap-3">
+                                                                            <div className="w-9 h-9 bg-indigo-100 dark:bg-indigo-900/40 rounded-lg flex items-center justify-center shrink-0 group-hover:bg-indigo-200 dark:group-hover:bg-indigo-900/60 transition-colors">
+                                                                                <User className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+                                                                            </div>
+                                                                            <div className="flex-1 min-w-0">
+                                                                                <p className="text-sm font-semibold text-slate-800 dark:text-white truncate">{user.fullName || user.username}</p>
                                                                                 <p className="text-xs text-indigo-600 dark:text-indigo-400 font-mono">{user.username}</p>
                                                                             </div>
-                                                                            <div className="text-right">
+                                                                            <div className="text-right shrink-0">
                                                                                 {user.department && <p className="text-xs text-slate-500 dark:text-slate-400">{user.department}</p>}
-                                                                                {user.email && <p className="text-xs text-slate-400 truncate max-w-[180px]">{user.email}</p>}
+                                                                                {user.email && <p className="text-[11px] text-slate-400 truncate max-w-[160px]">{user.email}</p>}
                                                                             </div>
                                                                         </div>
                                                                     </button>
@@ -759,40 +788,45 @@ export default function AdminUsersPage() {
 
                                         {/* AD Info Display (read-only) */}
                                         {isAdUser && formData.FullName && (
-                                            <div className="p-3 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-xl space-y-1.5">
-                                                <p className="text-xs font-bold text-green-700 dark:text-green-400 uppercase tracking-wider mb-2">ข้อมูลจาก Active Directory</p>
-                                                <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-sm">
-                                                    <div>
-                                                        <span className="text-slate-500 dark:text-slate-400 text-xs">ชื่อ-นามสกุล:</span>
-                                                        <p className="font-medium text-slate-800 dark:text-white">{formData.FullName}</p>
+                                            <div className="p-4 bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/10 border border-green-200 dark:border-green-800 rounded-xl">
+                                                <div className="flex items-center gap-2 mb-3">
+                                                    <div className="w-6 h-6 bg-green-100 dark:bg-green-900/40 rounded-md flex items-center justify-center">
+                                                        <UserCheck className="w-3 h-3 text-green-600 dark:text-green-400" />
+                                                    </div>
+                                                    <p className="text-xs font-bold text-green-700 dark:text-green-400 uppercase tracking-wider">ข้อมูลจาก Active Directory</p>
+                                                </div>
+                                                <div className="grid grid-cols-2 gap-2 text-sm">
+                                                    <div className="col-span-2 bg-white/60 dark:bg-slate-800/40 rounded-lg px-3 py-2">
+                                                        <span className="text-slate-500 dark:text-slate-400 text-xs">ชื่อ-นามสกุล</span>
+                                                        <p className="font-semibold text-slate-800 dark:text-white">{formData.FullName}</p>
                                                     </div>
                                                     {formData.Email && (
-                                                        <div>
-                                                            <span className="text-slate-500 dark:text-slate-400 text-xs">Email:</span>
-                                                            <p className="font-medium text-slate-800 dark:text-white">{formData.Email}</p>
+                                                        <div className="col-span-2 bg-white/60 dark:bg-slate-800/40 rounded-lg px-3 py-2">
+                                                            <span className="text-slate-500 dark:text-slate-400 text-xs">Email</span>
+                                                            <p className="font-medium text-slate-800 dark:text-white text-sm">{formData.Email}</p>
                                                         </div>
                                                     )}
                                                     {formData.EmployeeId && (
-                                                        <div>
-                                                            <span className="text-slate-500 dark:text-slate-400 text-xs">รหัสพนักงาน:</span>
+                                                        <div className="bg-white/60 dark:bg-slate-800/40 rounded-lg px-3 py-2">
+                                                            <span className="text-slate-500 dark:text-slate-400 text-xs">รหัสพนักงาน</span>
                                                             <p className="font-medium text-slate-800 dark:text-white">{formData.EmployeeId}</p>
                                                         </div>
                                                     )}
                                                     {formData.ADCompany && (
-                                                        <div>
-                                                            <span className="text-slate-500 dark:text-slate-400 text-xs">บริษัท:</span>
+                                                        <div className="bg-white/60 dark:bg-slate-800/40 rounded-lg px-3 py-2">
+                                                            <span className="text-slate-500 dark:text-slate-400 text-xs">บริษัท</span>
                                                             <p className="font-medium text-slate-800 dark:text-white">{formData.ADCompany}</p>
                                                         </div>
                                                     )}
                                                     {formData.Department && (
-                                                        <div>
-                                                            <span className="text-slate-500 dark:text-slate-400 text-xs">แผนก:</span>
+                                                        <div className="bg-white/60 dark:bg-slate-800/40 rounded-lg px-3 py-2">
+                                                            <span className="text-slate-500 dark:text-slate-400 text-xs">แผนก</span>
                                                             <p className="font-medium text-slate-800 dark:text-white">{formData.Department}</p>
                                                         </div>
                                                     )}
                                                     {formData.Branch && (
-                                                        <div>
-                                                            <span className="text-slate-500 dark:text-slate-400 text-xs">สาขา:</span>
+                                                        <div className="bg-white/60 dark:bg-slate-800/40 rounded-lg px-3 py-2">
+                                                            <span className="text-slate-500 dark:text-slate-400 text-xs">สาขา</span>
                                                             <p className="font-medium text-slate-800 dark:text-white">{formData.Branch}</p>
                                                         </div>
                                                     )}
@@ -842,9 +876,17 @@ export default function AdminUsersPage() {
                                     </div>
                                 </div>
 
+                                {/* Divider */}
+                                <div className="border-t border-slate-100 dark:border-slate-700" />
+
                                 {/* Section: Permissions */}
                                 <div>
-                                    <h4 className="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-3">สิทธิ์การใช้งาน</h4>
+                                    <div className="flex items-center gap-2 mb-3">
+                                        <div className="w-6 h-6 bg-amber-100 dark:bg-amber-900/30 rounded-md flex items-center justify-center">
+                                            <Shield className="w-3 h-3 text-amber-600 dark:text-amber-400" />
+                                        </div>
+                                        <h4 className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">สิทธิ์การใช้งาน</h4>
+                                    </div>
                                     <div className="space-y-3">
                                         <div>
                                             <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">
@@ -901,17 +943,32 @@ export default function AdminUsersPage() {
                                     </div>
                                 </div>
 
+                                {/* Divider */}
+                                <div className="border-t border-slate-100 dark:border-slate-700" />
+
                                 {/* Section: Status */}
                                 <div>
-                                    <h4 className="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-3">สถานะ</h4>
+                                    <div className="flex items-center gap-2 mb-3">
+                                        <div className={`w-6 h-6 rounded-md flex items-center justify-center ${formData.IsActive ? 'bg-emerald-100 dark:bg-emerald-900/30' : 'bg-slate-200 dark:bg-slate-600'}`}>
+                                            {formData.IsActive ? <UserCheck className="w-3 h-3 text-emerald-600 dark:text-emerald-400" /> : <UserX className="w-3 h-3 text-slate-500 dark:text-slate-400" />}
+                                        </div>
+                                        <h4 className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">สถานะ</h4>
+                                    </div>
                                     <label className={`flex items-center gap-3 cursor-pointer border rounded-xl p-3.5 transition-all ${formData.IsActive
-                                        ? 'bg-emerald-50 dark:bg-emerald-900/20 border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300'
+                                        ? 'bg-emerald-50 dark:bg-emerald-900/20 border-emerald-200 dark:border-emerald-800'
                                         : 'bg-slate-50 dark:bg-slate-700 border-slate-200 dark:border-slate-600'
                                         }`}>
-                                        <div className={`w-10 h-6 rounded-full relative transition-all ${formData.IsActive ? 'bg-emerald-500' : 'bg-slate-300 dark:bg-slate-600'}`}>
-                                            <div className={`w-5 h-5 rounded-full bg-white shadow-sm absolute top-0.5 transition-all ${formData.IsActive ? 'left-[18px]' : 'left-0.5'}`}></div>
+                                        <div className={`w-11 h-6 rounded-full relative transition-all ${formData.IsActive ? 'bg-emerald-500' : 'bg-slate-300 dark:bg-slate-600'}`}>
+                                            <div className={`w-5 h-5 rounded-full bg-white shadow-sm absolute top-0.5 transition-all ${formData.IsActive ? 'left-[22px]' : 'left-0.5'}`}></div>
                                         </div>
-                                        <span className="text-sm font-medium dark:text-white">{formData.IsActive ? 'เปิดใช้งาน (Active)' : 'ระงับบัญชี (Inactive)'}</span>
+                                        <div>
+                                            <span className={`text-sm font-semibold ${formData.IsActive ? 'text-emerald-700 dark:text-emerald-300' : 'text-slate-600 dark:text-slate-400'}`}>
+                                                {formData.IsActive ? 'เปิดใช้งาน (Active)' : 'ระงับบัญชี (Inactive)'}
+                                            </span>
+                                            <p className="text-xs text-slate-400">
+                                                {formData.IsActive ? 'ผู้ใช้สามารถเข้าสู่ระบบได้' : 'ผู้ใช้จะไม่สามารถเข้าสู่ระบบได้'}
+                                            </p>
+                                        </div>
                                         <input
                                             type="checkbox"
                                             checked={formData.IsActive}
@@ -933,10 +990,13 @@ export default function AdminUsersPage() {
                                 <button
                                     onClick={handleSaveUser}
                                     disabled={isSaving}
-                                    className="px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-xl flex items-center gap-2 transition-all active:scale-95 disabled:opacity-70 shadow-md shadow-blue-500/30"
+                                    className={`px-6 py-2.5 text-white font-medium rounded-xl flex items-center gap-2 transition-all active:scale-95 disabled:opacity-70 shadow-lg ${isAdUser
+                                        ? 'bg-indigo-600 hover:bg-indigo-700 shadow-indigo-500/30'
+                                        : 'bg-blue-600 hover:bg-blue-700 shadow-blue-500/30'
+                                        }`}
                                 >
                                     {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-                                    {isSaving ? 'กำลังบันทึก...' : 'บันทึกข้อมูล'}
+                                    {isSaving ? 'กำลังบันทึก...' : isAdUser ? 'บันทึกผู้ใช้ AD' : 'บันทึกข้อมูล'}
                                 </button>
                             </div>
                         </div>
