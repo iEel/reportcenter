@@ -50,7 +50,7 @@ reportcenter/
 │   │   │   │   │   ├── page.tsx          # Manage Reports list (search/filter)
 │   │   │   │   │   ├── new/page.tsx      # Create new report
 │   │   │   │   │   └── [id]/edit/page.tsx # Edit existing report
-│   │   │   │   ├── users/page.tsx        # Manage Users + AD autocomplete (search/filter/stats/pagination/delete/reset-pw)
+│   │   │   │   ├── users/page.tsx        # Manage Users + AD autocomplete (search by username/name/employeeId)
 │   │   │   │   ├── roles/page.tsx        # Manage Roles + Report access assignment
 │   │   │   │   ├── audit-logs/page.tsx   # Audit Log Viewer (paginated)
 │   │   │   │   ├── schedules/page.tsx    # Scheduled Reports (create/edit/toggle/delete)
@@ -753,6 +753,7 @@ npm run test:watch
 - [x] Active Directory (LDAP) integration — AD user bind, lookup, wildcard autocomplete search
 - [x] Add User modal UI overhaul — gradient header, section badges, AD info card, autocomplete dropdown
 - [x] Turbopack + ldapjs fix — `serverExternalPackages` to prevent BER parser corruption
+- [x] User search by EmployeeId — admin can search users by AD employee ID on manage users page
 - [ ] Two-factor authentication (2FA)
 - [ ] PDF export support
 
