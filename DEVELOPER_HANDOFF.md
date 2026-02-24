@@ -1,6 +1,6 @@
 # ReportCenter — Developer Handoff
 
-> **Version:** 5.9  
+> **Version:** 6.0  
 > **Last Updated:** 2026-02-24  
 > **Tech Stack:** Next.js 16.1.6 + React 19 + Tailwind CSS 4 + MSSQL (mssql driver) + Microsoft Graph API (OAuth2) / Nodemailer (SMTP fallback) + @azure/msal-node
 
@@ -77,6 +77,8 @@ reportcenter/
 │   │       │   └── settings/route.js     # GET/PUT system settings
 │   │       ├── cron/
 │   │       │   └── execute-schedules/route.js # GET: cron endpoint (runs due reports → email)
+│   │       ├── settings/
+│   │       │   └── idle-timeout/route.js    # GET: idle timeout setting (any logged-in user)
 │   │       └── reports/
 │   │           ├── available/route.js    # GET: reports user can access
 │   │           ├── execute/route.js      # POST: run T-SQL on company DB (supports pagination + exportAll)
@@ -91,7 +93,8 @@ reportcenter/
 │   │   ├── providers/
 │   │   │   ├── AuthProvider.tsx          # React Context for user session + allowedCompanies + availableReportTypes
 │   │   │   ├── ToastProvider.tsx         # Toast notification system (success/error/info)
-│   │   │   └── ConfirmProvider.tsx       # Custom confirm dialog (danger/warning/default)
+│   │   │   ├── ConfirmProvider.tsx       # Custom confirm dialog (danger/warning/default)
+│   │   │   └── IdleTimeoutProvider.tsx   # Session idle timeout detection + warning modal
 │   │   ├── ErrorBoundary.tsx             # Global error boundary
 │   │   ├── Skeletons.tsx                 # Reusable loading skeletons
 │   │   ├── TypeaheadInput.tsx            # Debounced server-side search input (for parameters with LookupQuery)
@@ -422,7 +425,7 @@ AZURE_CLIENT_SECRET=your-client-secret
 
 ### Route Groups
 - หน้า Login อยู่ที่ `src/app/login/` (ไม่มี Sidebar/Header)
-- หน้าอื่นๆ ทั้งหมดอยู่ใน `src/app/(dashboard)/` ซึ่งครอบด้วย `AppLayout` + `ToastProvider` + `ConfirmProvider`
+- หน้าอื่นๆ ทั้งหมดอยู่ใน `src/app/(dashboard)/` ซึ่งครอบด้วย `AppLayout` + `ToastProvider` + `ConfirmProvider` + `IdleTimeoutProvider`
 
 ### Security
 - JWT cookie: `httpOnly`, `sameSite: lax`, `maxAge: 8 ชั่วโมง`
@@ -431,6 +434,7 @@ AZURE_CLIENT_SECRET=your-client-secret
 - Admin password reset: admin รีเซ็ตรหัสผ่านให้ user ได้โดยไม่ต้องรู้รหัสเดิม + force re-login (TokenVersion++)
 - SQL: ใช้ parameterized queries ทุกจุดเพื่อป้องกัน SQL Injection
 - **SQL Query Validator** (`src/lib/sql-validator.js`): ตรวจ T-SQL ก่อน execute — block DML/DDL/metadata/procs/remote sources
+- **Session Idle Timeout**: ไม่ใช้งานตามเวลากำหนด → แสดง modal เตือน 60 วิ → auto-logout (ตั้งค่าได้ที่ Admin Settings)
 - Role-based access: Admin เมนูซ่อนจาก non-admin users ใน Sidebar
 - Multi-company: user เห็นเฉพาะ company ที่ถูก assign ใน `UserCompanyMapping`
 
@@ -697,6 +701,7 @@ npm run test:watch
 - [x] Background Job system for heavy reports (IsHeavy toggle + async APIs + polling UI)
 - [x] Password complexity rules enforcement (min 8, uppercase, number, special char)
 - [x] Rate limiting on login (5 attempts / 15 min, admin-configurable)
+- [x] Session idle timeout — แสดง warning modal + countdown 60 วิ + auto-logout + admin ตั้งค่าได้ (default 30 นาที, 0=ปิด)
 - [x] Dark mode toggle (ThemeProvider + localStorage + Tailwind dark:)
 - [x] Dashboard charts (usage per day + top reports + active users)
 - [x] Job History page (re-download within 24h, auto-refresh)
