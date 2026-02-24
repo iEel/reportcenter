@@ -1,10 +1,10 @@
 import { NextResponse } from 'next/server';
 import { getSession } from '@/lib/auth';
-import { ldapLookup } from '@/lib/ldap';
+import { ldapLookup, ldapSearchUsers } from '@/lib/ldap';
 
 /**
- * GET /api/admin/users/lookup-ad?username=veerapon.l
- * Lookup user info from Active Directory
+ * GET /api/admin/users/lookup-ad?username=veerapon.l       → exact lookup
+ * GET /api/admin/users/lookup-ad?search=veer               → wildcard search (autocomplete)
  */
 export async function GET(request) {
     try {
@@ -15,13 +15,24 @@ export async function GET(request) {
 
         const { searchParams } = new URL(request.url);
         const username = searchParams.get('username');
+        const search = searchParams.get('search');
 
-        if (!username) {
-            return NextResponse.json({ success: false, message: 'กรุณาระบุ username' }, { status: 400 });
+        if (search) {
+            // Wildcard search mode (autocomplete)
+            if (search.length < 2) {
+                return NextResponse.json({ success: true, users: [] });
+            }
+            const result = await ldapSearchUsers(search);
+            return NextResponse.json(result);
         }
 
-        const result = await ldapLookup(username);
-        return NextResponse.json(result);
+        if (username) {
+            // Exact lookup mode
+            const result = await ldapLookup(username);
+            return NextResponse.json(result);
+        }
+
+        return NextResponse.json({ success: false, message: 'กรุณาระบุ username หรือ search' }, { status: 400 });
 
     } catch (error) {
         console.error('AD Lookup error:', error);

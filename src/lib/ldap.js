@@ -133,7 +133,7 @@ export async function ldapLookup(username) {
             const searchOpts = {
                 scope: 'sub',
                 filter: searchFilter,
-                attributes: ['displayName', 'mail', 'employeeID', 'company', 'distinguishedName'],
+                attributes: ['sAMAccountName', 'displayName', 'mail', 'employeeID', 'company', 'distinguishedName'],
             };
 
             client.search(config.baseDN, searchOpts, (searchErr, res) => {
@@ -161,6 +161,7 @@ export async function ldapLookup(username) {
 
                     userData = {
                         success: true,
+                        username: attrs['sAMAccountName'] || username,
                         fullName: attrs['displayName'] || '',
                         email: attrs['mail'] || '',
                         employeeId: attrs['employeeID'] || '',
@@ -182,6 +183,93 @@ export async function ldapLookup(username) {
                     } else {
                         resolve({ success: false, error: `ไม่พบ "${username}" ใน Active Directory` });
                     }
+                });
+            });
+        });
+    });
+}
+
+/**
+ * Search AD for users matching a partial username (for autocomplete)
+ * Returns up to 10 matching users
+ * @param {string} query - Partial username (e.g. "veer")
+ * @returns {{ success, users: Array<{username, fullName, email, department}>, error? }}
+ */
+export async function ldapSearchUsers(query) {
+    const config = await getLdapConfig();
+
+    if (!config.enabled) {
+        return { success: false, error: 'LDAP ไม่ได้เปิดใช้งาน' };
+    }
+    if (!config.url || !config.domain || !config.baseDN) {
+        return { success: false, error: 'LDAP ยังไม่ได้ตั้งค่าครบ' };
+    }
+    if (!config.bindDN || !config.bindPassword) {
+        return { success: false, error: 'ไม่ได้ตั้งค่า Service Account ใน .env' };
+    }
+
+    const client = createClient(config.url);
+
+    return new Promise((resolve) => {
+        client.on('error', (err) => {
+            resolve({ success: false, error: `ไม่สามารถเชื่อมต่อ: ${err.message}` });
+        });
+
+        client.bind(config.bindDN, config.bindPassword, (bindErr) => {
+            if (bindErr) {
+                client.unbind(() => { });
+                return resolve({ success: false, error: `Bind ล้มเหลว: ${bindErr.message}` });
+            }
+
+            // Wildcard search: matches sAMAccountName or displayName
+            const safeQuery = query.replace(/[\\*()]/g, '');
+            const searchFilter = `(&(objectClass=user)(objectCategory=person)(|(sAMAccountName=*${safeQuery}*)(displayName=*${safeQuery}*)))`;
+            const searchOpts = {
+                scope: 'sub',
+                filter: searchFilter,
+                attributes: ['sAMAccountName', 'displayName', 'mail', 'employeeID', 'company', 'distinguishedName'],
+                sizeLimit: 10,
+            };
+
+            client.search(config.baseDN, searchOpts, (searchErr, res) => {
+                if (searchErr) {
+                    client.unbind(() => { });
+                    return resolve({ success: false, error: `Search ล้มเหลว: ${searchErr.message}` });
+                }
+
+                const users = [];
+
+                res.on('searchEntry', (entry) => {
+                    const attrs = {};
+                    const pojo = entry.pojo || entry;
+                    if (pojo.attributes) {
+                        for (const attr of pojo.attributes) {
+                            attrs[attr.type] = attr.values?.[0] || '';
+                        }
+                    }
+
+                    const dn = attrs['distinguishedName'] || entry.dn?.toString() || '';
+                    const { department, branch } = parseDistinguishedName(dn);
+
+                    users.push({
+                        username: attrs['sAMAccountName'] || '',
+                        fullName: attrs['displayName'] || '',
+                        email: attrs['mail'] || '',
+                        employeeId: attrs['employeeID'] || '',
+                        company: attrs['company'] || '',
+                        department,
+                        branch,
+                    });
+                });
+
+                res.on('error', (err) => {
+                    client.unbind(() => { });
+                    resolve({ success: false, error: `Search error: ${err.message}` });
+                });
+
+                res.on('end', () => {
+                    client.unbind(() => { });
+                    resolve({ success: true, users });
                 });
             });
         });

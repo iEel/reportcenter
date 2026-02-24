@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Plus, Search, Edit, Shield, User, Building, RefreshCw, X, Save, Loader2, Check, Eye, EyeOff, UserCheck, UserX, Trash2, KeyRound, ChevronLeft, ChevronRight, Link2, Search as SearchIcon } from "lucide-react";
 import { useToast } from "@/components/providers/ToastProvider";
 import { useConfirm } from "@/components/providers/ConfirmProvider";
@@ -72,6 +72,10 @@ export default function AdminUsersPage() {
     const [isAdUser, setIsAdUser] = useState(false);
     const [isLookingUp, setIsLookingUp] = useState(false);
     const [adLookupError, setAdLookupError] = useState('');
+    const [adSuggestions, setAdSuggestions] = useState<any[]>([]);
+    const [isSearching, setIsSearching] = useState(false);
+    const [showSuggestions, setShowSuggestions] = useState(false);
+    const searchTimerRef = useRef<NodeJS.Timeout | null>(null);
 
     const fetchUsersAndRoles = async () => {
         setIsLoading(true);
@@ -97,6 +101,8 @@ export default function AdminUsersPage() {
         setShowPassword(false);
         setIsAdUser(false);
         setAdLookupError('');
+        setAdSuggestions([]);
+        setShowSuggestions(false);
         setFormData({
             UserId: '', Username: '', PasswordHash: '',
             FullName: '', CompanyId: '', RoleId: '',
@@ -113,6 +119,8 @@ export default function AdminUsersPage() {
         const isAd = (user.AuthType || 'local').toLowerCase() === 'ldap';
         setIsAdUser(isAd);
         setAdLookupError('');
+        setAdSuggestions([]);
+        setShowSuggestions(false);
         setFormData({
             UserId: user.UserId,
             Username: user.Username,
@@ -169,6 +177,57 @@ export default function AdminUsersPage() {
         } finally {
             setIsLookingUp(false);
         }
+    };
+
+    // Debounced AD search for autocomplete
+    const handleAdSearch = (value: string) => {
+        setFormData(prev => ({ ...prev, Username: value }));
+        setAdLookupError('');
+
+        // Clear previous timer
+        if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
+
+        if (value.trim().length < 2) {
+            setAdSuggestions([]);
+            setShowSuggestions(false);
+            return;
+        }
+
+        // Debounce 300ms
+        searchTimerRef.current = setTimeout(async () => {
+            setIsSearching(true);
+            try {
+                const res = await fetch(`/api/admin/users/lookup-ad?search=${encodeURIComponent(value.trim())}`);
+                const data = await res.json();
+                if (data.success && data.users) {
+                    setAdSuggestions(data.users);
+                    setShowSuggestions(data.users.length > 0);
+                } else {
+                    setAdSuggestions([]);
+                    setShowSuggestions(false);
+                }
+            } catch {
+                setAdSuggestions([]);
+            } finally {
+                setIsSearching(false);
+            }
+        }, 300);
+    };
+
+    const handleSelectAdUser = (user: any) => {
+        setFormData(prev => ({
+            ...prev,
+            Username: user.username,
+            FullName: user.fullName || '',
+            Email: user.email || '',
+            EmployeeId: user.employeeId || '',
+            ADCompany: user.company || '',
+            Department: user.department || '',
+            Branch: user.branch || '',
+        }));
+        setAdSuggestions([]);
+        setShowSuggestions(false);
+        setAdLookupError('');
     };
 
     const handleSaveUser = async () => {
@@ -629,33 +688,68 @@ export default function AdminUsersPage() {
                                     <h4 className="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-3">ข้อมูลบัญชี</h4>
                                     <div className="space-y-3">
                                         {!editMode && (
-                                            <div>
+                                            <div className="relative">
                                                 <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                                                    {isAdUser ? 'AD Username' : 'Username'} <span className="text-red-500">*</span>
+                                                    {isAdUser ? 'ค้นหา AD Username' : 'Username'} <span className="text-red-500">*</span>
                                                 </label>
-                                                <div className={isAdUser ? 'flex gap-2' : ''}>
-                                                    <input
-                                                        type="text"
-                                                        value={formData.Username}
-                                                        onChange={e => setFormData({ ...formData, Username: e.target.value })}
-                                                        className={`${isAdUser ? 'flex-1' : 'w-full'} px-3 py-2.5 border border-slate-200 dark:border-slate-600 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 bg-white dark:bg-slate-700 dark:text-white text-sm`}
-                                                        placeholder={isAdUser ? 'เช่น veerapon.l' : 'เช่น jsmith'}
-                                                        onKeyDown={e => { if (isAdUser && e.key === 'Enter') { e.preventDefault(); handleAdLookup(); } }}
-                                                    />
+                                                <div className="flex gap-2">
+                                                    <div className="flex-1 relative">
+                                                        <input
+                                                            type="text"
+                                                            value={formData.Username}
+                                                            onChange={e => isAdUser ? handleAdSearch(e.target.value) : setFormData({ ...formData, Username: e.target.value })}
+                                                            onFocus={() => { if (isAdUser && adSuggestions.length > 0) setShowSuggestions(true); }}
+                                                            onBlur={() => setTimeout(() => setShowSuggestions(false), 200)}
+                                                            className="w-full px-3 py-2.5 border border-slate-200 dark:border-slate-600 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 bg-white dark:bg-slate-700 dark:text-white text-sm"
+                                                            placeholder={isAdUser ? 'พิมพ์อย่างน้อย 2 ตัว เช่น veer, john...' : 'เช่น jsmith'}
+                                                            onKeyDown={e => { if (isAdUser && e.key === 'Enter') { e.preventDefault(); handleAdLookup(); } }}
+                                                            autoComplete="off"
+                                                        />
+                                                        {isAdUser && isSearching && (
+                                                            <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                                                                <Loader2 className="w-4 h-4 animate-spin text-indigo-500" />
+                                                            </div>
+                                                        )}
+
+                                                        {/* Autocomplete Dropdown */}
+                                                        {isAdUser && showSuggestions && adSuggestions.length > 0 && (
+                                                            <div className="absolute z-50 w-full mt-1 bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-xl shadow-xl max-h-60 overflow-y-auto">
+                                                                {adSuggestions.map((user, idx) => (
+                                                                    <button
+                                                                        key={idx}
+                                                                        type="button"
+                                                                        onMouseDown={(e) => { e.preventDefault(); handleSelectAdUser(user); }}
+                                                                        className="w-full text-left px-4 py-3 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 transition-colors border-b border-slate-100 dark:border-slate-600 last:border-0"
+                                                                    >
+                                                                        <div className="flex items-center justify-between">
+                                                                            <div>
+                                                                                <p className="text-sm font-semibold text-slate-800 dark:text-white">{user.fullName || user.username}</p>
+                                                                                <p className="text-xs text-indigo-600 dark:text-indigo-400 font-mono">{user.username}</p>
+                                                                            </div>
+                                                                            <div className="text-right">
+                                                                                {user.department && <p className="text-xs text-slate-500 dark:text-slate-400">{user.department}</p>}
+                                                                                {user.email && <p className="text-xs text-slate-400 truncate max-w-[180px]">{user.email}</p>}
+                                                                            </div>
+                                                                        </div>
+                                                                    </button>
+                                                                ))}
+                                                            </div>
+                                                        )}
+                                                    </div>
                                                     {isAdUser && (
                                                         <button
                                                             type="button"
                                                             onClick={handleAdLookup}
                                                             disabled={isLookingUp}
-                                                            className="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-sm font-medium transition-all active:scale-95 disabled:opacity-70 flex items-center gap-1.5 whitespace-nowrap shadow-md shadow-indigo-500/20"
+                                                            className="px-3 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-sm font-medium transition-all active:scale-95 disabled:opacity-70 flex items-center gap-1 whitespace-nowrap shadow-md shadow-indigo-500/20"
+                                                            title="ค้นหาแบบ exact match"
                                                         >
                                                             {isLookingUp ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
-                                                            {isLookingUp ? 'ค้นหา...' : '🔍 ค้นหา'}
                                                         </button>
                                                     )}
                                                 </div>
                                                 {isAdUser && (
-                                                    <p className="text-xs text-slate-400 mt-1">ใช้ชื่อ login ไม่ต้องใส่ @domain</p>
+                                                    <p className="text-xs text-slate-400 mt-1">พิมพ์ชื่อบางส่วนแล้วเลือกจากรายการ หรือกด Enter เพื่อค้นหาแบบตรง</p>
                                                 )}
                                                 {adLookupError && (
                                                     <p className="text-xs text-red-500 mt-1">❌ {adLookupError}</p>
