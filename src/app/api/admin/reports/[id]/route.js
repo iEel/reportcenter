@@ -158,7 +158,7 @@ export async function PUT(request, props) {
                     .input('ReportId', sql.Int, parseInt(id))
                     .query('DELETE FROM ReportRoleMapping WHERE ReportId = @ReportId');
 
-                if (!report.IsPublic && report.Roles && report.Roles.length > 0) {
+                if (report.Roles && report.Roles.length > 0) {
                     const roleStmt = new sql.PreparedStatement(transaction);
                     roleStmt.input('ReportId', sql.Int);
                     roleStmt.input('RoleId', sql.Int);
