@@ -48,6 +48,14 @@ export async function POST(request) {
 
         const pool = await connectToCentralDB();
 
+        // Auto-migrate: ensure AuthType column exists
+        try {
+            const cols = await pool.request().query(`SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = 'Users' AND COLUMN_NAME = 'AuthType'`);
+            if (cols.recordset.length === 0) {
+                await pool.request().query(`ALTER TABLE Users ADD AuthType NVARCHAR(10) DEFAULT 'local'`);
+            }
+        } catch (e) { /* column might already exist */ }
+
         const result = await pool.request()
             .input('Username', sql.NVarChar(50), username)
             .query(`

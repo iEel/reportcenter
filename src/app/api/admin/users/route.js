@@ -14,6 +14,25 @@ export async function GET(request) {
 
         const pool = await connectToCentralDB();
 
+        // Auto-migrate: add AD columns if missing
+        try {
+            const cols = await pool.request().query(`SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = 'Users'`);
+            const existing = cols.recordset.map(r => r.COLUMN_NAME);
+            const migrations = [
+                { col: 'AuthType', sql: "ALTER TABLE Users ADD AuthType NVARCHAR(10) DEFAULT 'local'" },
+                { col: 'Email', sql: "ALTER TABLE Users ADD Email NVARCHAR(200) NULL" },
+                { col: 'EmployeeId', sql: "ALTER TABLE Users ADD EmployeeId NVARCHAR(50) NULL" },
+                { col: 'ADCompany', sql: "ALTER TABLE Users ADD ADCompany NVARCHAR(150) NULL" },
+                { col: 'Department', sql: "ALTER TABLE Users ADD Department NVARCHAR(100) NULL" },
+                { col: 'Branch', sql: "ALTER TABLE Users ADD Branch NVARCHAR(100) NULL" },
+            ];
+            for (const m of migrations) {
+                if (!existing.includes(m.col)) {
+                    await pool.request().query(m.sql);
+                }
+            }
+        } catch (e) { console.warn('Auto-migrate Users:', e.message); }
+
         // Fetch Users
         const usersResult = await pool.request().query(`
             SELECT u.UserId, u.Username, u.FullName, u.CompanyId, u.RoleId, r.RoleName, u.IsActive,
