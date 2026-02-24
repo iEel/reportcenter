@@ -295,8 +295,8 @@ export default function AdminRolesPage() {
                                             <button
                                                 onClick={(e) => { e.stopPropagation(); handleDelete(role); }}
                                                 className={`p-2 rounded-lg transition-colors ${role.UserCount > 0
-                                                        ? 'bg-slate-100 dark:bg-slate-700 text-slate-400 dark:text-slate-500 cursor-not-allowed'
-                                                        : 'bg-red-50 dark:bg-red-900/30 hover:bg-red-100 dark:hover:bg-red-900/50 text-red-600 dark:text-red-400'
+                                                    ? 'bg-slate-100 dark:bg-slate-700 text-slate-400 dark:text-slate-500 cursor-not-allowed'
+                                                    : 'bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400 hover:bg-red-50 dark:hover:bg-red-900/30 hover:text-red-600 dark:hover:text-red-400'
                                                     }`}
                                                 title={role.UserCount > 0 ? `มีผู้ใช้ ${role.UserCount} คน — ลบไม่ได้` : 'ลบ Role'}
                                             >
@@ -323,8 +323,8 @@ export default function AdminRolesPage() {
                                                         if (!report) return null;
                                                         return (
                                                             <span key={reportId} className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium border transition-colors ${report.ReportType === 1
-                                                                    ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-800'
-                                                                    : 'bg-purple-50 dark:bg-purple-900/20 text-purple-700 dark:text-purple-300 border-purple-200 dark:border-purple-800'
+                                                                ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-800'
+                                                                : 'bg-purple-50 dark:bg-purple-900/20 text-purple-700 dark:text-purple-300 border-purple-200 dark:border-purple-800'
                                                                 }`}>
                                                                 <FileText className="w-3 h-3" />
                                                                 {report.ReportName}
@@ -415,8 +415,8 @@ export default function AdminRolesPage() {
                                                     <p className={`text-sm font-medium truncate ${isChecked ? 'text-slate-900 dark:text-white' : 'text-slate-600 dark:text-slate-300'}`}>{report.ReportName}</p>
                                                 </div>
                                                 <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider ${report.ReportType === 1
-                                                        ? 'bg-blue-100 dark:bg-blue-900/40 text-blue-600 dark:text-blue-300'
-                                                        : 'bg-purple-100 dark:bg-purple-900/40 text-purple-600 dark:text-purple-300'
+                                                    ? 'bg-blue-100 dark:bg-blue-900/40 text-blue-600 dark:text-blue-300'
+                                                    : 'bg-purple-100 dark:bg-purple-900/40 text-purple-600 dark:text-purple-300'
                                                     }`}>
                                                     {report.ReportType === 1 ? 'STD' : 'TPL'}
                                                 </span>
