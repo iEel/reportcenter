@@ -39,6 +39,9 @@ export default function AdminRolesPage() {
     // Expanded role card
     const [expandedRoleId, setExpandedRoleId] = useState<number | null>(null);
 
+    // Report search in modal
+    const [reportSearch, setReportSearch] = useState('');
+
     const fetchData = async () => {
         setIsLoading(true);
         try {
@@ -60,6 +63,7 @@ export default function AdminRolesPage() {
     const handleOpenAddModal = () => {
         setEditMode(false);
         setFormData({ RoleId: 0, RoleName: '', assignedReports: [] });
+        setReportSearch('');
         setIsModalOpen(true);
     };
 
@@ -70,6 +74,7 @@ export default function AdminRolesPage() {
             RoleName: role.RoleName,
             assignedReports: [...role.assignedReports],
         });
+        setReportSearch('');
         setIsModalOpen(true);
     };
 
@@ -395,40 +400,105 @@ export default function AdminRolesPage() {
                                     </button>
                                 </div>
 
-                                <div className="border border-slate-200 dark:border-slate-600 rounded-xl overflow-hidden max-h-64 overflow-y-auto">
-                                    {allReports.length === 0 ? (
-                                        <p className="px-4 py-8 text-center text-sm text-slate-400 dark:text-slate-500">ไม่มีรายงานในระบบ</p>
-                                    ) : allReports.map(report => {
-                                        const isChecked = formData.assignedReports.includes(report.ReportId);
-                                        return (
-                                            <label
-                                                key={report.ReportId}
-                                                className={`flex items-center gap-3 px-4 py-3 cursor-pointer border-b border-slate-100 dark:border-slate-700 last:border-0 transition-all ${isChecked ? 'bg-blue-50/60 dark:bg-blue-900/20' : 'hover:bg-slate-50 dark:hover:bg-slate-700/50'
-                                                    }`}
-                                            >
-                                                <div className={`w-5 h-5 rounded border-2 flex items-center justify-center flex-shrink-0 transition-all ${isChecked ? 'bg-blue-600 border-blue-600' : 'border-slate-300 dark:border-slate-500'
-                                                    }`}>
-                                                    {isChecked && <Check className="w-3 h-3 text-white" />}
-                                                </div>
-                                                <FileText className={`w-4 h-4 flex-shrink-0 ${isChecked ? 'text-blue-600 dark:text-blue-400' : 'text-slate-400'}`} />
-                                                <div className="flex-1 min-w-0">
-                                                    <p className={`text-sm font-medium truncate ${isChecked ? 'text-slate-900 dark:text-white' : 'text-slate-600 dark:text-slate-300'}`}>{report.ReportName}</p>
-                                                </div>
-                                                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider ${report.ReportType === 1
-                                                    ? 'bg-blue-100 dark:bg-blue-900/40 text-blue-600 dark:text-blue-300'
-                                                    : 'bg-purple-100 dark:bg-purple-900/40 text-purple-600 dark:text-purple-300'
-                                                    }`}>
-                                                    {report.ReportType === 1 ? 'STD' : 'TPL'}
-                                                </span>
-                                                <input
-                                                    type="checkbox"
-                                                    checked={isChecked}
-                                                    onChange={() => toggleReport(report.ReportId)}
-                                                    className="sr-only"
-                                                />
-                                            </label>
+                                {/* Search Reports */}
+                                <div className="relative mb-3">
+                                    <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                                    <input
+                                        type="text"
+                                        placeholder="ค้นหารายงาน..."
+                                        value={reportSearch}
+                                        onChange={e => setReportSearch(e.target.value)}
+                                        className="w-full pl-9 pr-4 py-2 border border-slate-200 dark:border-slate-600 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 bg-white dark:bg-slate-700 dark:text-white"
+                                    />
+                                    {reportSearch && (
+                                        <button onClick={() => setReportSearch('')} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
+                                            <X className="w-3.5 h-3.5" />
+                                        </button>
+                                    )}
+                                </div>
+
+                                <div className="border border-slate-200 dark:border-slate-600 rounded-xl overflow-hidden max-h-72 overflow-y-auto">
+                                    {(() => {
+                                        // Filter by search
+                                        const filtered = allReports.filter(r =>
+                                            !reportSearch || r.ReportName.toLowerCase().includes(reportSearch.toLowerCase())
                                         );
-                                    })}
+
+                                        // Sort: selected first within each group
+                                        const sortBySelected = (a: Report, b: Report) => {
+                                            const aChecked = formData.assignedReports.includes(a.ReportId) ? 0 : 1;
+                                            const bChecked = formData.assignedReports.includes(b.ReportId) ? 0 : 1;
+                                            return aChecked - bChecked || a.ReportName.localeCompare(b.ReportName, 'th');
+                                        };
+
+                                        const standardReports = filtered.filter(r => r.ReportType === 1).sort(sortBySelected);
+                                        const templateReports = filtered.filter(r => r.ReportType === 2).sort(sortBySelected);
+
+                                        if (filtered.length === 0) {
+                                            return (
+                                                <p className="px-4 py-8 text-center text-sm text-slate-400 dark:text-slate-500">
+                                                    {reportSearch ? 'ไม่พบรายงานที่ค้นหา' : 'ไม่มีรายงานในระบบ'}
+                                                </p>
+                                            );
+                                        }
+
+                                        const renderReport = (report: Report) => {
+                                            const isChecked = formData.assignedReports.includes(report.ReportId);
+                                            return (
+                                                <label
+                                                    key={report.ReportId}
+                                                    className={`flex items-center gap-3 px-4 py-2.5 cursor-pointer border-b border-slate-100 dark:border-slate-700 last:border-0 transition-all ${isChecked ? 'bg-blue-50/60 dark:bg-blue-900/20' : 'hover:bg-slate-50 dark:hover:bg-slate-700/50'
+                                                        }`}
+                                                >
+                                                    <div className={`w-5 h-5 rounded border-2 flex items-center justify-center flex-shrink-0 transition-all ${isChecked ? 'bg-blue-600 border-blue-600' : 'border-slate-300 dark:border-slate-500'
+                                                        }`}>
+                                                        {isChecked && <Check className="w-3 h-3 text-white" />}
+                                                    </div>
+                                                    <FileText className={`w-4 h-4 flex-shrink-0 ${isChecked ? 'text-blue-600 dark:text-blue-400' : 'text-slate-400'}`} />
+                                                    <div className="flex-1 min-w-0">
+                                                        <p className={`text-sm font-medium truncate ${isChecked ? 'text-slate-900 dark:text-white' : 'text-slate-600 dark:text-slate-300'}`}>{report.ReportName}</p>
+                                                    </div>
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={isChecked}
+                                                        onChange={() => toggleReport(report.ReportId)}
+                                                        className="sr-only"
+                                                    />
+                                                </label>
+                                            );
+                                        };
+
+                                        const stdSelected = standardReports.filter(r => formData.assignedReports.includes(r.ReportId)).length;
+                                        const tplSelected = templateReports.filter(r => formData.assignedReports.includes(r.ReportId)).length;
+
+                                        return (
+                                            <>
+                                                {/* Standard Reports Group */}
+                                                {standardReports.length > 0 && (
+                                                    <>
+                                                        <div className="sticky top-0 z-10 px-4 py-2 bg-blue-50 dark:bg-blue-900/30 border-b border-blue-100 dark:border-blue-800 flex items-center justify-between">
+                                                            <span className="text-xs font-bold text-blue-700 dark:text-blue-300 uppercase tracking-wider">
+                                                                📊 Standard ({stdSelected}/{standardReports.length})
+                                                            </span>
+                                                        </div>
+                                                        {standardReports.map(renderReport)}
+                                                    </>
+                                                )}
+
+                                                {/* Template Reports Group */}
+                                                {templateReports.length > 0 && (
+                                                    <>
+                                                        <div className="sticky top-0 z-10 px-4 py-2 bg-purple-50 dark:bg-purple-900/30 border-b border-purple-100 dark:border-purple-800 flex items-center justify-between">
+                                                            <span className="text-xs font-bold text-purple-700 dark:text-purple-300 uppercase tracking-wider">
+                                                                📝 Template ({tplSelected}/{templateReports.length})
+                                                            </span>
+                                                        </div>
+                                                        {templateReports.map(renderReport)}
+                                                    </>
+                                                )}
+                                            </>
+                                        );
+                                    })()}
                                 </div>
                             </div>
                         </div>
