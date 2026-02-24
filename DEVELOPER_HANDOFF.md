@@ -1,7 +1,7 @@
 # ReportCenter — Developer Handoff
 
-> **Version:** 5.8  
-> **Last Updated:** 2026-02-23  
+> **Version:** 5.9  
+> **Last Updated:** 2026-02-24  
 > **Tech Stack:** Next.js 16.1.6 + React 19 + Tailwind CSS 4 + MSSQL (mssql driver) + Microsoft Graph API (OAuth2) / Nodemailer (SMTP fallback) + @azure/msal-node
 
 ---
@@ -49,7 +49,7 @@ reportcenter/
 │   │   │   │   │   ├── page.tsx          # Manage Reports list (search/filter)
 │   │   │   │   │   ├── new/page.tsx      # Create new report
 │   │   │   │   │   └── [id]/edit/page.tsx # Edit existing report
-│   │   │   │   ├── users/page.tsx        # Manage Users (search/filter/stats)
+│   │   │   │   ├── users/page.tsx        # Manage Users (search/filter/stats/pagination/delete/reset-pw)
 │   │   │   │   ├── roles/page.tsx        # Manage Roles + Report access assignment
 │   │   │   │   ├── audit-logs/page.tsx   # Audit Log Viewer (paginated)
 │   │   │   │   ├── schedules/page.tsx    # Scheduled Reports (create/edit/toggle/delete)
@@ -69,7 +69,8 @@ reportcenter/
 │   │       │   ├── reports/
 │   │       │   │   ├── route.js          # GET: list, POST: create
 │   │       │   │   └── [id]/route.js     # GET/PUT/DELETE single report
-│   │       │   ├── users/route.js        # GET/POST/PUT users & roles + company mappings
+│   │       │   ├── users/route.js        # GET/POST/PUT/DELETE users & roles + company mappings
+│   │       │   ├── users/reset-password/route.js # POST: admin reset user password
 │   │       │   ├── roles/route.js        # GET/POST/PUT/DELETE roles + ReportRoleMapping
 │   │       │   ├── audit-logs/route.js   # GET: paginated audit logs
 │   │       │   ├── schedules/route.js    # GET/POST/PUT/DELETE schedules
@@ -99,6 +100,7 @@ reportcenter/
 │   │   ├── auth.js                       # JWT sign/verify (jose) + getSession()
 │   │   ├── db.js                         # MSSQL connection pool manager
 │   │   ├── email.js                      # Email sender (Microsoft Graph API primary + SMTP password fallback)
+│   │   ├── sql-validator.js              # SQL query security validator (blocklist DML/DDL/metadata/procs)
 │   │   └── dateUtils.ts                  # Date/time utilities (Asia/Bangkok, 24h)
 │   └── middleware.ts                     # Route protection (JWT check)
 ├── scripts/
@@ -256,6 +258,8 @@ CreatedAt DATETIME DEFAULT GETDATE()
 | GET    | `/api/admin/users`           | List users + roles + allowedCompanies |
 | POST   | `/api/admin/users`           | Create user (bcrypt hash) + company mappings + logs CREATE_USER |
 | PUT    | `/api/admin/users`           | Update user + company mappings + logs UPDATE_USER |
+| DELETE | `/api/admin/users`           | Delete user + cleanup mappings/favorites + logs DELETE_USER |
+| POST   | `/api/admin/users/reset-password` | Admin reset user password (no old pw required) + logs RESET_PASSWORD |
 | GET    | `/api/admin/audit-logs`      | Paginated audit logs + ChangeData JSON (?page=&limit=) |
 | GET    | `/api/admin/roles`           | List roles + user count + assigned reports |
 | POST   | `/api/admin/roles`           | Create role + report mappings    |
@@ -424,7 +428,9 @@ AZURE_CLIENT_SECRET=your-client-secret
 - JWT cookie: `httpOnly`, `sameSite: lax`, `maxAge: 8 ชั่วโมง`
 - Password: bcrypt hash (salt rounds = 10) — hash ตอนสร้าง user ใหม่ด้วย
 - Password change: ต้องยืนยัน password เดิมก่อนเปลี่ยน (bcrypt compare)
+- Admin password reset: admin รีเซ็ตรหัสผ่านให้ user ได้โดยไม่ต้องรู้รหัสเดิม + force re-login (TokenVersion++)
 - SQL: ใช้ parameterized queries ทุกจุดเพื่อป้องกัน SQL Injection
+- **SQL Query Validator** (`src/lib/sql-validator.js`): ตรวจ T-SQL ก่อน execute — block DML/DDL/metadata/procs/remote sources
 - Role-based access: Admin เมนูซ่อนจาก non-admin users ใน Sidebar
 - Multi-company: user เห็นเฉพาะ company ที่ถูก assign ใน `UserCompanyMapping`
 
@@ -593,6 +599,27 @@ curl http://localhost:4000/api/cron/execute-schedules?secret=rc-cron-secret-2026
 - **`env-check.js`** — บังคับครบทุก env var (central DB + company DB + CRON_SECRET + JWT)
 - **`.env.example`** — template สำหรับ dev ใหม่
 
+### SQL Query Validator (`src/lib/sql-validator.js`)
+ตรวจสอบ T-SQL ที่ admin กรอก ก่อน execute บน company DB — ป้องกันการเปลี่ยนแปลง/ดูข้อมูลที่ไม่ควรเข้าถึง
+
+| ประเภท | คำสั่งที่ block |
+|--------|----------------|
+| **DML** | INSERT, UPDATE, DELETE, MERGE, TRUNCATE |
+| **DDL** | CREATE, ALTER, DROP |
+| **Metadata** | INFORMATION_SCHEMA.*, sys.*, sysobjects, syscolumns, master/tempdb/msdb |
+| **Procs** | EXEC/EXECUTE, xp_*, sp_executesql, sp_help*, sp_configure |
+| **Remote** | OPENROWSET, OPENDATASOURCE, OPENQUERY |
+| **Other** | BACKUP, RESTORE, DBCC, WAITFOR DELAY, SELECT INTO, PasswordHash |
+
+**Bypass protection:** Strip SQL comments (`/* */`, `--`) และ string literals ก่อนตรวจสอบ
+
+**Enforcement points (3 จุด):**
+1. `POST /api/reports/execute` — รันรายงานปกติ
+2. `POST /api/reports/execute-async` — รันรายงานหนัก (background)
+3. `GET /api/cron/execute-schedules` — cron job ส่งรายงานอัตโนมัติ
+
+**Audit:** Query ที่ถูก block → บันทึก `BLOCKED_QUERY` ใน ActivityLogs พร้อมชื่อ report + เหตุผล
+
 ### Dynamic Company Database (`CompanyDatabases` table)
 - ตารางใน Central DB: `CompanyId`, `CompanyName`, `CompanyLabel`, `DbUser`, `DbPassword`, `DbServer`, `DbName`, `DbInstance`, `IsActive`
 - `db.js` → `loadCompanyConfigs()` โหลดจาก table + cache ใน memory
@@ -683,6 +710,13 @@ npm run test:watch
 - [x] Query timeout (30s) + Pool config (min:2/max:20) via `.env`
 - [x] Automated tests — Vitest, 20 tests (auth, password-rules, db)
 - [x] Loading skeletons — `LoadingSkeleton` component + 4 `loading.tsx` pages
+- [x] Admin delete user — ลบ user + cleanup mappings/favorites + session invalidation + audit log
+- [x] Admin reset password — รีเซ็ตรหัสผ่านให้ user + force re-login + audit log
+- [x] User management pagination — client-side 10/page + page numbers + filter reset
+- [x] SQL Query Validator — blocklist DML/DDL/metadata/procs + audit log BLOCKED_QUERY
+- [x] Report execution parameter logging — audit trail includes parameter values + ChangeData JSON
+- [x] Roles page UI polish — neutral delete button (red on hover only)
+- [x] Fix: report edit no longer wipes role assignments
 - [ ] Two-factor authentication (2FA)
 - [ ] PDF export support
 
@@ -690,7 +724,7 @@ npm run test:watch
 
 ## 13. Activity Logging
 
-### Logged Actions (16 ActionTypes)
+### Logged Actions (19 ActionTypes)
 
 | ActionType | Endpoint | Notes |
 |------------|----------|-------|
@@ -698,8 +732,8 @@ npm run test:watch
 | `LOGIN_FAIL` | `/api/auth/login` | Failed login (includes IP + username for brute force detection) |
 | `LOGOUT` | `/api/auth/logout` | Before clearing cookie |
 | `CHANGE_PASSWORD` | `/api/auth/change-password` | After successful password change |
-| `EXECUTE_REPORT` | `/api/reports/execute` | On paginated/normal execution |
-| `EXPORT_EXCEL` | `/api/reports/execute` | When `exportAll=true` |
+| `EXECUTE_REPORT` | `/api/reports/execute` | Includes parameter values in details + ChangeData JSON |
+| `EXPORT_EXCEL` | `/api/reports/execute` | When `exportAll=true`, includes parameter values |
 | `CREATE_REPORT` | `/api/admin/reports` POST | After transaction commit |
 | `UPDATE_REPORT` | `/api/admin/reports/[id]` PUT | With `ChangeData` JSON (old→new diff) |
 | `RUN_SCHEDULE` | `/api/admin/schedules` PATCH | Manual trigger |
@@ -710,12 +744,16 @@ npm run test:watch
 | `CRON_FAIL` | `/api/cron/execute-schedules` | Cron job failed (includes error message) |
 | `CREATE_USER` | `/api/admin/users` POST | New user created |
 | `UPDATE_USER` | `/api/admin/users` PUT | User modified |
+| `DELETE_USER` | `/api/admin/users` DELETE | User deleted + cleanup data |
+| `RESET_PASSWORD` | `/api/admin/users/reset-password` POST | Admin reset user password + force re-login |
+| `BLOCKED_QUERY` | `/api/reports/execute*` | Dangerous SQL blocked by validator (includes reason) |
 
 All logging is **non-blocking** (wrapped in try/catch) — logging failure never breaks the main operation.
 
 ### Change Diff Tracking (ChangeData)
 - `UPDATE_REPORT` logs store a `ChangeData` JSON column with full old→new values for every changed field
 - Fields tracked: ชื่อรายงาน, คำอธิบาย, ประเภท, คำสั่ง SQL, Email Template, สาธารณะ, สถานะ, รายงานหนัก
+- `EXECUTE_REPORT` / `EXPORT_EXCEL` logs store parameter values in `ChangeData` JSON: `{ parameters: { @StartDate: '2026-01-01', ... } }`
 - UI: Audit Trail page (👁️ icon) → modal with **line-level diff** (LCS algorithm)
   - Short values: ~~old~~ → new (inline)
   - Long values (SQL): line-by-line diff with red (−removed) / green (+added) highlighting
