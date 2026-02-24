@@ -52,6 +52,12 @@ export async function GET(request) {
         if (!keys.includes('session_idle_timeout_minutes')) {
             seedSettings.push("('session_idle_timeout_minutes', '30', 'ระยะเวลาไม่ใช้งานก่อนออกจากระบบอัตโนมัติ (นาที) — 0 = ปิดใช้งาน')");
         }
+        if (!keys.includes('ldap_enabled')) {
+            seedSettings.push("('ldap_enabled', 'false', 'เปิด/ปิด LDAP Authentication')");
+            seedSettings.push("('ldap_url', '', 'LDAP Server URL เช่น ldap://192.168.1.10')");
+            seedSettings.push("('ldap_domain', '', 'Domain สำหรับ UPN bind เช่น soniclocal.com')");
+            seedSettings.push("('ldap_base_dn', '', 'Base DN สำหรับ search เช่น DC=soniclocal,DC=com')");
+        }
 
         if (seedSettings.length > 0) {
             await pool.request().query(`

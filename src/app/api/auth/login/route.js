@@ -4,6 +4,7 @@ import bcrypt from 'bcryptjs';
 import { connectToCentralDB } from '@/lib/db';
 import { signToken, COOKIE_NAME } from '@/lib/auth';
 import { checkRateLimit, recordFailedAttempt, clearAttempts, configure } from '@/lib/rate-limit';
+import { ldapBind } from '@/lib/ldap';
 
 export async function POST(request) {
     try {
@@ -50,7 +51,7 @@ export async function POST(request) {
         const result = await pool.request()
             .input('Username', sql.NVarChar(50), username)
             .query(`
-                SELECT u.UserId, u.Username, u.PasswordHash, u.FullName, u.CompanyId, u.RoleId, u.IsActive, u.TokenVersion, r.RoleName
+                SELECT u.UserId, u.Username, u.PasswordHash, u.FullName, u.CompanyId, u.RoleId, u.IsActive, u.TokenVersion, u.AuthType, r.RoleName
                 FROM Users u
                 LEFT JOIN Roles r ON u.RoleId = r.RoleId
                 WHERE u.Username = @Username
@@ -80,23 +81,47 @@ export async function POST(request) {
             );
         }
 
-        // Compare password with bcrypt hash
-        const isValid = await bcrypt.compare(password, user.PasswordHash);
-        if (!isValid) {
-            recordFailedAttempt(ip);
-            const remaining = rateCheck.remaining - 1;
-            // Audit: wrong password
-            try {
-                await pool.request()
-                    .input('UserId', sql.Int, user.UserId)
-                    .input('ActionType', sql.NVarChar(50), 'LOGIN_FAIL')
-                    .input('Details', sql.NVarChar(500), `Login ล้มเหลว: username="${username}" IP=${ip} (รหัสผ่านผิด, เหลือ ${remaining} ครั้ง)`)
-                    .query(`INSERT INTO ActivityLogs (UserId, ActionType, Details) VALUES (@UserId, @ActionType, @Details)`);
-            } catch (e) { /* ignore */ }
-            return NextResponse.json(
-                { success: false, message: `Username หรือ Password ไม่ถูกต้อง${remaining <= 2 ? ` (เหลืออีก ${remaining} ครั้ง)` : ''}` },
-                { status: 401 }
-            );
+        // Authenticate based on AuthType
+        const authType = (user.AuthType || 'local').toLowerCase();
+        let isValid = false;
+
+        if (authType === 'ldap') {
+            // LDAP authentication
+            const ldapResult = await ldapBind(username, password);
+            isValid = ldapResult.success;
+            if (!isValid) {
+                recordFailedAttempt(ip);
+                const remaining = rateCheck.remaining - 1;
+                try {
+                    await pool.request()
+                        .input('UserId', sql.Int, user.UserId)
+                        .input('ActionType', sql.NVarChar(50), 'LOGIN_FAIL')
+                        .input('Details', sql.NVarChar(500), `Login AD ล้มเหลว: username="${username}" IP=${ip} (${ldapResult.error || 'รหัสผ่านผิด'})`)
+                        .query(`INSERT INTO ActivityLogs (UserId, ActionType, Details) VALUES (@UserId, @ActionType, @Details)`);
+                } catch (e) { /* ignore */ }
+                return NextResponse.json(
+                    { success: false, message: `${ldapResult.error || 'Username หรือ Password ไม่ถูกต้อง'}${remaining <= 2 ? ` (เหลืออีก ${remaining} ครั้ง)` : ''}` },
+                    { status: 401 }
+                );
+            }
+        } else {
+            // Local authentication (bcrypt)
+            isValid = await bcrypt.compare(password, user.PasswordHash);
+            if (!isValid) {
+                recordFailedAttempt(ip);
+                const remaining = rateCheck.remaining - 1;
+                try {
+                    await pool.request()
+                        .input('UserId', sql.Int, user.UserId)
+                        .input('ActionType', sql.NVarChar(50), 'LOGIN_FAIL')
+                        .input('Details', sql.NVarChar(500), `Login ล้มเหลว: username="${username}" IP=${ip} (รหัสผ่านผิด, เหลือ ${remaining} ครั้ง)`)
+                        .query(`INSERT INTO ActivityLogs (UserId, ActionType, Details) VALUES (@UserId, @ActionType, @Details)`);
+                } catch (e) { /* ignore */ }
+                return NextResponse.json(
+                    { success: false, message: `Username หรือ Password ไม่ถูกต้อง${remaining <= 2 ? ` (เหลืออีก ${remaining} ครั้ง)` : ''}` },
+                    { status: 401 }
+                );
+            }
         }
 
         // Success — clear rate limit

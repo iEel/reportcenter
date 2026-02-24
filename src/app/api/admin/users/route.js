@@ -16,7 +16,8 @@ export async function GET(request) {
 
         // Fetch Users
         const usersResult = await pool.request().query(`
-            SELECT u.UserId, u.Username, u.FullName, u.CompanyId, u.RoleId, r.RoleName, u.IsActive
+            SELECT u.UserId, u.Username, u.FullName, u.CompanyId, u.RoleId, r.RoleName, u.IsActive,
+                   u.AuthType, u.Email, u.EmployeeId, u.ADCompany, u.Department, u.Branch
             FROM Users u
             LEFT JOIN Roles r ON u.RoleId = r.RoleId
             ORDER BY u.UserId DESC
@@ -63,7 +64,7 @@ export async function POST(request) {
         }
 
         const body = await request.json();
-        const { Username, PasswordHash, FullName, CompanyId, RoleId, IsActive, allowedCompanies } = body;
+        const { Username, PasswordHash, FullName, CompanyId, RoleId, IsActive, allowedCompanies, AuthType, Email, EmployeeId, ADCompany, Department, Branch } = body;
 
         if (!Username || !FullName) {
             return NextResponse.json({ success: false, message: "Username and FullName are required" }, { status: 400 });
@@ -79,6 +80,25 @@ export async function POST(request) {
 
         const pool = await connectToCentralDB();
 
+        // Auto-migrate: add new columns if missing
+        try {
+            const cols = await pool.request().query(`SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = 'Users'`);
+            const existing = cols.recordset.map(r => r.COLUMN_NAME);
+            const migrations = [
+                { col: 'AuthType', sql: "ALTER TABLE Users ADD AuthType NVARCHAR(10) DEFAULT 'local'" },
+                { col: 'Email', sql: "ALTER TABLE Users ADD Email NVARCHAR(200) NULL" },
+                { col: 'EmployeeId', sql: "ALTER TABLE Users ADD EmployeeId NVARCHAR(50) NULL" },
+                { col: 'ADCompany', sql: "ALTER TABLE Users ADD ADCompany NVARCHAR(150) NULL" },
+                { col: 'Department', sql: "ALTER TABLE Users ADD Department NVARCHAR(100) NULL" },
+                { col: 'Branch', sql: "ALTER TABLE Users ADD Branch NVARCHAR(100) NULL" },
+            ];
+            for (const m of migrations) {
+                if (!existing.includes(m.col)) {
+                    await pool.request().query(m.sql);
+                }
+            }
+        } catch (e) { console.warn('Auto-migrate Users columns:', e.message); }
+
         // Check if user exists
         const checkResult = await pool.request()
             .input('Username', sql.NVarChar(50), Username)
@@ -88,19 +108,21 @@ export async function POST(request) {
             return NextResponse.json({ success: false, message: "Username already exists" }, { status: 400 });
         }
 
-        // Hash the password with bcrypt before storing
-        const rawPassword = PasswordHash || 'P@ssw0rd123';
+        const isLdap = (AuthType || 'local').toLowerCase() === 'ldap';
+        let hashedPassword = null;
 
-        // Validate password complexity
-        const { valid, errors } = validatePassword(rawPassword);
-        if (!valid) {
-            return NextResponse.json(
-                { success: false, message: 'รหัสผ่านไม่ผ่านเกณฑ์: ' + errors.join(', ') },
-                { status: 400 }
-            );
+        if (!isLdap) {
+            // Local user: hash password
+            const rawPassword = PasswordHash || 'P@ssw0rd123';
+            const { valid, errors } = validatePassword(rawPassword);
+            if (!valid) {
+                return NextResponse.json(
+                    { success: false, message: 'รหัสผ่านไม่ผ่านเกณฑ์: ' + errors.join(', ') },
+                    { status: 400 }
+                );
+            }
+            hashedPassword = await bcrypt.hash(rawPassword, 10);
         }
-
-        const hashedPassword = await bcrypt.hash(rawPassword, 10);
 
         // Insert user
         const insertResult = await pool.request()
@@ -110,10 +132,16 @@ export async function POST(request) {
             .input('CompanyId', sql.Int, CompanyId ? parseInt(CompanyId) : null)
             .input('RoleId', sql.Int, RoleId ? parseInt(RoleId) : null)
             .input('IsActive', sql.Bit, IsActive ? 1 : 0)
+            .input('AuthType', sql.NVarChar(10), isLdap ? 'ldap' : 'local')
+            .input('Email', sql.NVarChar(200), Email || null)
+            .input('EmployeeId', sql.NVarChar(50), EmployeeId || null)
+            .input('ADCompany', sql.NVarChar(150), ADCompany || null)
+            .input('Department', sql.NVarChar(100), Department || null)
+            .input('Branch', sql.NVarChar(100), Branch || null)
             .query(`
-                INSERT INTO Users (Username, PasswordHash, FullName, CompanyId, RoleId, IsActive)
+                INSERT INTO Users (Username, PasswordHash, FullName, CompanyId, RoleId, IsActive, AuthType, Email, EmployeeId, ADCompany, Department, Branch)
                 OUTPUT INSERTED.UserId
-                VALUES (@Username, @PasswordHash, @FullName, @CompanyId, @RoleId, @IsActive)
+                VALUES (@Username, @PasswordHash, @FullName, @CompanyId, @RoleId, @IsActive, @AuthType, @Email, @EmployeeId, @ADCompany, @Department, @Branch)
             `);
 
         const newUserId = insertResult.recordset[0].UserId;
@@ -133,7 +161,7 @@ export async function POST(request) {
             await pool.request()
                 .input('UserId', sql.Int, session.userId)
                 .input('ActionType', sql.NVarChar(50), 'CREATE_USER')
-                .input('Details', sql.NVarChar(500), `สร้างผู้ใช้ "${Username}" (${FullName}), Role: ${RoleId}`)
+                .input('Details', sql.NVarChar(500), `สร้างผู้ใช้ "${Username}" (${FullName}), Role: ${RoleId}, Auth: ${isLdap ? 'LDAP' : 'Local'}`)
                 .query(`INSERT INTO ActivityLogs (UserId, ActionType, Details) VALUES (@UserId, @ActionType, @Details)`);
         } catch (e) { console.warn('Audit log failed:', e.message); }
 

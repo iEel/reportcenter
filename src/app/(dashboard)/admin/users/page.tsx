@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react";
-import { Plus, Search, Edit, Shield, User, Building, RefreshCw, X, Save, Loader2, Check, Eye, EyeOff, UserCheck, UserX, Trash2, KeyRound, ChevronLeft, ChevronRight } from "lucide-react";
+import { Plus, Search, Edit, Shield, User, Building, RefreshCw, X, Save, Loader2, Check, Eye, EyeOff, UserCheck, UserX, Trash2, KeyRound, ChevronLeft, ChevronRight, Link2, Search as SearchIcon } from "lucide-react";
 import { useToast } from "@/components/providers/ToastProvider";
 import { useConfirm } from "@/components/providers/ConfirmProvider";
 
@@ -59,8 +59,19 @@ export default function AdminUsersPage() {
         CompanyId: '',
         RoleId: '',
         IsActive: true,
-        allowedCompanies: [1, 2, 3] as number[]
+        allowedCompanies: [1, 2, 3] as number[],
+        AuthType: 'local',
+        Email: '',
+        EmployeeId: '',
+        ADCompany: '',
+        Department: '',
+        Branch: '',
     });
+
+    // AD Lookup
+    const [isAdUser, setIsAdUser] = useState(false);
+    const [isLookingUp, setIsLookingUp] = useState(false);
+    const [adLookupError, setAdLookupError] = useState('');
 
     const fetchUsersAndRoles = async () => {
         setIsLoading(true);
@@ -84,10 +95,14 @@ export default function AdminUsersPage() {
     const handleOpenAddModal = () => {
         setEditMode(false);
         setShowPassword(false);
+        setIsAdUser(false);
+        setAdLookupError('');
         setFormData({
             UserId: '', Username: '', PasswordHash: '',
             FullName: '', CompanyId: '', RoleId: '',
-            IsActive: true, allowedCompanies: [1, 2, 3]
+            IsActive: true, allowedCompanies: [1, 2, 3],
+            AuthType: 'local', Email: '', EmployeeId: '',
+            ADCompany: '', Department: '', Branch: '',
         });
         setIsModalOpen(true);
     };
@@ -95,6 +110,9 @@ export default function AdminUsersPage() {
     const handleOpenEditModal = (user: any) => {
         setEditMode(true);
         setShowPassword(false);
+        const isAd = (user.AuthType || 'local').toLowerCase() === 'ldap';
+        setIsAdUser(isAd);
+        setAdLookupError('');
         setFormData({
             UserId: user.UserId,
             Username: user.Username,
@@ -103,7 +121,13 @@ export default function AdminUsersPage() {
             CompanyId: user.CompanyId ? user.CompanyId.toString() : '',
             RoleId: user.RoleId ? user.RoleId.toString() : '',
             IsActive: user.IsActive,
-            allowedCompanies: user.allowedCompanies || []
+            allowedCompanies: user.allowedCompanies || [],
+            AuthType: user.AuthType || 'local',
+            Email: user.Email || '',
+            EmployeeId: user.EmployeeId || '',
+            ADCompany: user.ADCompany || '',
+            Department: user.Department || '',
+            Branch: user.Branch || '',
         });
         setIsModalOpen(true);
     };
@@ -115,6 +139,36 @@ export default function AdminUsersPage() {
                 ? prev.allowedCompanies.filter(c => c !== cid)
                 : [...prev.allowedCompanies, cid].sort((a, b) => a - b)
         }));
+    };
+
+    const handleAdLookup = async () => {
+        if (!formData.Username.trim()) {
+            setAdLookupError('กรุณากรอก AD Username ก่อน');
+            return;
+        }
+        setIsLookingUp(true);
+        setAdLookupError('');
+        try {
+            const res = await fetch(`/api/admin/users/lookup-ad?username=${encodeURIComponent(formData.Username.trim())}`);
+            const data = await res.json();
+            if (data.success) {
+                setFormData(prev => ({
+                    ...prev,
+                    FullName: data.fullName || prev.FullName,
+                    Email: data.email || '',
+                    EmployeeId: data.employeeId || '',
+                    ADCompany: data.company || '',
+                    Department: data.department || '',
+                    Branch: data.branch || '',
+                }));
+            } else {
+                setAdLookupError(data.error || 'ไม่พบ user ใน AD');
+            }
+        } catch {
+            setAdLookupError('ไม่สามารถเชื่อมต่อกับเซิร์ฟเวอร์ได้');
+        } finally {
+            setIsLookingUp(false);
+        }
     };
 
     const handleSaveUser = async () => {
@@ -509,8 +563,8 @@ export default function AdminUsersPage() {
                                             key={p}
                                             onClick={() => setCurrentPage(p)}
                                             className={`w-8 h-8 rounded-lg text-xs font-medium transition-all ${p === safePage
-                                                    ? 'bg-blue-600 text-white shadow-sm'
-                                                    : 'text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700'
+                                                ? 'bg-blue-600 text-white shadow-sm'
+                                                : 'text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700'
                                                 }`}
                                         >
                                             {p}
@@ -549,6 +603,27 @@ export default function AdminUsersPage() {
                             {/* Modal Body */}
                             <div className="p-6 space-y-5 overflow-y-auto flex-1">
 
+                                {/* AD Toggle (only for new users) */}
+                                {!editMode && (
+                                    <div className="flex items-center justify-between p-3 bg-indigo-50 dark:bg-indigo-900/20 border border-indigo-200 dark:border-indigo-800 rounded-xl">
+                                        <div className="flex items-center gap-2">
+                                            <Link2 className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+                                            <span className="text-sm font-medium text-indigo-700 dark:text-indigo-300">บัญชี AD (Active Directory)</span>
+                                        </div>
+                                        <button
+                                            onClick={() => {
+                                                const newVal = !isAdUser;
+                                                setIsAdUser(newVal);
+                                                setFormData(prev => ({ ...prev, AuthType: newVal ? 'ldap' : 'local', Email: '', EmployeeId: '', ADCompany: '', Department: '', Branch: '' }));
+                                                setAdLookupError('');
+                                            }}
+                                            className={`relative w-11 h-6 rounded-full transition-colors duration-200 ${isAdUser ? 'bg-indigo-600' : 'bg-slate-300 dark:bg-slate-600'}`}
+                                        >
+                                            <div className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow-md transition-transform duration-200 ${isAdUser ? 'translate-x-5.5 left-auto right-0.5' : 'left-0.5'}`} />
+                                        </button>
+                                    </div>
+                                )}
+
                                 {/* Section: Account */}
                                 <div>
                                     <h4 className="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-3">ข้อมูลบัญชี</h4>
@@ -556,30 +631,99 @@ export default function AdminUsersPage() {
                                         {!editMode && (
                                             <div>
                                                 <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                                                    Username <span className="text-red-500">*</span>
+                                                    {isAdUser ? 'AD Username' : 'Username'} <span className="text-red-500">*</span>
+                                                </label>
+                                                <div className={isAdUser ? 'flex gap-2' : ''}>
+                                                    <input
+                                                        type="text"
+                                                        value={formData.Username}
+                                                        onChange={e => setFormData({ ...formData, Username: e.target.value })}
+                                                        className={`${isAdUser ? 'flex-1' : 'w-full'} px-3 py-2.5 border border-slate-200 dark:border-slate-600 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 bg-white dark:bg-slate-700 dark:text-white text-sm`}
+                                                        placeholder={isAdUser ? 'เช่น veerapon.l' : 'เช่น jsmith'}
+                                                        onKeyDown={e => { if (isAdUser && e.key === 'Enter') { e.preventDefault(); handleAdLookup(); } }}
+                                                    />
+                                                    {isAdUser && (
+                                                        <button
+                                                            type="button"
+                                                            onClick={handleAdLookup}
+                                                            disabled={isLookingUp}
+                                                            className="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-sm font-medium transition-all active:scale-95 disabled:opacity-70 flex items-center gap-1.5 whitespace-nowrap shadow-md shadow-indigo-500/20"
+                                                        >
+                                                            {isLookingUp ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
+                                                            {isLookingUp ? 'ค้นหา...' : '🔍 ค้นหา'}
+                                                        </button>
+                                                    )}
+                                                </div>
+                                                {isAdUser && (
+                                                    <p className="text-xs text-slate-400 mt-1">ใช้ชื่อ login ไม่ต้องใส่ @domain</p>
+                                                )}
+                                                {adLookupError && (
+                                                    <p className="text-xs text-red-500 mt-1">❌ {adLookupError}</p>
+                                                )}
+                                            </div>
+                                        )}
+
+                                        {/* AD Info Display (read-only) */}
+                                        {isAdUser && formData.FullName && (
+                                            <div className="p-3 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-xl space-y-1.5">
+                                                <p className="text-xs font-bold text-green-700 dark:text-green-400 uppercase tracking-wider mb-2">ข้อมูลจาก Active Directory</p>
+                                                <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-sm">
+                                                    <div>
+                                                        <span className="text-slate-500 dark:text-slate-400 text-xs">ชื่อ-นามสกุล:</span>
+                                                        <p className="font-medium text-slate-800 dark:text-white">{formData.FullName}</p>
+                                                    </div>
+                                                    {formData.Email && (
+                                                        <div>
+                                                            <span className="text-slate-500 dark:text-slate-400 text-xs">Email:</span>
+                                                            <p className="font-medium text-slate-800 dark:text-white">{formData.Email}</p>
+                                                        </div>
+                                                    )}
+                                                    {formData.EmployeeId && (
+                                                        <div>
+                                                            <span className="text-slate-500 dark:text-slate-400 text-xs">รหัสพนักงาน:</span>
+                                                            <p className="font-medium text-slate-800 dark:text-white">{formData.EmployeeId}</p>
+                                                        </div>
+                                                    )}
+                                                    {formData.ADCompany && (
+                                                        <div>
+                                                            <span className="text-slate-500 dark:text-slate-400 text-xs">บริษัท:</span>
+                                                            <p className="font-medium text-slate-800 dark:text-white">{formData.ADCompany}</p>
+                                                        </div>
+                                                    )}
+                                                    {formData.Department && (
+                                                        <div>
+                                                            <span className="text-slate-500 dark:text-slate-400 text-xs">แผนก:</span>
+                                                            <p className="font-medium text-slate-800 dark:text-white">{formData.Department}</p>
+                                                        </div>
+                                                    )}
+                                                    {formData.Branch && (
+                                                        <div>
+                                                            <span className="text-slate-500 dark:text-slate-400 text-xs">สาขา:</span>
+                                                            <p className="font-medium text-slate-800 dark:text-white">{formData.Branch}</p>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        )}
+
+                                        {/* FullName (editable only for local users) */}
+                                        {!isAdUser && (
+                                            <div>
+                                                <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                                                    ชื่อ-นามสกุล <span className="text-red-500">*</span>
                                                 </label>
                                                 <input
                                                     type="text"
-                                                    value={formData.Username}
-                                                    onChange={e => setFormData({ ...formData, Username: e.target.value })}
+                                                    value={formData.FullName}
+                                                    onChange={e => setFormData({ ...formData, FullName: e.target.value })}
                                                     className="w-full px-3 py-2.5 border border-slate-200 dark:border-slate-600 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 bg-white dark:bg-slate-700 dark:text-white text-sm"
-                                                    placeholder="เช่น jsmith"
+                                                    placeholder="เช่น John Smith"
                                                 />
                                             </div>
                                         )}
-                                        <div>
-                                            <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                                                ชื่อ-นามสกุล <span className="text-red-500">*</span>
-                                            </label>
-                                            <input
-                                                type="text"
-                                                value={formData.FullName}
-                                                onChange={e => setFormData({ ...formData, FullName: e.target.value })}
-                                                className="w-full px-3 py-2.5 border border-slate-200 dark:border-slate-600 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 bg-white dark:bg-slate-700 dark:text-white text-sm"
-                                                placeholder="เช่น John Smith"
-                                            />
-                                        </div>
-                                        {!editMode && (
+
+                                        {/* Password (only for local users, new only) */}
+                                        {!editMode && !isAdUser && (
                                             <div>
                                                 <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">รหัสผ่านเริ่มต้น</label>
                                                 <div className="relative">

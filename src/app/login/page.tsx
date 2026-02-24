@@ -180,6 +180,10 @@ export default function LoginPage() {
                             )}
                         </button>
                     </form>
+
+                    <p className="text-center text-blue-300/40 text-xs mt-4">
+                        พนักงาน Sonic Group ใช้ AD Account ได้ (ติดต่อ admin เพื่อเปิดสิทธิ์)
+                    </p>
                 </div>
 
                 <p className="text-center text-white/20 text-xs mt-6">
