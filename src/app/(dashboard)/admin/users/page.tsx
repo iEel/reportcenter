@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react";
-import { Plus, Search, Edit, Shield, User, Building, RefreshCw, X, Save, Loader2, Check, Eye, EyeOff, UserCheck, UserX } from "lucide-react";
+import { Plus, Search, Edit, Shield, User, Building, RefreshCw, X, Save, Loader2, Check, Eye, EyeOff, UserCheck, UserX, Trash2 } from "lucide-react";
 import { useToast } from "@/components/providers/ToastProvider";
 import { useConfirm } from "@/components/providers/ConfirmProvider";
 
@@ -187,6 +187,29 @@ export default function AdminUsersPage() {
     const getAvatarColor = (name: string) => {
         const idx = (name?.charCodeAt(0) || 0) % avatarColors.length;
         return avatarColors[idx];
+    };
+
+    const handleDeleteUser = async (user: any) => {
+        const ok = await confirm({
+            title: 'ลบผู้ใช้',
+            message: `คุณต้องการลบผู้ใช้ "${user.FullName}" (@${user.Username}) ออกจากระบบหรือไม่?\n\nข้อมูลการตั้งค่าและสิทธิ์ของผู้ใช้จะถูกลบทั้งหมด การกระทำนี้ไม่สามารถย้อนกลับได้`,
+            confirmLabel: 'ลบผู้ใช้',
+            variant: 'danger',
+        });
+        if (!ok) return;
+
+        try {
+            const res = await fetch(`/api/admin/users?userId=${user.UserId}`, { method: 'DELETE' });
+            const data = await res.json();
+            if (data.success) {
+                toast('ลบผู้ใช้สำเร็จ', 'success');
+                fetchUsersAndRoles();
+            } else {
+                toast(data.message || 'เกิดข้อผิดพลาด', 'error');
+            }
+        } catch {
+            toast('ไม่สามารถเชื่อมต่อเซิร์ฟเวอร์ได้', 'error');
+        }
     };
 
     const filteredUsers = users.filter(u => {
@@ -378,13 +401,22 @@ export default function AdminUsersPage() {
                                         </button>
                                     </td>
                                     <td className="px-6 py-4 text-right">
-                                        <button
-                                            onClick={() => handleOpenEditModal(user)}
-                                            className="p-2 bg-blue-50 dark:bg-blue-900/30 hover:bg-blue-100 dark:hover:bg-blue-900/50 text-blue-600 dark:text-blue-400 rounded-lg transition-colors"
-                                            title="แก้ไข"
-                                        >
-                                            <Edit className="w-4 h-4" />
-                                        </button>
+                                        <div className="flex items-center justify-end gap-1.5">
+                                            <button
+                                                onClick={() => handleOpenEditModal(user)}
+                                                className="p-2 bg-blue-50 dark:bg-blue-900/30 hover:bg-blue-100 dark:hover:bg-blue-900/50 text-blue-600 dark:text-blue-400 rounded-lg transition-colors"
+                                                title="แก้ไข"
+                                            >
+                                                <Edit className="w-4 h-4" />
+                                            </button>
+                                            <button
+                                                onClick={() => handleDeleteUser(user)}
+                                                className="p-2 bg-red-50 dark:bg-red-900/20 hover:bg-red-100 dark:hover:bg-red-900/40 text-red-500 dark:text-red-400 rounded-lg transition-colors opacity-0 group-hover:opacity-100"
+                                                title="ลบผู้ใช้"
+                                            >
+                                                <Trash2 className="w-4 h-4" />
+                                            </button>
+                                        </div>
                                     </td>
                                 </tr>
                             ))}

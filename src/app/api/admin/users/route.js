@@ -213,3 +213,68 @@ export async function PUT(request) {
         return NextResponse.json({ success: false, message: "Internal Server Error" }, { status: 500 });
     }
 }
+
+export async function DELETE(request) {
+    try {
+        const session = await getSession(request);
+        if (!session || session.roleName?.toLowerCase() !== 'admin') {
+            return NextResponse.json({ success: false, message: 'Forbidden' }, { status: 403 });
+        }
+
+        const { searchParams } = new URL(request.url);
+        const userId = searchParams.get('userId');
+
+        if (!userId) {
+            return NextResponse.json({ success: false, message: 'userId is required' }, { status: 400 });
+        }
+
+        const uid = parseInt(userId);
+
+        // Prevent self-delete
+        if (uid === session.userId) {
+            return NextResponse.json({ success: false, message: 'ไม่สามารถลบบัญชีตัวเองได้' }, { status: 400 });
+        }
+
+        const pool = await connectToCentralDB();
+
+        // Get user info for audit log
+        const userResult = await pool.request()
+            .input('UserId', sql.Int, uid)
+            .query('SELECT Username, FullName FROM Users WHERE UserId = @UserId');
+
+        if (userResult.recordset.length === 0) {
+            return NextResponse.json({ success: false, message: 'ไม่พบผู้ใช้นี้' }, { status: 404 });
+        }
+
+        const targetUser = userResult.recordset[0];
+
+        // Delete related data first
+        await pool.request().input('UserId', sql.Int, uid)
+            .query('DELETE FROM UserCompanyMapping WHERE UserId = @UserId');
+
+        await pool.request().input('UserId', sql.Int, uid)
+            .query('DELETE FROM UserFavorites WHERE UserId = @UserId');
+
+        // Delete the user
+        await pool.request().input('UserId', sql.Int, uid)
+            .query('DELETE FROM Users WHERE UserId = @UserId');
+
+        // Invalidate session cache
+        invalidateSessionCache(uid);
+
+        // Audit log
+        try {
+            await pool.request()
+                .input('LogUserId', sql.Int, session.userId)
+                .input('ActionType', sql.NVarChar(50), 'DELETE_USER')
+                .input('Details', sql.NVarChar(500), `ลบผู้ใช้ #${uid} "${targetUser.FullName}" (${targetUser.Username})`)
+                .query(`INSERT INTO ActivityLogs (UserId, ActionType, Details) VALUES (@LogUserId, @ActionType, @Details)`);
+        } catch (e) { console.warn('Audit log failed:', e.message); }
+
+        return NextResponse.json({ success: true, message: 'ลบผู้ใช้สำเร็จ' });
+
+    } catch (error) {
+        console.error("Error deleting user:", error);
+        return NextResponse.json({ success: false, message: "Internal Server Error" }, { status: 500 });
+    }
+}
