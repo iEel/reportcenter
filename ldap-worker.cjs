@@ -263,7 +263,7 @@ async function doTest(config) {
 (async () => {
     try {
         const action = process.argv[2];
-        const args = JSON.parse(process.argv[3] || '{}');
+        const args = JSON.parse(Buffer.from(process.argv[3] || '', 'base64').toString('utf-8') || '{}');
 
         let result;
         switch (action) {

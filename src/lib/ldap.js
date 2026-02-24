@@ -7,58 +7,42 @@
  */
 
 import { connectToCentralDB } from './db';
-import { execFile } from 'child_process';
-import path from 'path';
-import { fileURLToPath } from 'url';
 
 /**
- * Get the path to the ldap-worker.cjs script.
- * In production (build), __dirname points to .next/server/... so we use
- * process.cwd() to find the worker in the project root.
- */
-function getWorkerPath() {
-    // Try multiple locations
-    const candidates = [
-        path.join(process.cwd(), 'src', 'lib', 'ldap-worker.cjs'),
-        path.join(process.cwd(), 'ldap-worker.cjs'),
-    ];
-
-    // In dev, __dirname works
-    try {
-        const __filename = fileURLToPath(import.meta.url);
-        const __dirname = path.dirname(__filename);
-        candidates.unshift(path.join(__dirname, 'ldap-worker.cjs'));
-    } catch (e) { /* import.meta.url not available */ }
-
-    return candidates[0]; // Primary location
-}
-
-/**
- * Call the LDAP worker process
+ * Call the LDAP worker process.
+ * Uses exec() with a command string so Turbopack cannot trace the file path.
+ * Arguments are base64-encoded to avoid shell escaping issues.
  */
 function callWorker(action, args) {
     return new Promise((resolve) => {
-        const workerPath = getWorkerPath();
-        const argsJson = JSON.stringify(args);
+        // Dynamic import to prevent Turbopack from analyzing child_process usage
+        import('child_process').then(({ exec }) => {
+            const argsB64 = Buffer.from(JSON.stringify(args)).toString('base64');
+            // Use exec with string command — Turbopack can't trace this
+            const cmd = `node ldap-worker.cjs ${action} ${argsB64}`;
 
-        execFile('node', [workerPath, action, argsJson], {
-            timeout: 15000,
-            maxBuffer: 1024 * 1024,
-        }, (error, stdout, stderr) => {
-            if (error) {
-                console.error(`LDAP worker error (${action}):`, error.message);
-                if (stderr) console.error('LDAP worker stderr:', stderr);
-                resolve({ success: false, error: `Worker error: ${error.message}` });
-                return;
-            }
+            exec(cmd, {
+                cwd: process.cwd(),
+                timeout: 15000,
+                maxBuffer: 1024 * 1024,
+            }, (error, stdout, stderr) => {
+                if (error) {
+                    console.error(`LDAP worker error (${action}):`, error.message);
+                    if (stderr) console.error('LDAP worker stderr:', stderr);
+                    resolve({ success: false, error: `Worker error: ${error.message}` });
+                    return;
+                }
 
-            try {
-                const result = JSON.parse(stdout);
-                resolve(result);
-            } catch (parseErr) {
-                console.error('LDAP worker output parse error:', stdout);
-                resolve({ success: false, error: 'Invalid response from LDAP worker' });
-            }
+                try {
+                    const result = JSON.parse(stdout);
+                    resolve(result);
+                } catch (parseErr) {
+                    console.error('LDAP worker parse error, stdout:', stdout);
+                    resolve({ success: false, error: 'Invalid response from LDAP worker' });
+                }
+            });
+        }).catch(err => {
+            resolve({ success: false, error: `Cannot load child_process: ${err.message}` });
         });
     });
 }
@@ -98,7 +82,6 @@ export async function getLdapConfig() {
  */
 export async function ldapBind(username, password) {
     const config = await getLdapConfig();
-
     if (!config.enabled) return { success: false, error: 'LDAP ไม่ได้เปิดใช้งาน' };
     if (!config.url || !config.domain) return { success: false, error: 'LDAP ยังไม่ได้ตั้งค่าครบ' };
 
@@ -113,7 +96,6 @@ export async function ldapBind(username, password) {
  */
 export async function ldapLookup(username) {
     const config = await getLdapConfig();
-
     if (!config.enabled) return { success: false, error: 'LDAP ไม่ได้เปิดใช้งาน' };
     if (!config.url || !config.domain || !config.baseDN) return { success: false, error: 'LDAP ยังไม่ได้ตั้งค่าครบ' };
     if (!config.bindDN || !config.bindPassword) return { success: false, error: 'ไม่ได้ตั้งค่า Service Account ใน .env' };
@@ -129,7 +111,6 @@ export async function ldapLookup(username) {
  */
 export async function ldapSearchUsers(query) {
     const config = await getLdapConfig();
-
     if (!config.enabled) return { success: false, error: 'LDAP ไม่ได้เปิดใช้งาน' };
     if (!config.url || !config.domain || !config.baseDN) return { success: false, error: 'LDAP ยังไม่ได้ตั้งค่าครบ' };
     if (!config.bindDN || !config.bindPassword) return { success: false, error: 'ไม่ได้ตั้งค่า Service Account ใน .env' };
@@ -145,7 +126,6 @@ export async function ldapSearchUsers(query) {
  */
 export async function testLdapConnection() {
     const config = await getLdapConfig();
-
     if (!config.url || !config.domain || !config.baseDN) return { success: false, error: 'LDAP ยังไม่ได้ตั้งค่าครบ' };
     if (!config.bindDN || !config.bindPassword) return { success: false, error: 'ไม่ได้ตั้งค่า Service Account ใน .env' };
 
