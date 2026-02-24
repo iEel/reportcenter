@@ -1,7 +1,7 @@
 # ReportCenter — Developer Handoff
 
-> **Version:** 6.0  
-> **Last Updated:** 2026-02-24  
+> **Version:** 7.0  
+> **Last Updated:** 2026-02-25  
 > **Tech Stack:** Next.js 16.1.6 + React 19 + Tailwind CSS 4 + MSSQL (mssql driver) + Microsoft Graph API (OAuth2) / Nodemailer (SMTP fallback) + @azure/msal-node
 
 ---
@@ -33,7 +33,8 @@ npm run build && npm start
 
 ```
 reportcenter/
-├── .env.local                           # Environment variables (DB creds, JWT secret)
+├── .env.local                           # Environment variables (DB creds, JWT secret, LDAP)
+├── next.config.ts                       # Next.js config (serverExternalPackages: ldapjs)
 ├── src/
 │   ├── app/
 │   │   ├── layout.tsx                    # Root layout (HTML/Body only)
@@ -49,7 +50,7 @@ reportcenter/
 │   │   │   │   │   ├── page.tsx          # Manage Reports list (search/filter)
 │   │   │   │   │   ├── new/page.tsx      # Create new report
 │   │   │   │   │   └── [id]/edit/page.tsx # Edit existing report
-│   │   │   │   ├── users/page.tsx        # Manage Users (search/filter/stats/pagination/delete/reset-pw)
+│   │   │   │   ├── users/page.tsx        # Manage Users + AD autocomplete (search/filter/stats/pagination/delete/reset-pw)
 │   │   │   │   ├── roles/page.tsx        # Manage Roles + Report access assignment
 │   │   │   │   ├── audit-logs/page.tsx   # Audit Log Viewer (paginated)
 │   │   │   │   ├── schedules/page.tsx    # Scheduled Reports (create/edit/toggle/delete)
@@ -69,12 +70,14 @@ reportcenter/
 │   │       │   ├── reports/
 │   │       │   │   ├── route.js          # GET: list, POST: create
 │   │       │   │   └── [id]/route.js     # GET/PUT/DELETE single report
-│   │       │   ├── users/route.js        # GET/POST/PUT/DELETE users & roles + company mappings
+│   │       │   ├── users/route.js        # GET/POST/PUT/DELETE users & roles + company mappings (AD/local)
+│   │       │   ├── users/lookup-ad/route.js # GET: AD user lookup + wildcard search (autocomplete)
 │   │       │   ├── users/reset-password/route.js # POST: admin reset user password
 │   │       │   ├── roles/route.js        # GET/POST/PUT/DELETE roles + ReportRoleMapping
 │   │       │   ├── audit-logs/route.js   # GET: paginated audit logs
 │   │       │   ├── schedules/route.js    # GET/POST/PUT/DELETE schedules
-│   │       │   └── settings/route.js     # GET/PUT system settings
+│   │       │   ├── settings/route.js     # GET/PUT system settings
+│   │       │   └── settings/test-ldap/route.js # POST: test LDAP connection
 │   │       ├── cron/
 │   │       │   └── execute-schedules/route.js # GET: cron endpoint (runs due reports → email)
 │   │       ├── settings/
@@ -103,6 +106,7 @@ reportcenter/
 │   │   ├── auth.js                       # JWT sign/verify (jose) + getSession()
 │   │   ├── db.js                         # MSSQL connection pool manager
 │   │   ├── email.js                      # Email sender (Microsoft Graph API primary + SMTP password fallback)
+│   │   ├── ldap.js                       # LDAP/AD integration (bind, lookup, search, test)
 │   │   ├── sql-validator.js              # SQL query security validator (blocklist DML/DDL/metadata/procs)
 │   │   └── dateUtils.ts                  # Date/time utilities (Asia/Bangkok, 24h)
 │   └── middleware.ts                     # Route protection (JWT check)
@@ -123,11 +127,17 @@ reportcenter/
 ### Authentication Flow
 
 ```
-User → /login → POST /api/auth/login
-                    ↓ bcrypt compare
-                    ↓ signToken(jose) → payload: { userId, username, roleId, roleName, allowedCompanies }
-                    ↓ Set cookie "rc_token" (httpOnly, 8h)
-                    ↓ redirect to /
+Local User → /login → POST /api/auth/login
+                          ↓ bcrypt compare
+                          ↓ signToken(jose) → payload: { userId, username, roleId, roleName, allowedCompanies }
+                          ↓ Set cookie "rc_token" (httpOnly, 8h)
+                          ↓ redirect to /
+
+AD User → /login → POST /api/auth/login
+                       ↓ Check AuthType = 'ldap'
+                       ↓ ldapBind(username, password) → LDAP bind with UPN
+                       ↓ signToken(jose) → same JWT payload
+                       ↓ Set cookie + redirect
 
 Every request → middleware.ts
                     ↓ Read cookie → jwtVerify
@@ -173,7 +183,7 @@ UserCompanyMapping (UserId, CompanyId)
 | Table                | Purpose                                      |
 |----------------------|----------------------------------------------|
 | `Roles`              | Role definitions (Admin, Sales, Accountant)  |
-| `Users`              | User accounts with PasswordHash, RoleId      |
+| `Users`              | User accounts (local + AD) with AuthType     |
 | `Reports`            | Report definitions with T-SQL query          |
 | `ReportParameters`   | Dynamic parameters (date, text, number)      |
 | `ReportRoleMapping`  | Many-to-many: which roles can see which report |
@@ -181,15 +191,23 @@ UserCompanyMapping (UserId, CompanyId)
 | `ActivityLogs`       | Audit trail: all system actions + change diff (ChangeData JSON) |
 | `UserFavorites`      | User's pinned/favorite reports (auto-created) |
 | `Notifications`      | In-app notification messages (auto-created)  |
-| `SystemSettings`     | Key-value config (company names, app settings)|
+| `SystemSettings`     | Key-value config (company names, LDAP settings)|
 | `ReportSchedules`    | Scheduled report runs + email config (auto-created) |
 
 ### Key Columns
 
 ```sql
--- Users
+-- Users (supports local + AD authentication)
 UserId INT PK, Username NVARCHAR(50) UNIQUE, PasswordHash NVARCHAR(255),
-FullName NVARCHAR(150), CompanyId INT, RoleId INT FK, IsActive BIT
+FullName NVARCHAR(150), CompanyId INT, RoleId INT FK, IsActive BIT,
+AuthType NVARCHAR(10) DEFAULT 'local',  -- 'local' or 'ldap'
+Email NVARCHAR(200) NULL,               -- from AD
+EmployeeId NVARCHAR(50) NULL,           -- from AD
+ADCompany NVARCHAR(150) NULL,           -- from AD
+Department NVARCHAR(100) NULL,          -- from AD
+Branch NVARCHAR(100) NULL               -- from AD
+-- AD users: PasswordHash = 'LDAP_AUTH' (placeholder, never used for auth)
+-- AD columns are auto-migrated if missing
 
 -- Reports
 ReportId INT PK, ReportName NVARCHAR(200), Description NVARCHAR(500),
@@ -258,10 +276,11 @@ CreatedAt DATETIME DEFAULT GETDATE()
 | GET    | `/api/admin/reports/[id]`    | Get single report + roles         |
 | PUT    | `/api/admin/reports/[id]`    | Update report + roles             |
 | DELETE | `/api/admin/reports/[id]`    | Soft-delete (IsActive=0)          |
-| GET    | `/api/admin/users`           | List users + roles + allowedCompanies |
-| POST   | `/api/admin/users`           | Create user (bcrypt hash) + company mappings + logs CREATE_USER |
+| GET    | `/api/admin/users`           | List users + roles + allowedCompanies + AD info |
+| POST   | `/api/admin/users`           | Create user (local bcrypt / AD LDAP_AUTH) + company mappings + logs CREATE_USER |
 | PUT    | `/api/admin/users`           | Update user + company mappings + logs UPDATE_USER |
 | DELETE | `/api/admin/users`           | Delete user + cleanup mappings/favorites + logs DELETE_USER |
+| GET    | `/api/admin/users/lookup-ad` | AD lookup (`?username=exact`) or search (`?search=wildcard`) for autocomplete |
 | POST   | `/api/admin/users/reset-password` | Admin reset user password (no old pw required) + logs RESET_PASSWORD |
 | GET    | `/api/admin/audit-logs`      | Paginated audit logs + ChangeData JSON (?page=&limit=) |
 | GET    | `/api/admin/roles`           | List roles + user count + assigned reports |
@@ -275,6 +294,7 @@ CreatedAt DATETIME DEFAULT GETDATE()
 | PATCH  | `/api/admin/schedules`       | Manual trigger: run schedule immediately → email |
 | GET    | `/api/admin/settings`        | Get all settings                  |
 | PUT    | `/api/admin/settings`        | Update settings                   |
+| POST   | `/api/admin/settings/test-ldap` | Test LDAP connection using service account |
 
 ### Notifications
 
@@ -349,6 +369,10 @@ CRON_SECRET=rc-cron-secret-2026
 AZURE_TENANT_ID=your-tenant-id
 AZURE_CLIENT_ID=your-client-id
 AZURE_CLIENT_SECRET=your-client-secret
+
+# LDAP Service Account (required for AD user lookup/search)
+LDAP_BIND_DN=CN=ServiceAccount,OU=ServiceAccounts,DC=soniclocal,DC=com
+LDAP_BIND_PASSWORD=your-service-account-password
 ```
 
 > ⚠️ ไฟล์ `.env.local` ถูก `.gitignore` อยู่แล้ว — ค่า default ยังมี fallback ใน `db.js` สำหรับ dev environment
@@ -364,11 +388,14 @@ AZURE_CLIENT_SECRET=your-client-secret
 | `mssql`    | 12.2.0  | MSSQL database driver            |
 | `bcryptjs` | latest  | Password hashing                 |
 | `jose`     | latest  | JWT token sign/verify            |
+| `ldapjs`   | 3.0.7   | LDAP/AD authentication + user search |
 | `xlsx`     | 0.18.5  | Excel export                     |
 | `nodemailer` | latest | SMTP email sending (OAuth2 XOAUTH2 / password) |
 | `@azure/msal-node` | latest | Azure AD OAuth2 token acquisition |
 | `lucide-react` | latest | Icon library                 |
 | `@dnd-kit` | latest  | Drag and drop (template builder) |
+
+> ⚠️ **`ldapjs` ต้อง externalize** — ใน `next.config.ts` ตั้ง `serverExternalPackages: ['ldapjs']` เพื่อป้องกัน Turbopack bundle ldapjs (จะทำให้ BER parser ภายในเสียหาย)
 
 ---
 
@@ -430,6 +457,7 @@ AZURE_CLIENT_SECRET=your-client-secret
 ### Security
 - JWT cookie: `httpOnly`, `sameSite: lax`, `maxAge: 8 ชั่วโมง`
 - Password: bcrypt hash (salt rounds = 10) — hash ตอนสร้าง user ใหม่ด้วย
+- **AD users**: authenticate ผ่าน LDAP bind — PasswordHash = `'LDAP_AUTH'` (placeholder, ไม่ใช้สำหรับ auth)
 - Password change: ต้องยืนยัน password เดิมก่อนเปลี่ยน (bcrypt compare)
 - Admin password reset: admin รีเซ็ตรหัสผ่านให้ user ได้โดยไม่ต้องรู้รหัสเดิม + force re-login (TokenVersion++)
 - SQL: ใช้ parameterized queries ทุกจุดเพื่อป้องกัน SQL Injection
@@ -722,6 +750,9 @@ npm run test:watch
 - [x] Report execution parameter logging — audit trail includes parameter values + ChangeData JSON
 - [x] Roles page UI polish — neutral delete button (red on hover only)
 - [x] Fix: report edit no longer wipes role assignments
+- [x] Active Directory (LDAP) integration — AD user bind, lookup, wildcard autocomplete search
+- [x] Add User modal UI overhaul — gradient header, section badges, AD info card, autocomplete dropdown
+- [x] Turbopack + ldapjs fix — `serverExternalPackages` to prevent BER parser corruption
 - [ ] Two-factor authentication (2FA)
 - [ ] PDF export support
 
