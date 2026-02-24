@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react";
-import { Plus, Search, Edit, Shield, User, Building, RefreshCw, X, Save, Loader2, Check, Eye, EyeOff, UserCheck, UserX, Trash2, KeyRound } from "lucide-react";
+import { Plus, Search, Edit, Shield, User, Building, RefreshCw, X, Save, Loader2, Check, Eye, EyeOff, UserCheck, UserX, Trash2, KeyRound, ChevronLeft, ChevronRight } from "lucide-react";
 import { useToast } from "@/components/providers/ToastProvider";
 import { useConfirm } from "@/components/providers/ConfirmProvider";
 
@@ -35,6 +35,8 @@ export default function AdminUsersPage() {
     const [searchQuery, setSearchQuery] = useState('');
     const [filterRole, setFilterRole] = useState('');
     const [filterStatus, setFilterStatus] = useState('');
+    const [currentPage, setCurrentPage] = useState(1);
+    const perPage = 10;
 
     // Modal
     const [isModalOpen, setIsModalOpen] = useState(false);
@@ -262,8 +264,15 @@ export default function AdminUsersPage() {
         return matchSearch && matchRole && matchStatus;
     });
 
+    const totalPages = Math.max(1, Math.ceil(filteredUsers.length / perPage));
+    const safePage = Math.min(currentPage, totalPages);
+    const paginatedUsers = filteredUsers.slice((safePage - 1) * perPage, safePage * perPage);
+
+    // Reset page when filters change
+    const resetPage = () => setCurrentPage(1);
+
     const activeCount = users.filter(u => u.IsActive).length;
-    const inactiveCount = users.filter(u => !u.IsActive).length;
+    const inactiveCount = users.filter(u => u.IsActive === false).length;
 
     return (
         <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
@@ -329,13 +338,13 @@ export default function AdminUsersPage() {
                             type="text"
                             placeholder="ค้นหาชื่อผู้ใช้..."
                             value={searchQuery}
-                            onChange={e => setSearchQuery(e.target.value)}
+                            onChange={e => { setSearchQuery(e.target.value); resetPage(); }}
                             className="w-full pl-9 pr-4 py-2 border border-slate-200 dark:border-slate-600 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors bg-white dark:bg-slate-700 dark:text-white font-medium"
                         />
                     </div>
                     <select
                         value={filterRole}
-                        onChange={e => setFilterRole(e.target.value)}
+                        onChange={e => { setFilterRole(e.target.value); resetPage(); }}
                         className="px-3 py-2 border border-slate-200 dark:border-slate-600 rounded-lg text-sm bg-white dark:bg-slate-700 dark:text-white"
                     >
                         <option value="">ทุก Role</option>
@@ -345,7 +354,7 @@ export default function AdminUsersPage() {
                     </select>
                     <select
                         value={filterStatus}
-                        onChange={e => setFilterStatus(e.target.value)}
+                        onChange={e => { setFilterStatus(e.target.value); resetPage(); }}
                         className="px-3 py-2 border border-slate-200 dark:border-slate-600 rounded-lg text-sm bg-white dark:bg-slate-700 dark:text-white"
                     >
                         <option value="">ทุกสถานะ</option>
@@ -386,7 +395,7 @@ export default function AdminUsersPage() {
                                         {searchQuery || filterRole || filterStatus ? 'ไม่พบผู้ใช้ตามเงื่อนไข' : 'ยังไม่มีผู้ใช้ในระบบ'}
                                     </td>
                                 </tr>
-                            ) : filteredUsers.map((user) => (
+                            ) : paginatedUsers.map((user) => (
                                 <tr key={user.UserId} className="hover:bg-slate-50/80 dark:hover:bg-slate-700/30 transition-colors group">
                                     <td className="px-6 py-4">
                                         <div className="flex items-center gap-3">
@@ -470,6 +479,54 @@ export default function AdminUsersPage() {
                         </tbody>
                     </table>
                 </div>
+
+                {/* Pagination */}
+                {filteredUsers.length > perPage && (
+                    <div className="px-6 py-3 border-t border-slate-100 dark:border-slate-700 flex items-center justify-between bg-slate-50/50 dark:bg-slate-800">
+                        <p className="text-xs text-slate-500 dark:text-slate-400">
+                            แสดง {(safePage - 1) * perPage + 1}-{Math.min(safePage * perPage, filteredUsers.length)} จาก {filteredUsers.length} รายการ
+                        </p>
+                        <div className="flex items-center gap-1">
+                            <button
+                                onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                                disabled={safePage <= 1}
+                                className="p-1.5 rounded-lg text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                            >
+                                <ChevronLeft className="w-4 h-4" />
+                            </button>
+                            {Array.from({ length: totalPages }, (_, i) => i + 1)
+                                .filter(p => p === 1 || p === totalPages || Math.abs(p - safePage) <= 1)
+                                .reduce<(number | string)[]>((acc, p, idx, arr) => {
+                                    if (idx > 0 && p - (arr[idx - 1] as number) > 1) acc.push('...');
+                                    acc.push(p);
+                                    return acc;
+                                }, [])
+                                .map((p, i) =>
+                                    typeof p === 'string' ? (
+                                        <span key={`dot-${i}`} className="px-1 text-slate-400 text-xs">...</span>
+                                    ) : (
+                                        <button
+                                            key={p}
+                                            onClick={() => setCurrentPage(p)}
+                                            className={`w-8 h-8 rounded-lg text-xs font-medium transition-all ${p === safePage
+                                                    ? 'bg-blue-600 text-white shadow-sm'
+                                                    : 'text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700'
+                                                }`}
+                                        >
+                                            {p}
+                                        </button>
+                                    )
+                                )}
+                            <button
+                                onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                                disabled={safePage >= totalPages}
+                                className="p-1.5 rounded-lg text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                            >
+                                <ChevronRight className="w-4 h-4" />
+                            </button>
+                        </div>
+                    </div>
+                )}
             </div>
 
             {/* Modal */}
