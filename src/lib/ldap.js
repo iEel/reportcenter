@@ -15,7 +15,7 @@ export async function getLdapConfig() {
         const pool = await connectToCentralDB();
         const result = await pool.request().query(`
             SELECT SettingKey, SettingValue FROM SystemSettings
-            WHERE SettingKey IN ('ldap_enabled','ldap_url','ldap_domain','ldap_basedn')
+            WHERE SettingKey IN ('ldap_enabled','ldap_url','ldap_domain','ldap_base_dn')
         `);
 
         const settings = {};
@@ -27,7 +27,7 @@ export async function getLdapConfig() {
             enabled: settings['ldap_enabled'] === 'true',
             url: settings['ldap_url'] || '',
             domain: settings['ldap_domain'] || '',
-            baseDN: settings['ldap_basedn'] || '',
+            baseDN: settings['ldap_base_dn'] || '',
             bindDN: process.env.LDAP_BIND_DN || '',
             bindPassword: process.env.LDAP_BIND_PASSWORD || '',
         };
