@@ -50,13 +50,30 @@ function parseDistinguishedName(dn) {
 }
 
 /**
- * Create an LDAP client with timeout
+ * Catch ldapjs internal errors that escape try-catch
+ */
+if (typeof process !== 'undefined' && !process.__ldapErrorHandlerSet) {
+    process.__ldapErrorHandlerSet = true;
+    process.on('uncaughtException', (err) => {
+        if (err?.message?.includes('toLowerCase') || err?.stack?.includes('ldapjs') || err?.stack?.includes('ldap')) {
+            console.warn('Suppressed ldapjs internal error:', err.message);
+            // Don't rethrow — this is a known ldapjs bug
+        } else {
+            // Re-throw non-ldap errors
+            throw err;
+        }
+    });
+}
+
+/**
+ * Create an LDAP client with timeout and strict mode off
  */
 function createClient(url) {
     return ldap.createClient({
         url: [url],
         connectTimeout: 5000,
         timeout: 10000,
+        strictDN: false,
     });
 }
 
@@ -133,7 +150,6 @@ export async function ldapLookup(username) {
             const searchOpts = {
                 scope: 'sub',
                 filter: searchFilter,
-                attributes: ['sAMAccountName', 'displayName', 'mail', 'employeeID', 'company', 'distinguishedName'],
             };
 
             client.search(config.baseDN, searchOpts, (searchErr, res) => {
@@ -244,7 +260,6 @@ export async function ldapSearchUsers(query) {
                 const searchOpts = {
                     scope: 'sub',
                     filter: searchFilter,
-                    attributes: ['sAMAccountName', 'displayName', 'mail', 'employeeID', 'company', 'distinguishedName'],
                     sizeLimit: 10,
                 };
 
