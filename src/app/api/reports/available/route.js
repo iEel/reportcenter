@@ -26,13 +26,23 @@ export async function GET(request) {
 
         const pool = await connectToCentralDB();
 
-        // Auto-add IsHeavy column if missing
+        // Auto-add IsHeavy + CategoryId columns and ReportCategories table if missing
         try {
             await pool.request().query(`
                 IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('Reports') AND name = 'IsHeavy')
                 ALTER TABLE Reports ADD IsHeavy BIT DEFAULT 0;
+                IF OBJECT_ID('ReportCategories') IS NULL
+                CREATE TABLE ReportCategories (
+                    CategoryId INT IDENTITY(1,1) PRIMARY KEY,
+                    CategoryName NVARCHAR(100) NOT NULL,
+                    ColorTag NVARCHAR(20) DEFAULT 'slate',
+                    SortOrder INT DEFAULT 0,
+                    CreatedAt DATETIME DEFAULT GETDATE()
+                );
+                IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('Reports') AND name = 'CategoryId')
+                ALTER TABLE Reports ADD CategoryId INT NULL;
             `);
-        } catch (e) { console.warn('Favorites fetch failed:', e.message); }
+        } catch (e) { console.warn('Schema auto-add:', e.message); }
 
         let result;
 

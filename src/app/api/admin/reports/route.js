@@ -144,6 +144,23 @@ export async function POST(request) {
 export async function GET(request) {
     try {
         const pool = await connectToCentralDB();
+
+        // Auto-create ReportCategories + CategoryId if missing
+        try {
+            await pool.request().query(`
+                IF OBJECT_ID('ReportCategories') IS NULL
+                CREATE TABLE ReportCategories (
+                    CategoryId INT IDENTITY(1,1) PRIMARY KEY,
+                    CategoryName NVARCHAR(100) NOT NULL,
+                    ColorTag NVARCHAR(20) DEFAULT 'slate',
+                    SortOrder INT DEFAULT 0,
+                    CreatedAt DATETIME DEFAULT GETDATE()
+                );
+                IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('Reports') AND name = 'CategoryId')
+                ALTER TABLE Reports ADD CategoryId INT NULL;
+            `);
+        } catch (e) { console.warn('Category schema check:', e.message); }
+
         const query = `
             SELECT r.ReportId, r.ReportName, r.Description, r.ReportType, r.IsPublic, r.IsActive,
                    r.CategoryId, c.CategoryName, c.ColorTag AS CategoryColor
