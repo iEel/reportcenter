@@ -177,7 +177,7 @@ export async function ldapSearchUsers(query) {
         client.bind(config.bindDN, config.bindPassword, (bindErr) => {
             if (bindErr) { clearTimeout(timeout); try { client.destroy(); } catch (e) { } return safeResolve({ success: false, error: `Bind ล้มเหลว: ${bindErr.message}` }); }
 
-            const searchFilter = `(sAMAccountName=*${safeQuery}*)`;
+            const searchFilter = `(&(objectCategory=person)(objectClass=user)(sAMAccountName=*${safeQuery}*))`;
             client.search(config.baseDN, { scope: 'sub', filter: searchFilter, sizeLimit: 10 }, (searchErr, res) => {
                 if (searchErr) { clearTimeout(timeout); try { client.destroy(); } catch (e) { } return safeResolve({ success: false, error: `Search ล้มเหลว: ${searchErr.message}` }); }
 
