@@ -5,6 +5,7 @@ import { useState, useEffect } from "react";
 import * as xlsx from 'xlsx';
 import { useAuth } from "@/components/providers/AuthProvider";
 import { useToast } from "@/components/providers/ToastProvider";
+import TypeaheadInput from "@/components/TypeaheadInput";
 import { formatDate } from '@/lib/dateUtils';
 
 export default function StandardReportPage() {
@@ -288,8 +289,8 @@ export default function StandardReportPage() {
             {/* Background Job Banner */}
             {activeJob && (
                 <div className={`flex items-center justify-between px-5 py-3 rounded-xl border shadow-sm animate-in slide-in-from-top-2 duration-300 ${activeJob.status === 'running' ? 'bg-blue-50 border-blue-200' :
-                        activeJob.status === 'done' ? 'bg-emerald-50 border-emerald-200' :
-                            'bg-red-50 border-red-200'
+                    activeJob.status === 'done' ? 'bg-emerald-50 border-emerald-200' :
+                        'bg-red-50 border-red-200'
                     }`}>
                     <div className="flex items-center gap-3">
                         {activeJob.status === 'running' && <Loader2 className="w-5 h-5 text-blue-600 animate-spin" />}
@@ -439,6 +440,15 @@ export default function StandardReportPage() {
                                             value={paramValues[param.ParameterName] || ''}
                                             onChange={e => handleParamChange(param.ParameterName, e.target.value)}
                                             className="w-full bg-white border border-slate-200 text-sm py-2 px-3 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors"
+                                        />
+                                    ) : param.LookupQuery ? (
+                                        <TypeaheadInput
+                                            reportId={selectedReportId}
+                                            paramName={param.ParameterName}
+                                            companyId={selectedCompany}
+                                            value={paramValues[param.ParameterName] || ''}
+                                            onChange={(val: string) => handleParamChange(param.ParameterName, val)}
+                                            placeholder={`ค้นหา ${param.DisplayLabel || param.ParameterName}...`}
                                         />
                                     ) : (
                                         <input
