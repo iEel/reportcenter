@@ -1,6 +1,6 @@
 # ReportCenter — Developer Handoff
 
-> **Version:** 7.0  
+> **Version:** 7.1  
 > **Last Updated:** 2026-02-25  
 > **Tech Stack:** Next.js 16.1.6 + React 19 + Tailwind CSS 4 + MSSQL (mssql driver) + Microsoft Graph API (OAuth2) / Nodemailer (SMTP fallback) + @azure/msal-node
 
@@ -47,12 +47,12 @@ reportcenter/
 │   │   │   ├── change-password/page.tsx  # Change password page (all users)
 │   │   │   ├── admin/
 │   │   │   │   ├── reports/
-│   │   │   │   │   ├── page.tsx          # Manage Reports list (search/filter)
+│   │   │   │   │   ├── page.tsx          # Manage Reports list (search/filter/disable-toggle/hard-delete)
 │   │   │   │   │   ├── new/page.tsx      # Create new report
 │   │   │   │   │   └── [id]/edit/page.tsx # Edit existing report
 │   │   │   │   ├── users/page.tsx        # Manage Users + AD autocomplete (search by username/name/employeeId)
 │   │   │   │   ├── roles/page.tsx        # Manage Roles + Report access assignment
-│   │   │   │   ├── audit-logs/page.tsx   # Audit Log Viewer (paginated)
+│   │   │   │   ├── audit-logs/page.tsx   # Audit Log Viewer (paginated, refresh, BLOCKED_QUERY red badge)
 │   │   │   │   ├── schedules/page.tsx    # Scheduled Reports (create/edit/toggle/delete)
 │   │   │   │   └── settings/page.tsx     # System Settings
 │   │   │   └── reports/
@@ -754,6 +754,12 @@ npm run test:watch
 - [x] Add User modal UI overhaul — gradient header, section badges, AD info card, autocomplete dropdown
 - [x] Turbopack + ldapjs fix — `serverExternalPackages` to prevent BER parser corruption
 - [x] User search by EmployeeId — admin can search users by AD employee ID on manage users page
+- [x] CTE query pagination fix — smart ORDER BY detection (skips OVER() clauses) + client-side fallback for complex CTEs
+- [x] TypeaheadInput on standard reports — LookupQuery parameters render autocomplete dropdown instead of plain text
+- [x] Report hard delete — DELETE actually removes report + params + role mappings + favorites from DB
+- [x] Report disable/enable toggle — PATCH endpoint + Power button (amber=disable, green=enable)
+- [x] Audit Trail UI — refresh button + BLOCKED_QUERY red badge styling
+- [x] Favicon — RC branded icon (icon.png replaces default Next.js favicon.ico)
 - [ ] Two-factor authentication (2FA)
 - [ ] PDF export support
 
