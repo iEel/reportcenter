@@ -285,6 +285,7 @@ CreatedAt DATETIME DEFAULT GETDATE()
 | GET    | `/api/admin/users/lookup-ad` | AD lookup (`?username=exact`) or search (`?search=wildcard`) for autocomplete |
 | POST   | `/api/admin/users/reset-password` | Admin reset user password (no old pw required) + logs RESET_PASSWORD |
 | GET    | `/api/admin/audit-logs`      | Paginated audit logs + ChangeData JSON (?page=&limit=) |
+| DELETE | `/api/admin/audit-logs`      | Bulk delete logs before date (`?before=YYYY-MM-DD`) |
 | GET    | `/api/admin/roles`           | List roles + user count + assigned reports |
 | POST   | `/api/admin/roles`           | Create role + report mappings    |
 | PUT    | `/api/admin/roles`           | Update role name + report mappings |
@@ -763,6 +764,7 @@ npm run test:watch
 - [x] Audit Trail UI — refresh button + BLOCKED_QUERY red badge styling
 - [x] Favicon — RC branded icon (icon.png replaces default Next.js favicon.ico)
 - [x] Dynamic company names — `/api/companies` endpoint + all pages load from `CompanyDatabases` table (no hardcode)
+- [x] Audit Trail bulk delete — date picker + quick-select (30/60/90/180 days) + DELETE API endpoint
 - [ ] Two-factor authentication (2FA)
 - [ ] PDF export support
 
