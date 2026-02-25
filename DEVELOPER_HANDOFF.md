@@ -1,6 +1,6 @@
 # ReportCenter — Developer Handoff
 
-> **Version:** 7.1  
+> **Version:** 7.2  
 > **Last Updated:** 2026-02-25  
 > **Tech Stack:** Next.js 16.1.6 + React 19 + Tailwind CSS 4 + MSSQL (mssql driver) + Microsoft Graph API (OAuth2) / Nodemailer (SMTP fallback) + @azure/msal-node
 
@@ -53,11 +53,13 @@ reportcenter/
 │   │   │   │   ├── users/page.tsx        # Manage Users + AD autocomplete (search by username/name/employeeId)
 │   │   │   │   ├── roles/page.tsx        # Manage Roles + Report access assignment
 │   │   │   │   ├── audit-logs/page.tsx   # Audit Log Viewer (paginated, refresh, BLOCKED_QUERY red badge)
+│   │   │   │   ├── categories/page.tsx   # Manage Report Categories (CRUD + color picker)
 │   │   │   │   ├── schedules/page.tsx    # Scheduled Reports (create/edit/toggle/delete)
 │   │   │   │   └── settings/page.tsx     # System Settings
 │   │   │   └── reports/
-│   │   │       ├── standard/page.tsx     # Standard report viewer (★ favorites)
-│   │   │       └── templates/page.tsx    # Email template report viewer (★ favorites)
+│   │   │       ├── standard/page.tsx     # Standard report viewer (★ favorites + category filter chips)
+│   │   │       ├── templates/page.tsx    # Email template report viewer (★ favorites)
+│   │   │       └── job-history/page.tsx  # Background job history
 │   │   └── api/                          # API Routes (all .js)
 │   │       ├── auth/
 │   │       │   ├── login/route.js        # POST: login with bcrypt + allowedCompanies
@@ -73,7 +75,8 @@ reportcenter/
 │   │       │   ├── users/route.js        # GET/POST/PUT/DELETE users & roles + company mappings (AD/local)
 │   │       │   ├── users/lookup-ad/route.js # GET: AD user lookup + wildcard search (autocomplete)
 │   │       │   ├── users/reset-password/route.js # POST: admin reset user password
-│   │       │   ├── roles/route.js        # GET/POST/PUT/DELETE roles + ReportRoleMapping
+│   │       │   ├── roles/route.js        # GET/POST/PUT/DELETE roles + ReportRoleMapping (category-grouped)
+│   │       │   ├── categories/route.js   # GET/POST/PUT/DELETE report categories (auto-migration)
 │   │       │   ├── audit-logs/route.js   # GET: paginated audit logs
 │   │       │   ├── schedules/route.js    # GET/POST/PUT/DELETE schedules
 │   │       │   ├── settings/route.js     # GET/PUT system settings
@@ -193,6 +196,7 @@ UserCompanyMapping (UserId, CompanyId)
 | `Notifications`      | In-app notification messages (auto-created)  |
 | `SystemSettings`     | Key-value config (company names, LDAP settings)|
 | `ReportSchedules`    | Scheduled report runs + email config (auto-created) |
+| `ReportCategories`   | Report categories with color tags (auto-created)    |
 
 ### Key Columns
 
@@ -212,7 +216,8 @@ Branch NVARCHAR(100) NULL               -- from AD
 -- Reports
 ReportId INT PK, ReportName NVARCHAR(200), Description NVARCHAR(500),
 ReportType INT (1=Standard, 2=Template), TSqlQuery NVARCHAR(MAX),
-EmailTemplateContent NVARCHAR(MAX), IsPublic BIT, IsActive BIT
+EmailTemplateContent NVARCHAR(MAX), IsPublic BIT, IsActive BIT,
+CategoryId INT NULL FK → ReportCategories (auto-migrated)
 
 -- ReportParameters
 ParameterId INT PK IDENTITY, ReportId INT FK, ParameterName NVARCHAR(50),
@@ -236,6 +241,11 @@ RunTime NVARCHAR(5), CompanyId INT, Parameters NVARCHAR(MAX) NULL,
 EmailTo NVARCHAR(500), EmailCc NVARCHAR(500) NULL, EmailSubject NVARCHAR(300) NULL,
 IsActive BIT, LastRunAt DATETIME NULL, LastRunStatus NVARCHAR(20) NULL,
 NextRunAt DATETIME NULL, CreatedBy INT, CreatedAt/UpdatedAt DATETIME
+
+-- ReportCategories (auto-created on first API call)
+CategoryId INT PK IDENTITY, CategoryName NVARCHAR(100),
+ColorTag NVARCHAR(20) DEFAULT 'slate', SortOrder INT DEFAULT 0,
+CreatedAt DATETIME DEFAULT GETDATE()
 
 -- ActivityLogs
 LogId INT PK IDENTITY, UserId INT NULL, ReportId INT NULL, CompanyId INT NULL,
@@ -290,6 +300,10 @@ CreatedAt DATETIME DEFAULT GETDATE()
 | POST   | `/api/admin/roles`           | Create role + report mappings    |
 | PUT    | `/api/admin/roles`           | Update role name + report mappings |
 | DELETE | `/api/admin/roles?roleId=`   | Delete role (blocked if users assigned) |
+| GET    | `/api/admin/categories`      | List categories + report counts         |
+| POST   | `/api/admin/categories`      | Create category (name + colorTag)       |
+| PUT    | `/api/admin/categories`      | Update category name/color              |
+| DELETE | `/api/admin/categories?categoryId=` | Delete category (unassigns reports) |
 | GET    | `/api/admin/schedules`       | List all schedules + report/user info |
 | POST   | `/api/admin/schedules`       | Create schedule + logs CREATE_SCHEDULE |
 | PUT    | `/api/admin/schedules`       | Update schedule + logs UPDATE_SCHEDULE |
