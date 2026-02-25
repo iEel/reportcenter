@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react";
-import { ArrowLeft, Database, Save, Code, Sliders, Type, Loader2 } from "lucide-react";
+import { ArrowLeft, Database, Save, Code, Sliders, Type, Loader2, Tag } from "lucide-react";
 import Link from "next/link";
 import TemplateEditor from "@/components/TemplateEditor";
 import { useRouter } from "next/navigation";
@@ -19,10 +19,14 @@ export default function NewReportPage() {
     const [tSqlQuery, setTSqlQuery] = useState('');
     const [emailTemplateContent, setEmailTemplateContent] = useState('');
     const [isHeavy, setIsHeavy] = useState(false);
+    const [categoryId, setCategoryId] = useState('');
 
     // Roles State
     const [roles, setRoles] = useState<any[]>([]);
     const [selectedRoles, setSelectedRoles] = useState<number[]>([]);
+
+    // Categories State
+    const [categories, setCategories] = useState<any[]>([]);
 
     useEffect(() => {
         const fetchRoles = async () => {
@@ -34,7 +38,15 @@ export default function NewReportPage() {
                 console.error("Failed to fetch roles:", error);
             }
         };
+        const fetchCategories = async () => {
+            try {
+                const res = await fetch('/api/admin/categories');
+                const data = await res.json();
+                if (data.success) setCategories(data.categories || []);
+            } catch { }
+        };
         fetchRoles();
+        fetchCategories();
     }, []);
 
     // Parameters State
@@ -93,6 +105,7 @@ export default function NewReportPage() {
                         IsPublic: isPublic === 'public',
                         IsActive: true,
                         IsHeavy: isHeavy,
+                        CategoryId: categoryId || null,
                         Roles: selectedRoles
                     },
                     parameters: parameters
@@ -232,6 +245,24 @@ export default function NewReportPage() {
                                             >
                                                 <option value="public">ทุกคน (Public)</option>
                                                 <option value="role">ระบุตามตำแหน่ง (Role Based)</option>
+                                            </select>
+                                        </div>
+                                    </div>
+
+                                    {/* Category Selector */}
+                                    <div>
+                                        <label className="block text-sm font-medium text-slate-700 mb-1">หมวดหมู่รายงาน</label>
+                                        <div className="relative">
+                                            <Tag className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                                            <select
+                                                value={categoryId}
+                                                onChange={e => setCategoryId(e.target.value)}
+                                                className="w-full pl-9 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 text-sm"
+                                            >
+                                                <option value="">-- ไม่ระบุหมวดหมู่ --</option>
+                                                {categories.map(c => (
+                                                    <option key={c.CategoryId} value={c.CategoryId}>{c.CategoryName}</option>
+                                                ))}
                                             </select>
                                         </div>
                                     </div>
