@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react";
-import { Activity, Download, Filter, ChevronLeft, ChevronRight, Loader2, Search, Eye, X, ArrowRight } from "lucide-react";
+import { Activity, Download, Filter, ChevronLeft, ChevronRight, Loader2, Search, Eye, X, ArrowRight, RefreshCw } from "lucide-react";
 import { formatDateTime } from "@/lib/dateUtils";
 import * as xlsx from 'xlsx';
 
@@ -22,6 +22,7 @@ const ACTION_COLORS: Record<string, string> = {
     CREATE_USER: 'bg-violet-100 text-violet-700',
     UPDATE_USER: 'bg-fuchsia-100 text-fuchsia-700',
     CHANGE_PASSWORD: 'bg-sky-100 text-sky-700',
+    BLOCKED_QUERY: 'bg-red-200 text-red-800 ring-1 ring-red-300',
 };
 
 export default function AuditLogsPage() {
@@ -185,9 +186,14 @@ export default function AuditLogsPage() {
                         <p className="text-sm text-slate-500 dark:text-slate-400">ประวัติกิจกรรมทั้งหมดในระบบ ({totalRows} รายการ)</p>
                     </div>
                 </div>
-                <button onClick={handleExport} className="flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors text-sm font-medium shadow-sm">
-                    <Download className="w-4 h-4" /> Export Excel
-                </button>
+                <div className="flex items-center gap-2">
+                    <button onClick={() => { setPage(1); fetchLogs(); }} className="p-2.5 bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-600 transition-colors" title="รีเฟรช">
+                        <RefreshCw className={`w-5 h-5 ${isLoading ? 'animate-spin' : ''}`} />
+                    </button>
+                    <button onClick={handleExport} className="flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors text-sm font-medium shadow-sm">
+                        <Download className="w-4 h-4" /> Export Excel
+                    </button>
+                </div>
             </div>
 
             {/* Filters */}
