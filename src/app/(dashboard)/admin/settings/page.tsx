@@ -240,25 +240,25 @@ export default function AdminSettingsPage() {
                                 <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 ml-9">Rate Limiting, Idle Timeout</p>
                             </div>
                             <div className="p-6">
-                                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                     {securitySettings.map(s => {
                                         const meta = settingLabels[s.SettingKey];
                                         const Icon = meta?.icon || ShieldAlert;
                                         return (
-                                            <div key={s.SettingKey} className="bg-slate-50 dark:bg-slate-700/50 rounded-xl p-4 border border-slate-100 dark:border-slate-600">
+                                            <div key={s.SettingKey} className="bg-slate-50 dark:bg-slate-700/50 rounded-xl p-4 border border-slate-100 dark:border-slate-600 flex flex-col">
                                                 <div className="flex items-center gap-2 mb-2">
-                                                    <Icon className="w-4 h-4 text-amber-500" />
+                                                    <Icon className="w-4 h-4 text-amber-500 shrink-0" />
                                                     <label className="text-sm font-semibold text-slate-700 dark:text-slate-200">{meta?.label}</label>
                                                 </div>
                                                 {meta?.description && (
-                                                    <p className="text-xs text-slate-400 mb-3 leading-relaxed">{meta.description}</p>
+                                                    <p className="text-xs text-slate-400 mb-3 leading-relaxed flex-1">{meta.description}</p>
                                                 )}
                                                 <input
                                                     type="number"
                                                     min="0"
                                                     value={s.SettingValue}
                                                     onChange={e => handleChange(s.SettingKey, e.target.value)}
-                                                    className="w-full px-4 py-2.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-600 rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 text-sm text-center font-semibold text-slate-900 dark:text-white transition-all"
+                                                    className="w-full px-4 py-2.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-600 rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 text-sm text-center font-semibold text-slate-900 dark:text-white transition-all mt-auto"
                                                 />
                                             </div>
                                         );
