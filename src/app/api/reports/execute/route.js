@@ -104,33 +104,82 @@ export async function POST(request) {
         };
 
         // 4. Execute — with or without pagination
-        const usePagination = page && pageSize && !exportAll;
+        let usePagination = page && pageSize && !exportAll;
         let dataResult;
         let totalRows = 0;
 
         if (usePagination) {
-            // Strip ORDER BY from original query for COUNT (SQL Server doesn't allow it in subqueries)
-            const orderByMatch = tSqlQuery.match(/\bORDER\s+BY\b[\s\S]*$/i);
-            const queryWithoutOrderBy = orderByMatch
-                ? tSqlQuery.substring(0, tSqlQuery.lastIndexOf(orderByMatch[0]))
-                : tSqlQuery;
-            const orderByClause = orderByMatch ? orderByMatch[0] : 'ORDER BY (SELECT NULL)';
+            // Detect CTE queries (start with ;WITH or WITH)
+            const isCTE = /^\s*;?\s*WITH\b/i.test(tSqlQuery.trim());
 
-            // Count total rows (without ORDER BY)
+            // Find the FINAL ORDER BY (not ones inside OVER(), subqueries, or CTEs)
+            // Strategy: find the last ORDER BY that is NOT inside parentheses
+            let finalOrderByIndex = -1;
+            let parenDepth = 0;
+            const upperQuery = tSqlQuery.toUpperCase();
+            for (let i = 0; i < upperQuery.length; i++) {
+                if (upperQuery[i] === '(') parenDepth++;
+                else if (upperQuery[i] === ')') parenDepth--;
+                else if (parenDepth === 0 && upperQuery.substring(i).match(/^ORDER\s+BY\b/i)) {
+                    finalOrderByIndex = i;
+                }
+            }
+
+            let queryWithoutOrderBy, orderByClause;
+            if (finalOrderByIndex >= 0) {
+                queryWithoutOrderBy = tSqlQuery.substring(0, finalOrderByIndex).trim();
+                orderByClause = tSqlQuery.substring(finalOrderByIndex).trim();
+            } else {
+                queryWithoutOrderBy = tSqlQuery;
+                orderByClause = 'ORDER BY (SELECT NULL)';
+            }
+
+            // Count total rows — CTE needs different wrapping
             const countReq = companyPool.request();
             bindParams(countReq);
-            const countResult = await countReq.query(`SELECT COUNT(*) AS total FROM (${queryWithoutOrderBy}) AS _countQuery`);
-            totalRows = countResult.recordset[0].total;
+            let countSql;
+            if (isCTE) {
+                // For CTE: append a SELECT COUNT(*) as a new final query
+                countSql = `${queryWithoutOrderBy.replace(/;\s*$/, '')}
+                    SELECT COUNT(*) AS total FROM (${queryWithoutOrderBy.substring(queryWithoutOrderBy.lastIndexOf('SELECT'))}) AS _cq`;
+                // Actually, simpler: wrap the whole CTE result in a count
+                // Re-approach: use the full query without ORDER BY, wrap with count
+                countSql = `SELECT COUNT(*) AS total FROM (${queryWithoutOrderBy}) AS _countQuery`;
+            } else {
+                countSql = `SELECT COUNT(*) AS total FROM (${queryWithoutOrderBy}) AS _countQuery`;
+            }
 
-            // Paginated query — use original ORDER BY if exists
-            const offset = (parseInt(page) - 1) * parseInt(pageSize);
-            const dataReq = companyPool.request();
-            bindParams(dataReq);
-            dataReq.input('_offset', sql.Int, offset);
-            dataReq.input('_pageSize', sql.Int, parseInt(pageSize));
-            dataResult = await dataReq.query(
-                `${queryWithoutOrderBy} ${orderByClause} OFFSET @_offset ROWS FETCH NEXT @_pageSize ROWS ONLY`
-            );
+            try {
+                const countResult = await countReq.query(countSql);
+                totalRows = countResult.recordset[0].total;
+            } catch (countErr) {
+                // If count fails (complex CTE), run full query and count client-side
+                console.warn('Count query failed, falling back to full query:', countErr.message);
+                const fallbackReq = companyPool.request();
+                bindParams(fallbackReq);
+                dataResult = await fallbackReq.query(tSqlQuery);
+                totalRows = dataResult.recordset.length;
+
+                // Apply client-side pagination
+                const offset = (parseInt(page) - 1) * parseInt(pageSize);
+                const paginatedData = dataResult.recordset.slice(offset, offset + parseInt(pageSize));
+                dataResult = { recordset: paginatedData };
+
+                // Skip the server-side pagination below
+                usePagination = false;
+            }
+
+            if (usePagination) {
+                // Paginated query — use original ORDER BY if exists
+                const offset = (parseInt(page) - 1) * parseInt(pageSize);
+                const dataReq = companyPool.request();
+                bindParams(dataReq);
+                dataReq.input('_offset', sql.Int, offset);
+                dataReq.input('_pageSize', sql.Int, parseInt(pageSize));
+                dataResult = await dataReq.query(
+                    `${queryWithoutOrderBy} ${orderByClause} OFFSET @_offset ROWS FETCH NEXT @_pageSize ROWS ONLY`
+                );
+            }
         } else {
             // Full query (no pagination or export mode)
             const req = companyPool.request();
