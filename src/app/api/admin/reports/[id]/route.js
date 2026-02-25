@@ -247,16 +247,64 @@ export async function DELETE(request, props) {
         if (!id) return NextResponse.json({ success: false, message: "Report ID required" }, { status: 400 });
 
         const pool = await connectToCentralDB();
+        const reportId = parseInt(id);
 
-        // Soft delete
-        await pool.request()
-            .input('ReportId', sql.Int, parseInt(id))
-            .query('UPDATE Reports SET IsActive = 0 WHERE ReportId = @ReportId');
+        // Hard delete — remove related data first (FK constraints)
+        await pool.request().input('ReportId', sql.Int, reportId)
+            .query('DELETE FROM ReportParameters WHERE ReportId = @ReportId');
 
-        return NextResponse.json({ success: true, message: "Report soft-deleted successfully" });
+        try {
+            await pool.request().input('ReportId', sql.Int, reportId)
+                .query('DELETE FROM ReportRoleMapping WHERE ReportId = @ReportId');
+        } catch (e) { /* table may not exist */ }
+
+        try {
+            await pool.request().input('ReportId', sql.Int, reportId)
+                .query('DELETE FROM UserFavoriteReports WHERE ReportId = @ReportId');
+        } catch (e) { /* table may not exist */ }
+
+        // Delete the report itself
+        await pool.request().input('ReportId', sql.Int, reportId)
+            .query('DELETE FROM Reports WHERE ReportId = @ReportId');
+
+        return NextResponse.json({ success: true, message: "Report deleted permanently" });
 
     } catch (error) {
         console.error("Error deleting report:", error);
+        return NextResponse.json({ success: false, message: "Internal Server Error" }, { status: 500 });
+    }
+}
+
+/**
+ * PATCH /api/admin/reports/[id]
+ * Toggle report IsActive status (enable/disable)
+ */
+export async function PATCH(request, props) {
+    try {
+        const { id } = await props.params;
+        if (!id) return NextResponse.json({ success: false, message: "Report ID required" }, { status: 400 });
+
+        const pool = await connectToCentralDB();
+        const reportId = parseInt(id);
+
+        // Toggle IsActive
+        const result = await pool.request()
+            .input('ReportId', sql.Int, reportId)
+            .query(`
+                UPDATE Reports SET IsActive = CASE WHEN IsActive = 1 THEN 0 ELSE 1 END 
+                WHERE ReportId = @ReportId;
+                SELECT IsActive FROM Reports WHERE ReportId = @ReportId;
+            `);
+
+        const newStatus = result.recordset[0]?.IsActive;
+        return NextResponse.json({
+            success: true,
+            isActive: !!newStatus,
+            message: newStatus ? 'เปิดใช้งานรายงานแล้ว' : 'ปิดใช้งานรายงานแล้ว',
+        });
+
+    } catch (error) {
+        console.error("Error toggling report status:", error);
         return NextResponse.json({ success: false, message: "Internal Server Error" }, { status: 500 });
     }
 }

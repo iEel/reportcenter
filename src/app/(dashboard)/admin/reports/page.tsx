@@ -1,7 +1,7 @@
 "use client"
 
 import Link from "next/link";
-import { Plus, Search, Edit, Trash2, FileText, Database, Shield, RefreshCw, Star } from "lucide-react";
+import { Plus, Search, Edit, Trash2, FileText, Database, Shield, RefreshCw, Star, Power } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useToast } from "@/components/providers/ToastProvider";
 import { useConfirm } from "@/components/providers/ConfirmProvider";
@@ -29,9 +29,9 @@ export default function AdminReportsPage() {
 
     const handleDelete = async (id: number, name: string) => {
         const ok = await confirm({
-            title: 'ลบรายงาน',
-            message: `คุณแน่ใจหรือไม่ว่าต้องการลบรายงาน "${name}"?`,
-            confirmLabel: 'ลบ',
+            title: 'ลบรายงานถาวร',
+            message: `คุณแน่ใจหรือไม่ว่าต้องการลบรายงาน "${name}" ออกจากระบบถาวร? ข้อมูลตัวแปร, สิทธิ์, และรายการโปรดที่เกี่ยวข้องจะถูกลบทั้งหมด`,
+            confirmLabel: 'ลบถาวร',
             variant: 'danger',
         });
         if (!ok) return;
@@ -40,13 +40,37 @@ export default function AdminReportsPage() {
             const res = await fetch(`/api/admin/reports/${id}`, { method: 'DELETE' });
             const data = await res.json();
             if (data.success) {
-                toast('ลบรายงานสำเร็จ', 'success');
+                toast('ลบรายงานถาวรสำเร็จ', 'success');
                 fetchReports();
             } else {
                 toast('เกิดข้อผิดพลาดในการลบ: ' + data.message, 'error');
             }
         } catch (error) {
             console.error("Delete error:", error);
+            toast('ไม่สามารถเชื่อมต่อกับเซิร์ฟเวอร์ได้', 'error');
+        }
+    };
+
+    const handleToggleActive = async (id: number, name: string, currentlyActive: boolean) => {
+        const action = currentlyActive ? 'ปิดใช้งาน' : 'เปิดใช้งาน';
+        const ok = await confirm({
+            title: `${action}รายงาน`,
+            message: `ต้องการ${action}รายงาน "${name}" หรือไม่?`,
+            confirmLabel: action,
+            variant: currentlyActive ? 'danger' : 'default',
+        });
+        if (!ok) return;
+
+        try {
+            const res = await fetch(`/api/admin/reports/${id}`, { method: 'PATCH' });
+            const data = await res.json();
+            if (data.success) {
+                toast(data.message, 'success');
+                fetchReports();
+            } else {
+                toast(data.message || 'เกิดข้อผิดพลาด', 'error');
+            }
+        } catch {
             toast('ไม่สามารถเชื่อมต่อกับเซิร์ฟเวอร์ได้', 'error');
         }
     };
@@ -218,7 +242,17 @@ export default function AdminReportsPage() {
                                             <Link href={`/admin/reports/${report.ReportId}/edit`} className="p-2 bg-blue-50 hover:bg-blue-100 text-blue-600 rounded-lg transition-colors" title="แก้ไข">
                                                 <Edit className="w-4 h-4" />
                                             </Link>
-                                            <button onClick={() => handleDelete(report.ReportId, report.ReportName)} className="p-2 bg-red-50 hover:bg-red-100 text-red-600 rounded-lg transition-colors" title="ลบ">
+                                            <button
+                                                onClick={() => handleToggleActive(report.ReportId, report.ReportName, report.IsActive)}
+                                                className={`p-2 rounded-lg transition-colors ${report.IsActive
+                                                    ? 'bg-amber-50 hover:bg-amber-100 text-amber-600'
+                                                    : 'bg-emerald-50 hover:bg-emerald-100 text-emerald-600'
+                                                    }`}
+                                                title={report.IsActive ? 'ปิดใช้งาน' : 'เปิดใช้งาน'}
+                                            >
+                                                <Power className="w-4 h-4" />
+                                            </button>
+                                            <button onClick={() => handleDelete(report.ReportId, report.ReportName)} className="p-2 bg-red-50 hover:bg-red-100 text-red-600 rounded-lg transition-colors" title="ลบถาวร">
                                                 <Trash2 className="w-4 h-4" />
                                             </button>
                                         </div>
