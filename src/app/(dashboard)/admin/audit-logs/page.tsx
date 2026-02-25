@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react";
-import { Activity, Download, Filter, ChevronLeft, ChevronRight, Loader2, Search, Eye, X, ArrowRight, RefreshCw } from "lucide-react";
+import { Activity, Download, Filter, ChevronLeft, ChevronRight, Loader2, Search, Eye, X, ArrowRight, RefreshCw, Trash2, AlertTriangle } from "lucide-react";
 import { formatDateTime } from "@/lib/dateUtils";
 import * as xlsx from 'xlsx';
 
@@ -40,6 +40,11 @@ export default function AuditLogsPage() {
     const [dateTo, setDateTo] = useState('');
     const [actionTypes, setActionTypes] = useState<string[]>([]);
     const [users, setUsers] = useState<any[]>([]);
+
+    // Bulk delete
+    const [showDeleteModal, setShowDeleteModal] = useState(false);
+    const [deleteBefore, setDeleteBefore] = useState('');
+    const [isDeleting, setIsDeleting] = useState(false);
 
     const fetchLogs = async () => {
         setIsLoading(true);
@@ -82,6 +87,22 @@ export default function AuditLogsPage() {
         const wb = xlsx.utils.book_new();
         xlsx.utils.book_append_sheet(wb, ws, 'Audit Logs');
         xlsx.writeFile(wb, `audit_logs_${new Date().toISOString().split('T')[0]}.xlsb`, { bookType: 'xlsb' });
+    };
+
+    const handleBulkDelete = async () => {
+        if (!deleteBefore) return;
+        setIsDeleting(true);
+        try {
+            const res = await fetch(`/api/admin/audit-logs?before=${deleteBefore}`, { method: 'DELETE' });
+            const data = await res.json();
+            if (data.success) {
+                setShowDeleteModal(false);
+                setDeleteBefore('');
+                setPage(1);
+                fetchLogs();
+            }
+        } catch { }
+        finally { setIsDeleting(false); }
     };
 
     const parseChangeData = (raw: string | null) => {
@@ -187,6 +208,9 @@ export default function AuditLogsPage() {
                     </div>
                 </div>
                 <div className="flex items-center gap-2">
+                    <button onClick={() => setShowDeleteModal(true)} className="p-2.5 bg-red-50 dark:bg-red-900/30 text-red-500 rounded-lg hover:bg-red-100 dark:hover:bg-red-900/50 transition-colors" title="ลบ log เก่า">
+                        <Trash2 className="w-5 h-5" />
+                    </button>
                     <button onClick={() => { setPage(1); fetchLogs(); }} className="p-2.5 bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-600 transition-colors" title="รีเฟรช">
                         <RefreshCw className={`w-5 h-5 ${isLoading ? 'animate-spin' : ''}`} />
                     </button>
@@ -320,7 +344,63 @@ export default function AuditLogsPage() {
                     </div>
                 );
             })()}
+            {/* Bulk Delete Modal */}
+            {showDeleteModal && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm" onClick={() => setShowDeleteModal(false)}>
+                    <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl w-full max-w-md mx-4 animate-in zoom-in-95 duration-200" onClick={e => e.stopPropagation()}>
+                        <div className="p-6">
+                            <div className="flex items-center gap-3 mb-4">
+                                <div className="w-10 h-10 bg-red-100 dark:bg-red-900/30 rounded-xl flex items-center justify-center">
+                                    <AlertTriangle className="w-5 h-5 text-red-500" />
+                                </div>
+                                <div>
+                                    <h3 className="text-lg font-bold text-slate-900 dark:text-white">ลบ Log เก่า</h3>
+                                    <p className="text-sm text-slate-500">ลบรายการ log ที่เก่ากว่าวันที่เลือก</p>
+                                </div>
+                            </div>
+                            <div className="mb-4">
+                                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">ลบ log ที่เก่ากว่าวันที่</label>
+                                <input
+                                    type="date"
+                                    value={deleteBefore}
+                                    onChange={e => setDeleteBefore(e.target.value)}
+                                    className="w-full px-3 py-2.5 bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-red-500/20 focus:border-red-500 dark:text-white"
+                                />
+                                <div className="flex gap-2 mt-2">
+                                    {[30, 60, 90, 180].map(days => {
+                                        const d = new Date();
+                                        d.setDate(d.getDate() - days);
+                                        const val = d.toISOString().split('T')[0];
+                                        return (
+                                            <button key={days} onClick={() => setDeleteBefore(val)} className={`px-2.5 py-1 text-xs font-medium rounded-lg border transition-colors ${deleteBefore === val ? 'bg-red-50 border-red-200 text-red-600' : 'bg-slate-50 dark:bg-slate-700 border-slate-200 dark:border-slate-600 text-slate-500 hover:bg-slate-100'}`}>
+                                                {days} วันก่อน
+                                            </button>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+                            {deleteBefore && (
+                                <div className="p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg mb-4">
+                                    <p className="text-sm text-red-700 dark:text-red-400 font-medium">
+                                        ⚠️ จะลบ log ทั้งหมดที่เก่ากว่าวันที่ <span className="font-bold">{deleteBefore}</span> การดำเนินการนี้ไม่สามารถย้อนกลับได้
+                                    </p>
+                                </div>
+                            )}
+                        </div>
+                        <div className="px-6 py-4 bg-slate-50 dark:bg-slate-700/50 rounded-b-2xl flex items-center justify-end gap-3 border-t border-slate-200 dark:border-slate-600">
+                            <button onClick={() => setShowDeleteModal(false)} className="px-4 py-2 text-sm font-medium text-slate-500 hover:text-slate-700 transition-colors">ยกเลิก</button>
+                            <button
+                                onClick={handleBulkDelete}
+                                disabled={!deleteBefore || isDeleting}
+                                className="px-5 py-2 text-sm font-semibold text-white bg-red-600 hover:bg-red-700 rounded-lg transition-colors disabled:opacity-50 inline-flex items-center gap-2"
+                            >
+                                {isDeleting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+                                {isDeleting ? 'กำลังลบ...' : 'ลบ Log'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }
-

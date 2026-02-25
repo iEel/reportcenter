@@ -103,3 +103,48 @@ export async function GET(request) {
         return NextResponse.json({ success: false, message: 'เกิดข้อผิดพลาดภายในเซิร์ฟเวอร์' }, { status: 500 });
     }
 }
+
+/**
+ * DELETE /api/admin/audit-logs
+ * Bulk delete logs older than a specified date
+ * Query: ?before=YYYY-MM-DD
+ */
+export async function DELETE(request) {
+    try {
+        const session = await getSession(request);
+        if (!session || session.roleName?.toLowerCase() !== 'admin') {
+            return NextResponse.json({ success: false, message: 'Unauthorized' }, { status: 401 });
+        }
+
+        const { searchParams } = new URL(request.url);
+        const before = searchParams.get('before');
+
+        if (!before) {
+            return NextResponse.json({ success: false, message: 'กรุณาระบุวันที่ (before)' }, { status: 400 });
+        }
+
+        const pool = await connectToCentralDB();
+
+        // Count first
+        const countResult = await pool.request()
+            .input('Before', sql.DateTime, new Date(before + 'T23:59:59'))
+            .query('SELECT COUNT(*) AS cnt FROM ActivityLogs WHERE CreatedAt <= @Before');
+
+        const count = countResult.recordset[0].cnt;
+
+        if (count === 0) {
+            return NextResponse.json({ success: true, deleted: 0, message: 'ไม่พบ log ในช่วงเวลาที่เลือก' });
+        }
+
+        // Delete
+        await pool.request()
+            .input('Before', sql.DateTime, new Date(before + 'T23:59:59'))
+            .query('DELETE FROM ActivityLogs WHERE CreatedAt <= @Before');
+
+        return NextResponse.json({ success: true, deleted: count, message: `ลบ log ${count} รายการสำเร็จ` });
+
+    } catch (error) {
+        console.error('Delete audit logs error:', error);
+        return NextResponse.json({ success: false, message: 'เกิดข้อผิดพลาดภายในเซิร์ฟเวอร์' }, { status: 500 });
+    }
+}
