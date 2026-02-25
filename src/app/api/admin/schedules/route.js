@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import sql from 'mssql';
-import { connectToCentralDB } from '@/lib/db';
+import { connectToCentralDB, getCompanyLabelAsync } from '@/lib/db';
 import { verifyToken } from '@/lib/auth';
 import { cookies } from 'next/headers';
 import { sendMail } from '@/lib/email';
@@ -367,8 +367,7 @@ export async function PATCH(request) {
             : '';
 
         // Send email via Graph API or SMTP fallback
-        const companyNames = { 1: 'Sonic Interfreight (SNI)', 2: 'Grandlink Logistics (GRL)', 3: 'Sonic Autologis (SALOG)' };
-        const companyName = companyNames[sched.CompanyId] || `Company ${sched.CompanyId}`;
+        const companyName = await getCompanyLabelAsync(sched.CompanyId);
         const dateStr = new Date().toISOString().split('T')[0];
         const subject = sched.EmailSubject || `[ReportCenter] ${sched.ReportName} - ${companyName} - ${dateStr}`;
 

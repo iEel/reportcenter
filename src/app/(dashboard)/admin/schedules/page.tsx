@@ -60,17 +60,13 @@ const FREQ_COLORS: Record<string, string> = {
     monthly: 'bg-teal-50 text-teal-700 border-teal-200',
 };
 
-const companyNames: Record<number, string> = {
-    1: 'Sonic Interfreight (SNI)',
-    2: 'Grandlink Logistics (GRL)',
-    3: 'Sonic Autologis (SALOG)',
-};
 
 export default function ScheduledReportsPage() {
     const { toast } = useToast();
     const { confirm } = useConfirm();
     const [schedules, setSchedules] = useState<Schedule[]>([]);
     const [reports, setReports] = useState<Report[]>([]);
+    const [companies, setCompanies] = useState<any[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [showModal, setShowModal] = useState(false);
     const [editSchedule, setEditSchedule] = useState<Schedule | null>(null);
@@ -148,6 +144,7 @@ export default function ScheduledReportsPage() {
     useEffect(() => {
         fetchSchedules();
         fetchReports();
+        fetch('/api/companies').then(r => r.json()).then(d => { if (d.success) setCompanies(d.companies); }).catch(() => { });
     }, []);
 
     const openCreateModal = () => {
@@ -417,7 +414,7 @@ export default function ScheduledReportsPage() {
                                                 <span className="text-slate-300 dark:text-slate-600">•</span>
                                                 <span className="inline-flex items-center gap-1.5">
                                                     <Building2 className="w-3.5 h-3.5 text-slate-400" />
-                                                    {companyNames[s.CompanyId] || `Company ${s.CompanyId}`}
+                                                    {companies.find(c => c.companyId === s.CompanyId)?.name || `Company ${s.CompanyId}`}
                                                 </span>
                                             </div>
 
@@ -517,7 +514,7 @@ export default function ScheduledReportsPage() {
                                         <div>
                                             <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1.5">บริษัท</label>
                                             <select value={form.companyId} onChange={e => setForm({ ...form, companyId: e.target.value })} className={inputClass}>
-                                                {Object.entries(companyNames).map(([id, name]) => (<option key={id} value={id}>{name}</option>))}
+                                                {companies.map(c => (<option key={c.companyId} value={c.companyId}>{c.name} ({c.label})</option>))}
                                             </select>
                                         </div>
                                     </div>

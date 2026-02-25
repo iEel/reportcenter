@@ -228,5 +228,6 @@ export async function getCompanyList() {
     return Object.entries(configs).map(([id, cfg]) => ({
         companyId: parseInt(id),
         label: cfg.label,
-    }));
+        name: cfg.name || cfg.label,
+    })).sort((a, b) => a.companyId - b.companyId);
 }

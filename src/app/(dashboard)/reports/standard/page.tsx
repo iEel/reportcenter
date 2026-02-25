@@ -40,11 +40,10 @@ export default function StandardReportPage() {
     // Background Job state
     const [activeJob, setActiveJob] = useState<{ jobId: number; status: string; rowCount?: number; fileName?: string; error?: string } | null>(null);
 
-    const companyNames: Record<number, string> = {
-        1: 'Sonic Interfreight (SNI)',
-        2: 'Grandlink Logistics (GRL)',
-        3: 'Sonic Autologis (SALOG)',
-    };
+    const [companies, setCompanies] = useState<any[]>([]);
+
+    const companyNames: Record<number, string> = {};
+    companies.forEach(c => { companyNames[c.companyId] = `${c.name} (${c.label})`; });
 
     const allowedCompanies = user?.allowedCompanies || [];
 
@@ -60,17 +59,22 @@ export default function StandardReportPage() {
         const fetchReports = async () => {
             setIsLoadingReports(true);
             try {
-                const [reportsRes, favRes] = await Promise.all([
+                const [reportsRes, favRes, compRes] = await Promise.all([
                     fetch('/api/reports/available'),
                     fetch('/api/reports/favorites'),
+                    fetch('/api/companies'),
                 ]);
                 const reportsData = await reportsRes.json();
                 const favData = await favRes.json();
+                const compData = await compRes.json();
                 if (reportsData.success) {
                     setReports(reportsData.reports.filter((r: any) => r.ReportType === 1));
                 }
                 if (favData.success) {
                     setFavoriteIds(favData.favorites.map((f: any) => f.ReportId));
+                }
+                if (compData.success) {
+                    setCompanies(compData.companies);
                 }
             } catch (error) {
                 console.error("Failed to fetch reports:", error);
@@ -415,8 +419,8 @@ export default function StandardReportPage() {
                                     onChange={e => setSelectedCompany(e.target.value)}
                                     className="w-full bg-white border border-slate-200 text-sm py-2 px-3 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors"
                                 >
-                                    {allowedCompanies.map(cid => (
-                                        <option key={cid} value={cid}>{cid}. {companyNames[cid] || `Company ${cid}`}</option>
+                                    {companies.map(c => (
+                                        <option key={c.companyId} value={c.companyId}>{c.companyId}. {c.name} ({c.label})</option>
                                     ))}
                                 </select>
                             </div>

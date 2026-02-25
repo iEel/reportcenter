@@ -5,16 +5,15 @@ import { Plus, Search, Edit, Shield, User, Building, RefreshCw, X, Save, Loader2
 import { useToast } from "@/components/providers/ToastProvider";
 import { useConfirm } from "@/components/providers/ConfirmProvider";
 
-const companies = [
-    { id: 1, name: 'Sonic Interfreight', short: 'SNI', color: 'blue' },
-    { id: 2, name: 'Grandlink Logistics', short: 'GRL', color: 'emerald' },
-    { id: 3, name: 'Sonic Autologis', short: 'SALOG', color: 'purple' },
-];
+const COMPANY_COLORS = ['blue', 'emerald', 'purple', 'amber', 'cyan', 'rose'];
 
 const companyColorMap: Record<string, { bg: string; text: string; border: string }> = {
     blue: { bg: 'bg-blue-50 dark:bg-blue-900/30', text: 'text-blue-700 dark:text-blue-300', border: 'border-blue-200 dark:border-blue-800' },
     emerald: { bg: 'bg-emerald-50 dark:bg-emerald-900/30', text: 'text-emerald-700 dark:text-emerald-300', border: 'border-emerald-200 dark:border-emerald-800' },
     purple: { bg: 'bg-purple-50 dark:bg-purple-900/30', text: 'text-purple-700 dark:text-purple-300', border: 'border-purple-200 dark:border-purple-800' },
+    amber: { bg: 'bg-amber-50 dark:bg-amber-900/30', text: 'text-amber-700 dark:text-amber-300', border: 'border-amber-200 dark:border-amber-800' },
+    cyan: { bg: 'bg-cyan-50 dark:bg-cyan-900/30', text: 'text-cyan-700 dark:text-cyan-300', border: 'border-cyan-200 dark:border-cyan-800' },
+    rose: { bg: 'bg-rose-50 dark:bg-rose-900/30', text: 'text-rose-700 dark:text-rose-300', border: 'border-rose-200 dark:border-rose-800' },
 };
 
 const avatarColors = [
@@ -31,6 +30,7 @@ export default function AdminUsersPage() {
     const { confirm } = useConfirm();
     const [users, setUsers] = useState<any[]>([]);
     const [roles, setRoles] = useState<any[]>([]);
+    const [companies, setCompanies] = useState<any[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [searchQuery, setSearchQuery] = useState('');
     const [filterRole, setFilterRole] = useState('');
@@ -94,7 +94,14 @@ export default function AdminUsersPage() {
         }
     };
 
-    useEffect(() => { fetchUsersAndRoles(); }, []);
+    useEffect(() => {
+        fetchUsersAndRoles();
+        fetch('/api/companies').then(r => r.json()).then(d => {
+            if (d.success) setCompanies(d.companies.map((c: any, i: number) => ({
+                id: c.companyId, name: c.name, short: c.label, color: COMPANY_COLORS[i % COMPANY_COLORS.length],
+            })));
+        }).catch(() => { });
+    }, []);
 
     const handleOpenAddModal = () => {
         setEditMode(false);

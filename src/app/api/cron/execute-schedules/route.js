@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import sql from 'mssql';
-import { connectToCentralDB, connectToCompanyDB } from '@/lib/db';
+import { connectToCentralDB, connectToCompanyDB, getCompanyLabelAsync } from '@/lib/db';
 import { sendMail } from '@/lib/email';
 import { validateQuery } from '@/lib/sql-validator';
 import * as xlsx from 'xlsx';
@@ -159,8 +159,7 @@ export async function GET(request) {
                 const excelBuffer = xlsx.write(wb, { type: 'buffer', bookType: 'xlsb' });
 
                 // 3. Send email
-                const companyNames = { 1: 'Sonic Interfreight (SNI)', 2: 'Grandlink Logistics (GRL)', 3: 'Sonic Autologis (SALOG)' };
-                const companyName = companyNames[schedule.CompanyId] || `Company ${schedule.CompanyId}`;
+                const companyName = await getCompanyLabelAsync(schedule.CompanyId);
                 const dateStr = new Date().toLocaleDateString('th-TH', { day: '2-digit', month: '2-digit', year: 'numeric' });
                 const subject = schedule.EmailSubject
                     ? schedule.EmailSubject.replace('{date}', dateStr).replace('{report}', schedule.ReportName)
