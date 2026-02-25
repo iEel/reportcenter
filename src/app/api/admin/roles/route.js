@@ -29,11 +29,14 @@ export async function GET(request) {
             WHERE rpt.IsActive = 1
         `);
 
-        // Get all active reports for selection
+        // Get all active reports for selection (with category info)
         const reportsResult = await pool.request().query(`
-            SELECT ReportId, ReportName, ReportType
-            FROM Reports WHERE IsActive = 1
-            ORDER BY ReportName
+            SELECT r.ReportId, r.ReportName, r.ReportType,
+                   r.CategoryId, ISNULL(c.CategoryName, '') AS CategoryName, ISNULL(c.ColorTag, '') AS CategoryColor
+            FROM Reports r
+            LEFT JOIN ReportCategories c ON r.CategoryId = c.CategoryId
+            WHERE r.IsActive = 1
+            ORDER BY c.SortOrder, c.CategoryName, r.ReportName
         `);
 
         // Merge mappings into roles

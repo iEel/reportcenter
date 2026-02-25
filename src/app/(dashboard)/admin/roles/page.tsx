@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react";
-import { Plus, Search, Edit, Trash2, Shield, FileText, RefreshCw, X, Save, Loader2, Check, Users, ChevronRight } from "lucide-react";
+import { Plus, Search, Edit, Trash2, Shield, FileText, RefreshCw, X, Save, Loader2, Check, Users, ChevronRight, Tag } from "lucide-react";
 import { useToast } from "@/components/providers/ToastProvider";
 import { useConfirm } from "@/components/providers/ConfirmProvider";
 
@@ -16,7 +16,23 @@ interface Report {
     ReportId: number;
     ReportName: string;
     ReportType: number;
+    CategoryId: number | null;
+    CategoryName: string;
+    CategoryColor: string;
 }
+
+const CATEGORY_COLORS: Record<string, string> = {
+    blue: 'bg-blue-50 border-blue-100 text-blue-700',
+    emerald: 'bg-emerald-50 border-emerald-100 text-emerald-700',
+    amber: 'bg-amber-50 border-amber-100 text-amber-700',
+    rose: 'bg-rose-50 border-rose-100 text-rose-700',
+    purple: 'bg-purple-50 border-purple-100 text-purple-700',
+    cyan: 'bg-cyan-50 border-cyan-100 text-cyan-700',
+    orange: 'bg-orange-50 border-orange-100 text-orange-700',
+    slate: 'bg-slate-50 border-slate-100 text-slate-700',
+    indigo: 'bg-indigo-50 border-indigo-100 text-indigo-700',
+    teal: 'bg-teal-50 border-teal-100 text-teal-700',
+};
 
 export default function AdminRolesPage() {
     const { toast } = useToast();
@@ -424,16 +440,6 @@ export default function AdminRolesPage() {
                                             !reportSearch || r.ReportName.toLowerCase().includes(reportSearch.toLowerCase())
                                         );
 
-                                        // Sort: selected first within each group
-                                        const sortBySelected = (a: Report, b: Report) => {
-                                            const aChecked = formData.assignedReports.includes(a.ReportId) ? 0 : 1;
-                                            const bChecked = formData.assignedReports.includes(b.ReportId) ? 0 : 1;
-                                            return aChecked - bChecked || a.ReportName.localeCompare(b.ReportName, 'th');
-                                        };
-
-                                        const standardReports = filtered.filter(r => r.ReportType === 1).sort(sortBySelected);
-                                        const templateReports = filtered.filter(r => r.ReportType === 2).sort(sortBySelected);
-
                                         if (filtered.length === 0) {
                                             return (
                                                 <p className="px-4 py-8 text-center text-sm text-slate-400 dark:text-slate-500">
@@ -442,21 +448,37 @@ export default function AdminRolesPage() {
                                             );
                                         }
 
+                                        // Group by category
+                                        const categoryMap = new Map<string, Report[]>();
+                                        filtered.forEach(r => {
+                                            const key = r.CategoryName || '__uncategorized__';
+                                            if (!categoryMap.has(key)) categoryMap.set(key, []);
+                                            categoryMap.get(key)!.push(r);
+                                        });
+
+                                        // Sort: categorized first, uncategorized last
+                                        const sortedKeys = [...categoryMap.keys()].sort((a, b) => {
+                                            if (a === '__uncategorized__') return 1;
+                                            if (b === '__uncategorized__') return -1;
+                                            return a.localeCompare(b, 'th');
+                                        });
+
                                         const renderReport = (report: Report) => {
                                             const isChecked = formData.assignedReports.includes(report.ReportId);
                                             return (
                                                 <label
                                                     key={report.ReportId}
-                                                    className={`flex items-center gap-3 px-4 py-2.5 cursor-pointer border-b border-slate-100 dark:border-slate-700 last:border-0 transition-all ${isChecked ? 'bg-blue-50/60 dark:bg-blue-900/20' : 'hover:bg-slate-50 dark:hover:bg-slate-700/50'
-                                                        }`}
+                                                    className={`flex items-center gap-3 px-4 py-2.5 cursor-pointer border-b border-slate-100 dark:border-slate-700 last:border-0 transition-all ${isChecked ? 'bg-blue-50/60 dark:bg-blue-900/20' : 'hover:bg-slate-50 dark:hover:bg-slate-700/50'}`}
                                                 >
-                                                    <div className={`w-5 h-5 rounded border-2 flex items-center justify-center flex-shrink-0 transition-all ${isChecked ? 'bg-blue-600 border-blue-600' : 'border-slate-300 dark:border-slate-500'
-                                                        }`}>
+                                                    <div className={`w-5 h-5 rounded border-2 flex items-center justify-center flex-shrink-0 transition-all ${isChecked ? 'bg-blue-600 border-blue-600' : 'border-slate-300 dark:border-slate-500'}`}>
                                                         {isChecked && <Check className="w-3 h-3 text-white" />}
                                                     </div>
-                                                    <FileText className={`w-4 h-4 flex-shrink-0 ${isChecked ? 'text-blue-600 dark:text-blue-400' : 'text-slate-400'}`} />
-                                                    <div className="flex-1 min-w-0">
+                                                    <FileText className={`w-4 h-4 flex-shrink-0 ${report.ReportType === 1 ? (isChecked ? 'text-blue-600' : 'text-blue-400') : (isChecked ? 'text-purple-600' : 'text-purple-400')}`} />
+                                                    <div className="flex-1 min-w-0 flex items-center gap-2">
                                                         <p className={`text-sm font-medium truncate ${isChecked ? 'text-slate-900 dark:text-white' : 'text-slate-600 dark:text-slate-300'}`}>{report.ReportName}</p>
+                                                        <span className={`shrink-0 text-[9px] font-bold uppercase px-1.5 py-0.5 rounded ${report.ReportType === 1 ? 'bg-blue-100 text-blue-600' : 'bg-purple-100 text-purple-600'}`}>
+                                                            {report.ReportType === 1 ? 'STD' : 'TPL'}
+                                                        </span>
                                                     </div>
                                                     <input
                                                         type="checkbox"
@@ -468,34 +490,53 @@ export default function AdminRolesPage() {
                                             );
                                         };
 
-                                        const stdSelected = standardReports.filter(r => formData.assignedReports.includes(r.ReportId)).length;
-                                        const tplSelected = templateReports.filter(r => formData.assignedReports.includes(r.ReportId)).length;
+                                        const toggleCategory = (reports: Report[]) => {
+                                            const ids = reports.map(r => r.ReportId);
+                                            const allSelected = ids.every(id => formData.assignedReports.includes(id));
+                                            setFormData(prev => ({
+                                                ...prev,
+                                                assignedReports: allSelected
+                                                    ? prev.assignedReports.filter(id => !ids.includes(id))
+                                                    : [...new Set([...prev.assignedReports, ...ids])],
+                                            }));
+                                        };
 
                                         return (
                                             <>
-                                                {/* Standard Reports Group */}
-                                                {standardReports.length > 0 && (
-                                                    <>
-                                                        <div className="sticky top-0 z-10 px-4 py-2 bg-blue-50 dark:bg-blue-900/30 border-b border-blue-100 dark:border-blue-800 flex items-center justify-between">
-                                                            <span className="text-xs font-bold text-blue-700 dark:text-blue-300 uppercase tracking-wider">
-                                                                📊 Standard ({stdSelected}/{standardReports.length})
-                                                            </span>
-                                                        </div>
-                                                        {standardReports.map(renderReport)}
-                                                    </>
-                                                )}
+                                                {sortedKeys.map(key => {
+                                                    const reports = categoryMap.get(key)!;
+                                                    const catSelected = reports.filter(r => formData.assignedReports.includes(r.ReportId)).length;
+                                                    const allSelected = catSelected === reports.length;
+                                                    const catName = key === '__uncategorized__' ? 'ไม่ระบุหมวดหมู่' : key;
+                                                    const catColor = reports[0]?.CategoryColor || 'slate';
+                                                    const headerClass = CATEGORY_COLORS[catColor] || CATEGORY_COLORS.slate;
 
-                                                {/* Template Reports Group */}
-                                                {templateReports.length > 0 && (
-                                                    <>
-                                                        <div className="sticky top-0 z-10 px-4 py-2 bg-purple-50 dark:bg-purple-900/30 border-b border-purple-100 dark:border-purple-800 flex items-center justify-between">
-                                                            <span className="text-xs font-bold text-purple-700 dark:text-purple-300 uppercase tracking-wider">
-                                                                📝 Template ({tplSelected}/{templateReports.length})
-                                                            </span>
+                                                    return (
+                                                        <div key={key}>
+                                                            <div className={`sticky top-0 z-10 px-4 py-2 border-b flex items-center justify-between ${headerClass}`}>
+                                                                <span className="text-xs font-bold uppercase tracking-wider flex items-center gap-1.5">
+                                                                    <Tag className="w-3 h-3" />
+                                                                    {catName} ({catSelected}/{reports.length})
+                                                                </span>
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => toggleCategory(reports)}
+                                                                    className={`text-[10px] font-semibold px-2 py-0.5 rounded-md transition-colors ${allSelected
+                                                                        ? 'bg-white/60 hover:bg-white/80 text-slate-600'
+                                                                        : 'bg-blue-600 text-white hover:bg-blue-700'
+                                                                        }`}
+                                                                >
+                                                                    {allSelected ? 'ยกเลิกทั้งหมวด' : 'เลือกทั้งหมวด'}
+                                                                </button>
+                                                            </div>
+                                                            {reports.sort((a, b) => {
+                                                                const ac = formData.assignedReports.includes(a.ReportId) ? 0 : 1;
+                                                                const bc = formData.assignedReports.includes(b.ReportId) ? 0 : 1;
+                                                                return ac - bc || a.ReportName.localeCompare(b.ReportName, 'th');
+                                                            }).map(renderReport)}
                                                         </div>
-                                                        {templateReports.map(renderReport)}
-                                                    </>
-                                                )}
+                                                    );
+                                                })}
                                             </>
                                         );
                                     })()}
