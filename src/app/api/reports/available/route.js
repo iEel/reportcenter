@@ -39,8 +39,10 @@ export async function GET(request) {
         if (isAdmin) {
             // Admin sees all active reports
             result = await pool.request().query(`
-                SELECT r.ReportId, r.ReportName, r.Description, r.ReportType, r.EmailTemplateContent, ISNULL(r.IsHeavy, 0) AS IsHeavy
+                SELECT r.ReportId, r.ReportName, r.Description, r.ReportType, r.EmailTemplateContent, ISNULL(r.IsHeavy, 0) AS IsHeavy,
+                       r.CategoryId, c.CategoryName, c.ColorTag AS CategoryColor
                 FROM Reports r
+                LEFT JOIN ReportCategories c ON r.CategoryId = c.CategoryId
                 WHERE r.IsActive = 1
                 ORDER BY r.ReportType, r.ReportName
             `);
@@ -49,9 +51,11 @@ export async function GET(request) {
             result = await pool.request()
                 .input('UserRoleId', sql.Int, userRoleId)
                 .query(`
-                    SELECT DISTINCT r.ReportId, r.ReportName, r.Description, r.ReportType, r.EmailTemplateContent, ISNULL(r.IsHeavy, 0) AS IsHeavy
+                    SELECT DISTINCT r.ReportId, r.ReportName, r.Description, r.ReportType, r.EmailTemplateContent, ISNULL(r.IsHeavy, 0) AS IsHeavy,
+                           r.CategoryId, c.CategoryName, c.ColorTag AS CategoryColor
                     FROM Reports r
                     INNER JOIN ReportRoleMapping m ON r.ReportId = m.ReportId
+                    LEFT JOIN ReportCategories c ON r.CategoryId = c.CategoryId
                     WHERE r.IsActive = 1 
                       AND m.RoleId = @UserRoleId
                     ORDER BY r.ReportType, r.ReportName

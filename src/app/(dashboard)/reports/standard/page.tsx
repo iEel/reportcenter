@@ -34,8 +34,9 @@ export default function StandardReportPage() {
     // Favorites
     const [favoriteIds, setFavoriteIds] = useState<number[]>([]);
 
-    // Search
+    // Search & Category filter
     const [searchQuery, setSearchQuery] = useState('');
+    const [selectedCategory, setSelectedCategory] = useState('');
 
     // Background Job state
     const [activeJob, setActiveJob] = useState<{ jobId: number; status: string; rowCount?: number; fileName?: string; error?: string } | null>(null);
@@ -345,6 +346,24 @@ export default function StandardReportPage() {
                     </div>
                 )}
 
+                {/* Category Filter Chips */}
+                {(() => {
+                    const cats = [...new Set(reports.map(r => r.CategoryName).filter(Boolean))];
+                    if (cats.length === 0) return null;
+                    return (
+                        <div className="mb-4 flex flex-wrap gap-2">
+                            <button onClick={() => setSelectedCategory('')} className={`px-3 py-1 rounded-full text-xs font-medium border transition-colors ${!selectedCategory ? 'bg-blue-50 border-blue-200 text-blue-700' : 'bg-white border-slate-200 text-slate-500 hover:bg-slate-50'}`}>
+                                ทั้งหมด ({reports.length})
+                            </button>
+                            {cats.map(cat => (
+                                <button key={cat} onClick={() => setSelectedCategory(cat)} className={`px-3 py-1 rounded-full text-xs font-medium border transition-colors ${selectedCategory === cat ? 'bg-blue-50 border-blue-200 text-blue-700' : 'bg-white border-slate-200 text-slate-500 hover:bg-slate-50'}`}>
+                                    {cat} ({reports.filter(r => r.CategoryName === cat).length})
+                                </button>
+                            ))}
+                        </div>
+                    );
+                })()}
+
                 <div className="flex flex-col md:flex-row md:items-end gap-6 justify-between">
                     <div className="w-full max-w-sm">
                         <label className="text-sm font-semibold text-slate-700 mb-2 flex items-center gap-2">
@@ -370,8 +389,9 @@ export default function StandardReportPage() {
                                     disabled={isLoadingReports || isExecuting}
                                     className="appearance-none w-full bg-slate-50 border border-slate-200 text-slate-900 py-2.5 pl-4 pr-10 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 font-medium disabled:opacity-60"
                                 >
-                                    <option value="">-- กรุณาเลือกรายงาน ({reports.length} รายการ) --</option>
+                                    <option value="">-- กรุณาเลือกรายงาน --</option>
                                     {reports.filter(r => {
+                                        if (selectedCategory && r.CategoryName !== selectedCategory) return false;
                                         if (!searchQuery) return true;
                                         const q = searchQuery.toLowerCase();
                                         return r.ReportName?.toLowerCase().includes(q) || r.Description?.toLowerCase().includes(q);
@@ -481,15 +501,17 @@ export default function StandardReportPage() {
             </div>
 
             {/* Error Message */}
-            {executionError && (
-                <div className="bg-red-50 text-red-600 p-4 rounded-xl flex items-start gap-3 border border-red-100">
-                    <AlertCircle className="w-5 h-5 flex-shrink-0 mt-0.5" />
-                    <div>
-                        <h4 className="font-semibold text-sm">เกิดข้อผิดพลาดในการดึงข้อมูล</h4>
-                        <p className="text-sm opacity-90">{executionError}</p>
+            {
+                executionError && (
+                    <div className="bg-red-50 text-red-600 p-4 rounded-xl flex items-start gap-3 border border-red-100">
+                        <AlertCircle className="w-5 h-5 flex-shrink-0 mt-0.5" />
+                        <div>
+                            <h4 className="font-semibold text-sm">เกิดข้อผิดพลาดในการดึงข้อมูล</h4>
+                            <p className="text-sm opacity-90">{executionError}</p>
+                        </div>
                     </div>
-                </div>
-            )}
+                )
+            }
 
             {/* Data Grid Area */}
             <div className="flex-1 bg-white rounded-2xl shadow-sm border border-slate-200 flex flex-col overflow-hidden relative">
@@ -597,6 +619,6 @@ export default function StandardReportPage() {
                     </div>
                 )}
             </div>
-        </div>
+        </div >
     );
 }

@@ -92,7 +92,8 @@ export async function PUT(request, props) {
                     EmailTemplateContent = @EmailTemplateContent, 
                     IsPublic = @IsPublic, 
                     IsActive = @IsActive,
-                    IsHeavy = @IsHeavy
+                    IsHeavy = @IsHeavy,
+                    CategoryId = @CategoryId
                 WHERE ReportId = @ReportId;
             `;
 
@@ -106,6 +107,7 @@ export async function PUT(request, props) {
                 .input('IsPublic', sql.Bit, report.IsPublic ? 1 : 0)
                 .input('IsActive', sql.Bit, report.IsActive !== undefined ? (report.IsActive ? 1 : 0) : 1)
                 .input('IsHeavy', sql.Bit, report.IsHeavy ? 1 : 0)
+                .input('CategoryId', sql.Int, report.CategoryId ? parseInt(report.CategoryId) : null)
                 .query(reportQuery);
 
             // 2. Delete Old Parameters
@@ -116,9 +118,9 @@ export async function PUT(request, props) {
             // 3. Auto-add LookupQuery column if missing
             try {
                 await transaction.request().query(`
-                    IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = 'ReportParameters' AND COLUMN_NAME = 'LookupQuery')
+                    IF NOT EXISTS(SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = 'ReportParameters' AND COLUMN_NAME = 'LookupQuery')
                     ALTER TABLE ReportParameters ADD LookupQuery NVARCHAR(MAX) NULL;
-                `);
+            `);
             } catch (e) { console.warn('IsHeavy column check failed:', e.message); }
 
             // 4. Insert New Parameters
@@ -132,9 +134,9 @@ export async function PUT(request, props) {
                 paramStmt.input('OrderIndex', sql.Int);
 
                 const paramQuery = `
-                    INSERT INTO ReportParameters (ReportId, ParameterName, DisplayLabel, InputType, LookupQuery, OrderIndex)
-                    VALUES (@ReportId, @ParameterName, @DisplayLabel, @InputType, @LookupQuery, @OrderIndex);
-                `;
+                    INSERT INTO ReportParameters(ReportId, ParameterName, DisplayLabel, InputType, LookupQuery, OrderIndex)
+            VALUES(@ReportId, @ParameterName, @DisplayLabel, @InputType, @LookupQuery, @OrderIndex);
+            `;
 
                 await paramStmt.prepare(paramQuery);
 
@@ -164,9 +166,9 @@ export async function PUT(request, props) {
                     roleStmt.input('RoleId', sql.Int);
 
                     const roleQuery = `
-                        INSERT INTO ReportRoleMapping (ReportId, RoleId)
-                        VALUES (@ReportId, @RoleId);
-                    `;
+                        INSERT INTO ReportRoleMapping(ReportId, RoleId)
+            VALUES(@ReportId, @RoleId);
+            `;
 
                     await roleStmt.prepare(roleQuery);
 
@@ -186,13 +188,13 @@ export async function PUT(request, props) {
             const changes = [];
             if (oldReport.ReportName !== report.ReportName) changes.push(`ชื่อ: "${oldReport.ReportName}" → "${report.ReportName}"`);
             if ((oldReport.Description || '') !== (report.Description || '')) changes.push(`คำอธิบาย: "${oldReport.Description || '-'}" → "${report.Description || '-'}"`);
-            if (oldReport.ReportType !== (report.ReportType || 1)) changes.push(`ประเภท: ${oldReport.ReportType} → ${report.ReportType || 1}`);
-            if ((oldReport.TSqlQuery || '') !== (report.TSqlQuery || '')) changes.push(`SQL เปลี่ยน (${(oldReport.TSqlQuery || '').length}→${(report.TSqlQuery || '').length} ตัวอักษร)`);
+            if (oldReport.ReportType !== (report.ReportType || 1)) changes.push(`ประเภท: ${oldReport.ReportType} → ${report.ReportType || 1} `);
+            if ((oldReport.TSqlQuery || '') !== (report.TSqlQuery || '')) changes.push(`SQL เปลี่ยน(${(oldReport.TSqlQuery || '').length}→${(report.TSqlQuery || '').length} ตัวอักษร)`);
             if ((oldReport.EmailTemplateContent || '') !== (report.EmailTemplateContent || '')) changes.push(`Email Template เปลี่ยน`);
-            if (!!oldReport.IsPublic !== !!report.IsPublic) changes.push(`สาธารณะ: ${oldReport.IsPublic ? 'ใช่' : 'ไม่'} → ${report.IsPublic ? 'ใช่' : 'ไม่'}`);
-            if (!!oldReport.IsActive !== !!(report.IsActive !== undefined ? report.IsActive : true)) changes.push(`สถานะ: ${oldReport.IsActive ? 'เปิด' : 'ปิด'} → ${report.IsActive ? 'เปิด' : 'ปิด'}`);
-            if (!!oldReport.IsHeavy !== !!report.IsHeavy) changes.push(`รายงานหนัก: ${oldReport.IsHeavy ? 'ใช่' : 'ไม่'} → ${report.IsHeavy ? 'ใช่' : 'ไม่'}`);
-            const changeSummary = changes.length > 0 ? ` | ${changes.join(', ')}` : '';
+            if (!!oldReport.IsPublic !== !!report.IsPublic) changes.push(`สาธารณะ: ${oldReport.IsPublic ? 'ใช่' : 'ไม่'} → ${report.IsPublic ? 'ใช่' : 'ไม่'} `);
+            if (!!oldReport.IsActive !== !!(report.IsActive !== undefined ? report.IsActive : true)) changes.push(`สถานะ: ${oldReport.IsActive ? 'เปิด' : 'ปิด'} → ${report.IsActive ? 'เปิด' : 'ปิด'} `);
+            if (!!oldReport.IsHeavy !== !!report.IsHeavy) changes.push(`รายงานหนัก: ${oldReport.IsHeavy ? 'ใช่' : 'ไม่'} → ${report.IsHeavy ? 'ใช่' : 'ไม่'} `);
+            const changeSummary = changes.length > 0 ? ` | ${changes.join(', ')} ` : '';
 
             // Log activity with full change data
             try {
@@ -201,9 +203,9 @@ export async function PUT(request, props) {
                     // Auto-add ChangeData column if missing
                     try {
                         await pool.request().query(`
-                            IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = 'ActivityLogs' AND COLUMN_NAME = 'ChangeData')
+                            IF NOT EXISTS(SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = 'ActivityLogs' AND COLUMN_NAME = 'ChangeData')
                             ALTER TABLE ActivityLogs ADD ChangeData NVARCHAR(MAX) NULL;
-                        `);
+        `);
                     } catch (e) { /* ignore */ }
 
                     // Build change data JSON with old→new for each changed field
@@ -221,9 +223,9 @@ export async function PUT(request, props) {
                         .input('UserId', sql.Int, session.userId)
                         .input('ReportId', sql.Int, parseInt(id))
                         .input('ActionType', sql.NVarChar(50), 'UPDATE_REPORT')
-                        .input('Details', sql.NVarChar(sql.MAX), `แก้ไขรายงาน "${report.ReportName}"${changeSummary}`)
+                        .input('Details', sql.NVarChar(sql.MAX), `แก้ไขรายงาน "${report.ReportName}"${changeSummary} `)
                         .input('ChangeData', sql.NVarChar(sql.MAX), Object.keys(changeData).length > 0 ? JSON.stringify(changeData) : null)
-                        .query(`INSERT INTO ActivityLogs (UserId, ReportId, ActionType, Details, ChangeData) VALUES (@UserId, @ReportId, @ActionType, @Details, @ChangeData)`);
+                        .query(`INSERT INTO ActivityLogs(UserId, ReportId, ActionType, Details, ChangeData) VALUES(@UserId, @ReportId, @ActionType, @Details, @ChangeData)`);
                 }
             } catch (e) { console.warn('Report activity log failed:', e.message); }
 
@@ -294,7 +296,7 @@ export async function PATCH(request, props) {
                 UPDATE Reports SET IsActive = CASE WHEN IsActive = 1 THEN 0 ELSE 1 END 
                 WHERE ReportId = @ReportId;
                 SELECT IsActive FROM Reports WHERE ReportId = @ReportId;
-            `);
+        `);
 
         const newStatus = result.recordset[0]?.IsActive;
         return NextResponse.json({

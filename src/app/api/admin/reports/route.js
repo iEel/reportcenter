@@ -27,9 +27,9 @@ export async function POST(request) {
         try {
             // 1. Insert Report
             const reportQuery = `
-                INSERT INTO Reports (ReportName, Description, ReportType, TSqlQuery, EmailTemplateContent, IsPublic, IsActive, IsHeavy)
+                INSERT INTO Reports (ReportName, Description, ReportType, TSqlQuery, EmailTemplateContent, IsPublic, IsActive, IsHeavy, CategoryId)
                 OUTPUT INSERTED.ReportId
-                VALUES (@ReportName, @Description, @ReportType, @TSqlQuery, @EmailTemplateContent, @IsPublic, @IsActive, @IsHeavy);
+                VALUES (@ReportName, @Description, @ReportType, @TSqlQuery, @EmailTemplateContent, @IsPublic, @IsActive, @IsHeavy, @CategoryId);
             `;
 
             const reportResult = await transaction.request()
@@ -41,6 +41,7 @@ export async function POST(request) {
                 .input('IsPublic', sql.Bit, report.IsPublic ? 1 : 0)
                 .input('IsActive', sql.Bit, 1)
                 .input('IsHeavy', sql.Bit, report.IsHeavy ? 1 : 0)
+                .input('CategoryId', sql.Int, report.CategoryId ? parseInt(report.CategoryId) : null)
                 .query(reportQuery);
 
             const newReportId = reportResult.recordset[0].ReportId;
@@ -144,8 +145,10 @@ export async function GET(request) {
     try {
         const pool = await connectToCentralDB();
         const query = `
-            SELECT ReportId, ReportName, Description, ReportType, IsPublic, IsActive
-            FROM Reports
+            SELECT r.ReportId, r.ReportName, r.Description, r.ReportType, r.IsPublic, r.IsActive,
+                   r.CategoryId, c.CategoryName, c.ColorTag AS CategoryColor
+            FROM Reports r
+            LEFT JOIN ReportCategories c ON r.CategoryId = c.CategoryId
             ORDER BY ReportId DESC;
         `;
         const result = await pool.request().query(query);
