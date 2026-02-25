@@ -32,7 +32,7 @@ interface Category {
 
 export default function AdminCategoriesPage() {
     const { toast } = useToast();
-    const confirm = useConfirm();
+    const { confirm } = useConfirm();
     const [categories, setCategories] = useState<Category[]>([]);
     const [isLoading, setIsLoading] = useState(true);
 
