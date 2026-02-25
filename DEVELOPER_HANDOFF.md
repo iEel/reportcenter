@@ -260,6 +260,7 @@ CreatedAt DATETIME DEFAULT GETDATE()
 
 | Method | Path                        | Description                       |
 |--------|-----------------------------|-----------------------------------|
+| GET    | `/api/companies`            | List all active companies from `CompanyDatabases` table |
 | GET    | `/api/reports/available`    | List reports user can access      |
 | GET    | `/api/reports/parameters`   | Get parameters for a report (incl. `LookupQuery`)       |
 | POST   | `/api/reports/execute`      | Execute T-SQL on company DB (handles ORDER BY in pagination) |
@@ -275,7 +276,8 @@ CreatedAt DATETIME DEFAULT GETDATE()
 | POST   | `/api/admin/reports`         | Create report + params            |
 | GET    | `/api/admin/reports/[id]`    | Get single report + roles         |
 | PUT    | `/api/admin/reports/[id]`    | Update report + roles             |
-| DELETE | `/api/admin/reports/[id]`    | Soft-delete (IsActive=0)          |
+| DELETE | `/api/admin/reports/[id]`    | **Hard-delete** (removes params + roles + favorites + report) |
+| PATCH  | `/api/admin/reports/[id]`    | Toggle IsActive (enable/disable)  |
 | GET    | `/api/admin/users`           | List users + roles + allowedCompanies + AD info |
 | POST   | `/api/admin/users`           | Create user (local bcrypt / AD LDAP_AUTH) + company mappings + logs CREATE_USER |
 | PUT    | `/api/admin/users`           | Update user + company mappings + logs UPDATE_USER |
@@ -760,6 +762,7 @@ npm run test:watch
 - [x] Report disable/enable toggle — PATCH endpoint + Power button (amber=disable, green=enable)
 - [x] Audit Trail UI — refresh button + BLOCKED_QUERY red badge styling
 - [x] Favicon — RC branded icon (icon.png replaces default Next.js favicon.ico)
+- [x] Dynamic company names — `/api/companies` endpoint + all pages load from `CompanyDatabases` table (no hardcode)
 - [ ] Two-factor authentication (2FA)
 - [ ] PDF export support
 
