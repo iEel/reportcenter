@@ -109,7 +109,7 @@ reportcenter/
 │   │   ├── auth.js                       # JWT sign/verify (jose) + getSession()
 │   │   ├── db.js                         # MSSQL connection pool manager
 │   │   ├── email.js                      # Email sender (Microsoft Graph API primary + SMTP password fallback)
-│   │   ├── ldap.js                       # LDAP/AD integration (bind, lookup, search, test)
+│   │   ├── ldap.js                       # LDAP/AD integration (bind, lookup, search with person-only filter)
 │   │   ├── sql-validator.js              # SQL query security validator (blocklist DML/DDL/metadata/procs)
 │   │   └── dateUtils.ts                  # Date/time utilities (Asia/Bangkok, 24h)
 │   └── middleware.ts                     # Route protection (JWT check)
@@ -292,7 +292,7 @@ CreatedAt DATETIME DEFAULT GETDATE()
 | POST   | `/api/admin/users`           | Create user (local bcrypt / AD LDAP_AUTH) + company mappings + logs CREATE_USER |
 | PUT    | `/api/admin/users`           | Update user + company mappings + logs UPDATE_USER |
 | DELETE | `/api/admin/users`           | Delete user + cleanup mappings/favorites + logs DELETE_USER |
-| GET    | `/api/admin/users/lookup-ad` | AD lookup (`?username=exact`) or search (`?search=wildcard`) for autocomplete |
+| GET    | `/api/admin/users/lookup-ad` | AD lookup (`?username=exact`) or search (`?search=wildcard`) — filters out computer accounts ($) |
 | POST   | `/api/admin/users/reset-password` | Admin reset user password (no old pw required) + logs RESET_PASSWORD |
 | GET    | `/api/admin/audit-logs`      | Paginated audit logs + ChangeData JSON (?page=&limit=) |
 | DELETE | `/api/admin/audit-logs`      | Bulk delete logs before date (`?before=YYYY-MM-DD`) |
