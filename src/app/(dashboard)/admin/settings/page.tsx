@@ -24,6 +24,7 @@ const settingLabels: Record<string, { label: string; icon: any; group: string; d
     'ldap_url': { label: 'Server URL', icon: Server, group: 'ldap', description: 'เช่น ldap://192.168.1.10:389' },
     'ldap_domain': { label: 'Domain', icon: AtSign, group: 'ldap', description: 'เช่น soniclocal.com' },
     'ldap_base_dn': { label: 'Base DN', icon: Network, group: 'ldap', description: 'เช่น DC=soniclocal,DC=com' },
+    'auto_purge_logs_days': { label: 'ลบ Log อัตโนมัติ (วัน)', icon: Clock, group: 'security', description: 'ลบ Audit Log เก่ากว่ากี่วันอัตโนมัติ — ตั้ง 0 เพื่อปิด', type: 'number' },
 };
 
 // Explicit LDAP field order

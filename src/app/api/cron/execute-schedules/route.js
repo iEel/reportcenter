@@ -30,6 +30,24 @@ async function cleanupOldJobs() {
         await pool.request().query(`
             DELETE FROM ReportJobs WHERE CreatedAt < DATEADD(DAY, -7, GETDATE())
         `);
+
+        // Auto-purge old Audit Logs based on SystemSettings
+        try {
+            const settingResult = await pool.request().query(`
+                SELECT SettingValue FROM SystemSettings WHERE SettingKey = 'auto_purge_logs_days'
+            `);
+            const purgeDays = parseInt(settingResult.recordset?.[0]?.SettingValue || '0');
+            if (purgeDays > 0) {
+                const purgeResult = await pool.request()
+                    .input('Days', sql.Int, purgeDays)
+                    .query('DELETE FROM ActivityLogs WHERE CreatedAt < DATEADD(DAY, -@Days, GETDATE())');
+                if (purgeResult.rowsAffected[0] > 0) {
+                    console.log(`[AutoPurge] Deleted ${purgeResult.rowsAffected[0]} audit logs older than ${purgeDays} days`);
+                }
+            }
+        } catch (purgeErr) {
+            console.warn('[AutoPurge] Error:', purgeErr.message);
+        }
     } catch (err) {
         console.warn('[Cleanup] Error:', err.message);
     }

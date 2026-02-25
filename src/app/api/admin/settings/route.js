@@ -58,6 +58,9 @@ export async function GET(request) {
             seedSettings.push("('ldap_domain', '', 'Domain สำหรับ UPN bind เช่น soniclocal.com')");
             seedSettings.push("('ldap_base_dn', '', 'Base DN สำหรับ search เช่น DC=soniclocal,DC=com')");
         }
+        if (!keys.includes('auto_purge_logs_days')) {
+            seedSettings.push("('auto_purge_logs_days', '0', 'จำนวนวันที่เก็บ Audit Log — 0 = ไม่ลบอัตโนมัติ')");
+        }
 
         if (seedSettings.length > 0) {
             await pool.request().query(`
