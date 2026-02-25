@@ -1,10 +1,23 @@
 "use client"
 
 import Link from "next/link";
-import { Plus, Search, Edit, Trash2, FileText, Database, Shield, RefreshCw, Star, Power } from "lucide-react";
+import { Plus, Search, Edit, Trash2, FileText, Database, Shield, RefreshCw, Star, Power, Tag } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useToast } from "@/components/providers/ToastProvider";
 import { useConfirm } from "@/components/providers/ConfirmProvider";
+
+const CATEGORY_COLORS: Record<string, string> = {
+    blue: 'bg-blue-100 text-blue-700 border-blue-200',
+    emerald: 'bg-emerald-100 text-emerald-700 border-emerald-200',
+    amber: 'bg-amber-100 text-amber-700 border-amber-200',
+    rose: 'bg-rose-100 text-rose-700 border-rose-200',
+    purple: 'bg-purple-100 text-purple-700 border-purple-200',
+    cyan: 'bg-cyan-100 text-cyan-700 border-cyan-200',
+    orange: 'bg-orange-100 text-orange-700 border-orange-200',
+    slate: 'bg-slate-100 text-slate-700 border-slate-200',
+    indigo: 'bg-indigo-100 text-indigo-700 border-indigo-200',
+    teal: 'bg-teal-100 text-teal-700 border-teal-200',
+};
 
 export default function AdminReportsPage() {
     const { toast } = useToast();
@@ -198,9 +211,17 @@ export default function AdminReportsPage() {
                                     </td>
                                     <td className="px-6 py-4 font-mono text-slate-500">RID-{report.ReportId.toString().padStart(4, '0')}</td>
                                     <td className="px-6 py-4">
-                                        <div className="flex flex-col">
+                                        <div className="flex flex-col gap-1">
                                             <span className="font-semibold text-slate-900 group-hover:text-blue-600 transition-colors">{report.ReportName}</span>
-                                            <span className="text-xs text-slate-500 truncate max-w-xs">{report.Description}</span>
+                                            <div className="flex items-center gap-2">
+                                                <span className="text-xs text-slate-500 truncate max-w-xs">{report.Description}</span>
+                                                {report.CategoryName && (
+                                                    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold border shrink-0 ${CATEGORY_COLORS[report.CategoryColor] || CATEGORY_COLORS.slate}`}>
+                                                        <Tag className="w-2.5 h-2.5" />
+                                                        {report.CategoryName}
+                                                    </span>
+                                                )}
+                                            </div>
                                         </div>
                                     </td>
                                     <td className="px-6 py-4">
