@@ -1,6 +1,6 @@
 "use client"
 
-import { Search, Filter, Download, FileText, ChevronDown, ChevronLeft, ChevronRight, RefreshCw, Loader2, AlertCircle, Star } from "lucide-react";
+import { Search, Filter, Download, FileText, ChevronDown, ChevronLeft, ChevronRight, RefreshCw, Loader2, AlertCircle, Star, Tag } from "lucide-react";
 import { useState, useEffect } from "react";
 import * as xlsx from 'xlsx';
 import { useAuth } from "@/components/providers/AuthProvider";
@@ -348,16 +348,37 @@ export default function StandardReportPage() {
 
                 {/* Category Filter Chips */}
                 {(() => {
-                    const cats = [...new Set(reports.map(r => r.CategoryName).filter(Boolean))];
-                    if (cats.length === 0) return null;
+                    const cats = reports.reduce((acc: Record<string, { name: string; color: string; count: number }>, r: any) => {
+                        if (r.CategoryName) {
+                            if (!acc[r.CategoryName]) acc[r.CategoryName] = { name: r.CategoryName, color: r.CategoryColor || 'slate', count: 0 };
+                            acc[r.CategoryName].count++;
+                        }
+                        return acc;
+                    }, {} as Record<string, { name: string; color: string; count: number }>);
+                    const catList = Object.values(cats) as { name: string; color: string; count: number }[];
+                    if (catList.length === 0) return null;
                     return (
-                        <div className="mb-4 flex flex-wrap gap-2">
-                            <button onClick={() => setSelectedCategory('')} className={`px-3 py-1 rounded-full text-xs font-medium border transition-colors ${!selectedCategory ? 'bg-blue-50 border-blue-200 text-blue-700' : 'bg-white border-slate-200 text-slate-500 hover:bg-slate-50'}`}>
+                        <div className="flex flex-wrap gap-2 mb-5">
+                            <button
+                                onClick={() => setSelectedCategory('')}
+                                className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold border transition-all ${selectedCategory === ''
+                                        ? 'bg-slate-900 text-white border-slate-900 shadow-md'
+                                        : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
+                                    }`}
+                            >
                                 ทั้งหมด ({reports.length})
                             </button>
-                            {cats.map(cat => (
-                                <button key={cat} onClick={() => setSelectedCategory(cat)} className={`px-3 py-1 rounded-full text-xs font-medium border transition-colors ${selectedCategory === cat ? 'bg-blue-50 border-blue-200 text-blue-700' : 'bg-white border-slate-200 text-slate-500 hover:bg-slate-50'}`}>
-                                    {cat} ({reports.filter(r => r.CategoryName === cat).length})
+                            {catList.map(cat => (
+                                <button
+                                    key={cat.name}
+                                    onClick={() => setSelectedCategory(cat.name)}
+                                    className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold border transition-all ${selectedCategory === cat.name
+                                            ? 'bg-slate-900 text-white border-slate-900 shadow-md'
+                                            : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
+                                        }`}
+                                >
+                                    <Tag className="w-3 h-3" />
+                                    {cat.name} ({cat.count})
                                 </button>
                             ))}
                         </div>
