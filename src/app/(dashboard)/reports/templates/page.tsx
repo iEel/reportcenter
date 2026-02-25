@@ -1,6 +1,6 @@
 "use client";
 
-import { Search, Filter, Copy, Download, LayoutTemplate, ChevronDown, CheckCircle2, RefreshCw, Loader2, AlertCircle, Star } from "lucide-react";
+import { Search, Filter, Copy, Download, LayoutTemplate, ChevronDown, CheckCircle2, RefreshCw, Loader2, AlertCircle, Star, Tag } from "lucide-react";
 import { useState, useEffect } from "react";
 import * as xlsx from 'xlsx';
 import { useAuth } from "@/components/providers/AuthProvider";
@@ -33,6 +33,7 @@ export default function TemplateReportPage() {
 
     // Search
     const [searchQuery, setSearchQuery] = useState('');
+    const [selectedCategory, setSelectedCategory] = useState('');
 
     // Background Job state
     const [activeJob, setActiveJob] = useState<{ jobId: number; status: string; rowCount?: number; fileName?: string; error?: string } | null>(null);
@@ -360,6 +361,44 @@ export default function TemplateReportPage() {
                     </div>
                 )}
 
+                {/* Category Filter Chips */}
+                {(() => {
+                    const cats = reports.reduce((acc: Record<string, { name: string; color: string; count: number }>, r: any) => {
+                        if (r.CategoryName) {
+                            if (!acc[r.CategoryName]) acc[r.CategoryName] = { name: r.CategoryName, color: r.CategoryColor || 'slate', count: 0 };
+                            acc[r.CategoryName].count++;
+                        }
+                        return acc;
+                    }, {} as Record<string, { name: string; color: string; count: number }>);
+                    const catList = Object.values(cats) as { name: string; color: string; count: number }[];
+                    if (catList.length === 0) return null;
+                    return (
+                        <div className="flex flex-wrap gap-2 mb-5">
+                            <button
+                                onClick={() => setSelectedCategory('')}
+                                className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold border transition-all ${selectedCategory === ''
+                                        ? 'bg-slate-900 text-white border-slate-900 shadow-md'
+                                        : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
+                                    }`}
+                            >
+                                ทั้งหมด ({reports.length})
+                            </button>
+                            {catList.map(cat => (
+                                <button
+                                    key={cat.name}
+                                    onClick={() => setSelectedCategory(cat.name)}
+                                    className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold border transition-all ${selectedCategory === cat.name
+                                            ? 'bg-slate-900 text-white border-slate-900 shadow-md'
+                                            : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
+                                        }`}
+                                >
+                                    <Tag className="w-3 h-3" />
+                                    {cat.name} ({cat.count})
+                                </button>
+                            ))}
+                        </div>
+                    );
+                })()}
                 <div className="flex flex-col md:flex-row md:items-end gap-6 justify-between">
                     <div className="w-full max-w-sm">
                         <label className="text-sm font-semibold text-slate-700 mb-2 flex items-center gap-2">
@@ -385,8 +424,9 @@ export default function TemplateReportPage() {
                                     disabled={isLoadingReports || isExecuting}
                                     className="appearance-none w-full bg-slate-50 border border-slate-200 text-slate-900 py-2.5 pl-4 pr-10 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 font-medium disabled:opacity-60"
                                 >
-                                    <option value="">-- กรุณาเลือกรายงานเทมเพลต ({reports.length} รายการ) --</option>
+                                    <option value="">-- กรุณาเลือกรายงานเทมเพลต ({reports.filter(r => !selectedCategory || r.CategoryName === selectedCategory).length} รายการ) --</option>
                                     {reports.filter(r => {
+                                        if (selectedCategory && r.CategoryName !== selectedCategory) return false;
                                         if (!searchQuery) return true;
                                         const q = searchQuery.toLowerCase();
                                         return r.ReportName?.toLowerCase().includes(q) || r.Description?.toLowerCase().includes(q);
