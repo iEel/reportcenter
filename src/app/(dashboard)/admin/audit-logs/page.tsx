@@ -258,7 +258,7 @@ export default function AuditLogsPage() {
                                     <th className="px-4 py-3 text-left font-medium whitespace-nowrap">วันที่</th>
                                     <th className="px-4 py-3 text-left font-medium">ผู้ใช้</th>
                                     <th className="px-4 py-3 text-left font-medium">ประเภท</th>
-                                    <th className="px-4 py-3 text-left font-medium hidden md:table-cell">รายละเอียด</th>
+                                    <th className="px-4 py-3 text-left font-medium">รายละเอียด</th>
                                     <th className="px-4 py-3 text-center font-medium w-16"></th>
                                 </tr>
                             </thead>
@@ -272,7 +272,7 @@ export default function AuditLogsPage() {
                                                 {log.ActionType}
                                             </span>
                                         </td>
-                                        <td className="px-4 py-3 text-slate-600 dark:text-slate-300 max-w-xs truncate hidden md:table-cell">{log.Details}</td>
+                                        <td className="px-4 py-3 text-slate-600 dark:text-slate-300 max-w-xs truncate">{log.Details}</td>
                                         <td className="px-4 py-3 text-center">
                                             {log.ChangeData && (
                                                 <button
