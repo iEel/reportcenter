@@ -272,17 +272,15 @@ export default function AuditLogsPage() {
                                                 {log.ActionType}
                                             </span>
                                         </td>
-                                        <td className="px-4 py-3 text-slate-600 dark:text-slate-300 max-w-xs truncate">{log.Details}</td>
+                                        <td className="px-4 py-3 text-slate-600 dark:text-slate-300 max-w-md"><span className="line-clamp-2">{log.Details}</span></td>
                                         <td className="px-4 py-3 text-center">
-                                            {log.ChangeData && (
-                                                <button
-                                                    onClick={() => setSelectedLog(log)}
-                                                    className="p-1.5 rounded-lg text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/30 transition-colors"
-                                                    title="ดูรายละเอียดการเปลี่ยนแปลง"
-                                                >
-                                                    <Eye className="w-4 h-4" />
-                                                </button>
-                                            )}
+                                            <button
+                                                onClick={() => setSelectedLog(log)}
+                                                className="p-1.5 rounded-lg text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/30 transition-colors"
+                                                title="ดูรายละเอียด"
+                                            >
+                                                <Eye className="w-4 h-4" />
+                                            </button>
                                         </td>
                                     </tr>
                                 ))}
@@ -325,6 +323,18 @@ export default function AuditLogsPage() {
 
                             {/* Modal Body */}
                             <div className="p-5 overflow-y-auto flex-1 space-y-4">
+                                {/* Full Details Text */}
+                                <div className="rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden">
+                                    <div className="px-4 py-2.5 bg-blue-50 dark:bg-blue-900/30 font-semibold text-sm text-blue-700 dark:text-blue-300 flex items-center gap-2">
+                                        <Eye className="w-4 h-4" />
+                                        รายละเอียดทั้งหมด
+                                    </div>
+                                    <div className="px-4 py-3 text-sm text-slate-700 dark:text-slate-300 break-words whitespace-pre-wrap">
+                                        {selectedLog.Details || '-'}
+                                    </div>
+                                </div>
+
+                                {/* ChangeData Diff */}
                                 {changeData ? Object.entries(changeData).map(([field, values]: [string, any]) => (
                                     <div key={field} className="rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden">
                                         <div className="px-4 py-2.5 bg-slate-50 dark:bg-slate-700/50 font-semibold text-sm text-slate-700 dark:text-slate-300">
@@ -332,9 +342,7 @@ export default function AuditLogsPage() {
                                         </div>
                                         {renderDiff(values.old, values.new)}
                                     </div>
-                                )) : (
-                                    <p className="text-sm text-slate-500">ไม่มีข้อมูลการเปลี่ยนแปลง</p>
-                                )}
+                                )) : null}
                             </div>
 
                             {/* Legend */}
