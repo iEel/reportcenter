@@ -1,6 +1,6 @@
 "use client"
 
-import { Search, Filter, Download, FileText, ChevronDown, ChevronLeft, ChevronRight, RefreshCw, Loader2, AlertCircle, Star, Tag } from "lucide-react";
+import { Search, Filter, Download, FileText, ChevronDown, ChevronLeft, ChevronRight, RefreshCw, Loader2, AlertCircle, Star, Tag, BarChart3, Calendar, Play, ArrowRight } from "lucide-react";
 import { useState, useEffect, useRef } from "react";
 import * as xlsx from 'xlsx';
 import { useAuth } from "@/components/providers/AuthProvider";
@@ -627,8 +627,42 @@ export default function StandardReportPage() {
                             <p>กำลังรันคำสั่งฐานข้อมูล โปรดรอสักครู่...</p>
                         </div>
                     ) : !reportData ? (
-                        <div className="h-full flex items-center justify-center p-12 text-slate-400">
-                            กรุณาเลือกรายงานและกดปุ่ม 'ดึงข้อมูล' เพื่อแสดงผล
+                        <div className="h-full flex items-center justify-center p-8">
+                            <div className="text-center max-w-lg space-y-6">
+                                {/* Icon */}
+                                <div className="w-20 h-20 bg-gradient-to-br from-blue-100 to-indigo-100 dark:from-blue-900/30 dark:to-indigo-900/30 rounded-3xl flex items-center justify-center mx-auto shadow-sm">
+                                    <BarChart3 className="w-10 h-10 text-blue-500 dark:text-blue-400" />
+                                </div>
+
+                                {/* Title */}
+                                <div>
+                                    <h3 className="text-xl font-bold text-slate-800 dark:text-white">เลือกรายงานเพื่อเริ่มต้น</h3>
+                                    <p className="text-sm text-slate-400 dark:text-slate-500 mt-1">ทำตาม 3 ขั้นตอนง่ายๆ ด้านล่าง</p>
+                                </div>
+
+                                {/* Steps */}
+                                <div className="flex items-center justify-center gap-3">
+                                    <div className="flex flex-col items-center gap-2 px-4 py-3 bg-blue-50 dark:bg-blue-900/20 rounded-xl border border-blue-100 dark:border-blue-800">
+                                        <div className="w-8 h-8 bg-blue-500 text-white rounded-lg flex items-center justify-center text-sm font-bold">1</div>
+                                        <FileText className="w-5 h-5 text-blue-500" />
+                                        <span className="text-xs font-medium text-blue-700 dark:text-blue-300">เลือกรายงาน</span>
+                                    </div>
+                                    <ArrowRight className="w-4 h-4 text-slate-300 dark:text-slate-600 flex-shrink-0" />
+                                    <div className="flex flex-col items-center gap-2 px-4 py-3 bg-purple-50 dark:bg-purple-900/20 rounded-xl border border-purple-100 dark:border-purple-800">
+                                        <div className="w-8 h-8 bg-purple-500 text-white rounded-lg flex items-center justify-center text-sm font-bold">2</div>
+                                        <Calendar className="w-5 h-5 text-purple-500" />
+                                        <span className="text-xs font-medium text-purple-700 dark:text-purple-300">กรอก Parameter</span>
+                                    </div>
+                                    <ArrowRight className="w-4 h-4 text-slate-300 dark:text-slate-600 flex-shrink-0" />
+                                    <div className="flex flex-col items-center gap-2 px-4 py-3 bg-emerald-50 dark:bg-emerald-900/20 rounded-xl border border-emerald-100 dark:border-emerald-800">
+                                        <div className="w-8 h-8 bg-emerald-500 text-white rounded-lg flex items-center justify-center text-sm font-bold">3</div>
+                                        <Play className="w-5 h-5 text-emerald-500" />
+                                        <span className="text-xs font-medium text-emerald-700 dark:text-emerald-300">กดดึงข้อมูล</span>
+                                    </div>
+                                </div>
+
+                                <p className="text-xs text-slate-400 dark:text-slate-500">💡 กด ★ เพื่อปักหมุดรายงานที่ใช้บ่อย</p>
+                            </div>
                         </div>
                     ) : reportData.length === 0 ? (
                         <div className="h-full flex items-center justify-center p-12 text-slate-500">
