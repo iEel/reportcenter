@@ -567,7 +567,7 @@ export default function StandardReportPage() {
 
                 {/* Export Progress Overlay */}
                 {isExporting && (
-                    <div className="absolute inset-0 z-30 bg-white/80 dark:bg-slate-800/80 backdrop-blur-sm flex items-center justify-center">
+                    <div className="fixed inset-0 z-50 bg-black/30 backdrop-blur-sm flex items-center justify-center">
                         <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-700 p-8 max-w-sm w-full mx-4 text-center space-y-5">
                             <div className="w-14 h-14 bg-emerald-100 dark:bg-emerald-900/30 rounded-2xl flex items-center justify-center mx-auto">
                                 <Download className="w-7 h-7 text-emerald-600 dark:text-emerald-400 animate-bounce" />
