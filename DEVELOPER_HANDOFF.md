@@ -87,7 +87,7 @@ reportcenter/
 │   │       │   └── idle-timeout/route.js    # GET: idle timeout setting (any logged-in user)
 │   │       └── reports/
 │   │           ├── available/route.js    # GET: reports user can access
-│   │           ├── execute/route.js      # POST: run T-SQL on company DB (supports pagination + exportAll)
+│   │           ├── execute/route.js      # POST: run T-SQL on company DB (ROW_NUMBER pagination + client-side fallback for SQL 2005+)
 │   │           ├── parameters/route.js   # GET: report parameters (auto-migrate LookupQuery column)
 │   │           ├── search-param/route.js # GET: typeahead search for parameters with LookupQuery
 │   │           └── favorites/route.js    # GET/POST: toggle favorite reports
@@ -273,7 +273,7 @@ CreatedAt DATETIME DEFAULT GETDATE()
 | GET    | `/api/companies`            | List all active companies from `CompanyDatabases` table |
 | GET    | `/api/reports/available`    | List reports user can access      |
 | GET    | `/api/reports/parameters`   | Get parameters for a report (incl. `LookupQuery`)       |
-| POST   | `/api/reports/execute`      | Execute T-SQL on company DB (handles ORDER BY in pagination) |
+| POST   | `/api/reports/execute`      | Execute T-SQL on company DB (ROW_NUMBER pagination → client-side fallback) |
 | GET    | `/api/reports/search-param` | Typeahead search for parameter values (`?reportId=&paramName=&q=&companyId=`) |
 | GET    | `/api/reports/favorites`    | Get user's favorite reports       |
 | POST   | `/api/reports/favorites`    | Toggle favorite (add/remove)      |
