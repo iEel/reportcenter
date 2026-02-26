@@ -197,7 +197,7 @@ export default function AuditLogsPage() {
     return (
         <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
             {/* Header */}
-            <div className="flex items-center justify-between">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 <div className="flex items-center gap-3">
                     <div className="w-10 h-10 bg-violet-100 rounded-xl flex items-center justify-center dark:bg-violet-900/50">
                         <Activity className="w-5 h-5 text-violet-600 dark:text-violet-400" />
@@ -215,7 +215,8 @@ export default function AuditLogsPage() {
                         <RefreshCw className={`w-5 h-5 ${isLoading ? 'animate-spin' : ''}`} />
                     </button>
                     <button onClick={handleExport} className="flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors text-sm font-medium shadow-sm">
-                        <Download className="w-4 h-4" /> Export Excel
+                        <Download className="w-4 h-4" />
+                        <span className="hidden sm:inline">Export</span> Excel
                     </button>
                 </div>
             </div>
@@ -226,7 +227,7 @@ export default function AuditLogsPage() {
                     <Filter className="w-4 h-4 text-slate-500" />
                     <span className="text-sm font-medium text-slate-700 dark:text-slate-300">ตัวกรอง</span>
                 </div>
-                <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
                     <select value={actionType} onChange={e => setActionType(e.target.value)} className="px-3 py-2 bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-lg text-sm dark:text-white">
                         <option value="">ทุกประเภท</option>
                         {actionTypes.map(t => <option key={t} value={t}>{t}</option>)}
@@ -250,42 +251,44 @@ export default function AuditLogsPage() {
                 ) : logs.length === 0 ? (
                     <div className="text-center py-20 text-slate-500 dark:text-slate-400">ไม่พบข้อมูล</div>
                 ) : (
-                    <table className="w-full text-sm">
-                        <thead className="bg-slate-50 dark:bg-slate-700/50 text-slate-600 dark:text-slate-300">
-                            <tr>
-                                <th className="px-4 py-3 text-left font-medium">วันที่</th>
-                                <th className="px-4 py-3 text-left font-medium">ผู้ใช้</th>
-                                <th className="px-4 py-3 text-left font-medium">ประเภท</th>
-                                <th className="px-4 py-3 text-left font-medium">รายละเอียด</th>
-                                <th className="px-4 py-3 text-center font-medium w-16"></th>
-                            </tr>
-                        </thead>
-                        <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
-                            {logs.map(log => (
-                                <tr key={log.LogId} className="hover:bg-slate-50 dark:hover:bg-slate-700/30 transition-colors">
-                                    <td className="px-4 py-3 text-slate-500 dark:text-slate-400 whitespace-nowrap">{formatDateTime(log.CreatedAt)}</td>
-                                    <td className="px-4 py-3 font-medium text-slate-800 dark:text-slate-200">{log.UserName || '-'}</td>
-                                    <td className="px-4 py-3">
-                                        <span className={`px-2.5 py-1 rounded-full text-xs font-semibold ${ACTION_COLORS[log.ActionType] || 'bg-slate-100 text-slate-600'}`}>
-                                            {log.ActionType}
-                                        </span>
-                                    </td>
-                                    <td className="px-4 py-3 text-slate-600 dark:text-slate-300 max-w-md truncate">{log.Details}</td>
-                                    <td className="px-4 py-3 text-center">
-                                        {log.ChangeData && (
-                                            <button
-                                                onClick={() => setSelectedLog(log)}
-                                                className="p-1.5 rounded-lg text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/30 transition-colors"
-                                                title="ดูรายละเอียดการเปลี่ยนแปลง"
-                                            >
-                                                <Eye className="w-4 h-4" />
-                                            </button>
-                                        )}
-                                    </td>
+                    <div className="overflow-x-auto">
+                        <table className="w-full text-sm min-w-[600px]">
+                            <thead className="bg-slate-50 dark:bg-slate-700/50 text-slate-600 dark:text-slate-300">
+                                <tr>
+                                    <th className="px-4 py-3 text-left font-medium whitespace-nowrap">วันที่</th>
+                                    <th className="px-4 py-3 text-left font-medium">ผู้ใช้</th>
+                                    <th className="px-4 py-3 text-left font-medium">ประเภท</th>
+                                    <th className="px-4 py-3 text-left font-medium hidden md:table-cell">รายละเอียด</th>
+                                    <th className="px-4 py-3 text-center font-medium w-16"></th>
                                 </tr>
-                            ))}
-                        </tbody>
-                    </table>
+                            </thead>
+                            <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
+                                {logs.map(log => (
+                                    <tr key={log.LogId} className="hover:bg-slate-50 dark:hover:bg-slate-700/30 transition-colors">
+                                        <td className="px-4 py-3 text-slate-500 dark:text-slate-400 whitespace-nowrap">{formatDateTime(log.CreatedAt)}</td>
+                                        <td className="px-4 py-3 font-medium text-slate-800 dark:text-slate-200">{log.UserName || '-'}</td>
+                                        <td className="px-4 py-3">
+                                            <span className={`px-2.5 py-1 rounded-full text-xs font-semibold ${ACTION_COLORS[log.ActionType] || 'bg-slate-100 text-slate-600'}`}>
+                                                {log.ActionType}
+                                            </span>
+                                        </td>
+                                        <td className="px-4 py-3 text-slate-600 dark:text-slate-300 max-w-xs truncate hidden md:table-cell">{log.Details}</td>
+                                        <td className="px-4 py-3 text-center">
+                                            {log.ChangeData && (
+                                                <button
+                                                    onClick={() => setSelectedLog(log)}
+                                                    className="p-1.5 rounded-lg text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/30 transition-colors"
+                                                    title="ดูรายละเอียดการเปลี่ยนแปลง"
+                                                >
+                                                    <Eye className="w-4 h-4" />
+                                                </button>
+                                            )}
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
                 )}
                 {totalPages > 1 && (
                     <div className="flex items-center justify-between px-4 py-3 border-t border-slate-100 dark:border-slate-700 bg-slate-50 dark:bg-slate-800">
