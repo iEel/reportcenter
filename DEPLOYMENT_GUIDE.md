@@ -1,7 +1,7 @@
 # ReportCenter — Deployment Guide (Ubuntu Server + Cloudflare Zero Trust)
 
 > **Target OS:** Ubuntu 22.04 LTS / 24.04 LTS  
-> **Last Updated:** 2026-02-23
+> **Last Updated:** 2026-02-26
 
 ---
 
@@ -133,6 +133,15 @@ CRON_SECRET=your-cron-secret-here
 AZURE_TENANT_ID=your-tenant-id
 AZURE_CLIENT_ID=your-client-id
 AZURE_CLIENT_SECRET=your-client-secret
+
+# === LDAP / Active Directory ===
+LDAP_BIND_DN=CN=ServiceAccount,OU=ServiceAccounts,DC=yourcompany,DC=com
+LDAP_BIND_PASSWORD=your-ldap-password
+
+# === Timeout Settings (milliseconds, optional — defaults shown) ===
+DB_REQUEST_TIMEOUT=30000              # 30s  — general queries (admin, login)
+REPORT_REQUEST_TIMEOUT=120000         # 120s — report execution (table view)
+BACKGROUND_JOB_TIMEOUT=900000         # 900s — background job (large export, 15 min)
 ```
 
 > ⚠️ **สำคัญ**: เปลี่ยน `JWT_SECRET` และ `CRON_SECRET` เป็นค่าสุ่มที่ปลอดภัย  
@@ -204,8 +213,8 @@ server {
         proxy_cache_bypass $http_upgrade;
 
         # Increase timeouts for large reports
-        proxy_read_timeout 120s;
-        proxy_send_timeout 120s;
+        proxy_read_timeout 180s;
+        proxy_send_timeout 180s;
     }
 }
 ```
