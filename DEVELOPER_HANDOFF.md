@@ -1,7 +1,7 @@
 # ReportCenter — Developer Handoff
 
-> **Version:** 7.2  
-> **Last Updated:** 2026-02-25  
+> **Version:** 7.3  
+> **Last Updated:** 2026-02-26  
 > **Tech Stack:** Next.js 16.1.6 + React 19 + Tailwind CSS 4 + MSSQL (mssql driver) + Microsoft Graph API (OAuth2) / Nodemailer (SMTP fallback) + @azure/msal-node
 
 ---
@@ -57,7 +57,7 @@ reportcenter/
 │   │   │   │   ├── schedules/page.tsx    # Scheduled Reports (create/edit/toggle/delete)
 │   │   │   │   └── settings/page.tsx     # System Settings
 │   │   │   └── reports/
-│   │   │       ├── standard/page.tsx     # Standard report viewer (★ favorites + category filter chips)
+│   │   │       ├── standard/page.tsx     # Standard report viewer (★ favorites + category chips + export progress overlay)
 │   │   │       ├── templates/page.tsx    # Email template report viewer (★ favorites)
 │   │   │       └── job-history/page.tsx  # Background job history
 │   │   └── api/                          # API Routes (all .js)
@@ -90,6 +90,9 @@ reportcenter/
 │   │           ├── execute/route.js      # POST: run T-SQL on company DB (ROW_NUMBER pagination + client-side fallback for SQL 2005+)
 │   │           ├── parameters/route.js   # GET: report parameters (auto-migrate LookupQuery column)
 │   │           ├── search-param/route.js # GET: typeahead search for parameters with LookupQuery
+│   │           ├── execute-async/route.js # POST: background job for large exports (BACKGROUND_JOB_TIMEOUT)
+│   │           ├── jobs/[id]/route.js    # GET: poll job status
+│   │           ├── job-history/route.js  # GET: list completed jobs
 │   │           └── favorites/route.js    # GET/POST: toggle favorite reports
 │   ├── components/
 │   │   ├── layout/
