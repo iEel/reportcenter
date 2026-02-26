@@ -1,7 +1,7 @@
 "use client"
 
 import { Search, Filter, Download, FileText, ChevronDown, ChevronLeft, ChevronRight, RefreshCw, Loader2, AlertCircle, Star, Tag } from "lucide-react";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import * as xlsx from 'xlsx';
 import { useAuth } from "@/components/providers/AuthProvider";
 import { useToast } from "@/components/providers/ToastProvider";
@@ -24,6 +24,9 @@ export default function StandardReportPage() {
     // Data execution state
     const [isExecuting, setIsExecuting] = useState(false);
     const [isExporting, setIsExporting] = useState(false);
+    const [exportStatus, setExportStatus] = useState('');
+    const [exportElapsed, setExportElapsed] = useState(0);
+    const exportTimerRef = useRef<NodeJS.Timeout | null>(null);
     const [reportData, setReportData] = useState<any[] | null>(null);
     const [executionError, setExecutionError] = useState<string | null>(null);
 
@@ -210,6 +213,21 @@ export default function StandardReportPage() {
     const handleExportExcel = async () => {
         if (!selectedReportId || isExporting) return;
         setIsExporting(true);
+        setExportElapsed(0);
+        setExportStatus('กำลังดึงข้อมูลจากฐานข้อมูล...');
+
+        // Start elapsed timer
+        const startTime = Date.now();
+        exportTimerRef.current = setInterval(() => {
+            setExportElapsed(Math.floor((Date.now() - startTime) / 1000));
+        }, 1000);
+
+        const stopTimer = () => {
+            if (exportTimerRef.current) {
+                clearInterval(exportTimerRef.current);
+                exportTimerRef.current = null;
+            }
+        };
 
         const report = reports.find(r => r.ReportId.toString() === selectedReportId);
         const reportName = report ? report.ReportName : 'Report';
@@ -253,6 +271,7 @@ export default function StandardReportPage() {
             } catch {
                 toast('เกิดข้อผิดพลาด', 'error');
             }
+            stopTimer();
             setIsExporting(false);
             return;
         }
@@ -274,14 +293,18 @@ export default function StandardReportPage() {
                 toast('ไม่มีข้อมูลให้ส่งออก', 'info');
                 return;
             }
+            setExportStatus(`กำลังสร้างไฟล์ Excel (${data.data.length.toLocaleString()} แถว)...`);
+            // Small delay to let UI update before heavy xlsx work
+            await new Promise(r => setTimeout(r, 100));
             const worksheet = xlsx.utils.json_to_sheet(data.data);
             const workbook = xlsx.utils.book_new();
             xlsx.utils.book_append_sheet(workbook, worksheet, "Report Data");
             xlsx.writeFile(workbook, `${reportName}_${dateStr}.xlsb`, { bookType: 'xlsb' });
-            toast(`ส่งออก ${data.data.length} รายการเรียบร้อย`, 'success');
+            toast(`ส่งออก ${data.data.length.toLocaleString()} รายการเรียบร้อย`, 'success');
         } catch {
             toast('ไม่สามารถส่งออกข้อมูลได้', 'error');
         } finally {
+            stopTimer();
             setIsExporting(false);
         }
     };
@@ -540,8 +563,34 @@ export default function StandardReportPage() {
             }
 
             {/* Data Grid Area */}
-            <div className="flex-1 bg-white rounded-2xl shadow-sm border border-slate-200 flex flex-col overflow-hidden relative">
+            <div className="flex-1 bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700 flex flex-col overflow-hidden relative">
 
+                {/* Export Progress Overlay */}
+                {isExporting && (
+                    <div className="absolute inset-0 z-30 bg-white/80 dark:bg-slate-800/80 backdrop-blur-sm flex items-center justify-center">
+                        <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-700 p-8 max-w-sm w-full mx-4 text-center space-y-5">
+                            <div className="w-14 h-14 bg-emerald-100 dark:bg-emerald-900/30 rounded-2xl flex items-center justify-center mx-auto">
+                                <Download className="w-7 h-7 text-emerald-600 dark:text-emerald-400 animate-bounce" />
+                            </div>
+                            <div>
+                                <h3 className="text-lg font-bold text-slate-900 dark:text-white">กำลังส่งออก Excel</h3>
+                                <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">{exportStatus}</p>
+                            </div>
+                            {/* Progress Bar */}
+                            <div className="w-full bg-slate-200 dark:bg-slate-700 rounded-full h-2 overflow-hidden">
+                                <div className="h-full bg-gradient-to-r from-emerald-500 to-teal-400 rounded-full animate-pulse" style={{ width: '75%' }} />
+                            </div>
+                            {/* Elapsed Time */}
+                            <div className="flex items-center justify-center gap-2 text-sm">
+                                <RefreshCw className="w-4 h-4 animate-spin text-emerald-500" />
+                                <span className="text-slate-600 dark:text-slate-300 font-mono">
+                                    {Math.floor(exportElapsed / 60).toString().padStart(2, '0')}:{(exportElapsed % 60).toString().padStart(2, '0')}
+                                </span>
+                            </div>
+                            <p className="text-xs text-slate-400 dark:text-slate-500">กรุณาอย่าปิดหน้านี้ระหว่างส่งออก</p>
+                        </div>
+                    </div>
+                )}
                 {/* Actions Toolbar */}
                 <div className="p-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
                     <p className="text-sm font-medium text-slate-600">
