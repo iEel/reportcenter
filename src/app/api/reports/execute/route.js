@@ -4,6 +4,9 @@ import { connectToCentralDB, connectToCompanyDB, getCompanyLabel } from '@/lib/d
 import { getSession } from '@/lib/auth';
 import { validateQuery } from '@/lib/sql-validator';
 
+// Report queries can be complex — allow longer timeout (default 120s)
+const REPORT_TIMEOUT = parseInt(process.env.REPORT_REQUEST_TIMEOUT) || 120000;
+
 export async function POST(request) {
     try {
         const body = await request.json();
@@ -78,8 +81,9 @@ export async function POST(request) {
         // 3. Get connection to the specified Company Database
         const companyPool = await connectToCompanyDB(companyId);
 
-        // Helper: bind parameters to a request
+        // Helper: bind parameters to a request + set report timeout
         const bindParams = (req) => {
+            req.timeout = REPORT_TIMEOUT;
             if (parameters && expectedParams.length > 0) {
                 for (const expectedParam of expectedParams) {
                     const paramName = expectedParam.ParameterName.replace('@', '');
