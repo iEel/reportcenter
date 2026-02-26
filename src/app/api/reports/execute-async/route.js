@@ -8,6 +8,7 @@ import fs from 'fs';
 import path from 'path';
 
 const JOBS_DIR = path.join(process.cwd(), 'tmp', 'jobs');
+const BG_JOB_TIMEOUT = parseInt(process.env.BACKGROUND_JOB_TIMEOUT) || 900000; // 15 min default
 
 export async function POST(request) {
     try {
@@ -133,7 +134,7 @@ export async function POST(request) {
                 }
 
                 // Execute query (no timeout limit for heavy jobs)
-                req.timeout = 900000; // 15 minutes
+                req.timeout = BG_JOB_TIMEOUT;
                 const dataResult = await req.query(tSqlQuery);
                 const data = dataResult.recordset;
 
