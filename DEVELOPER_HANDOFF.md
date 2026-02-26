@@ -390,6 +390,11 @@ AZURE_CLIENT_SECRET=your-client-secret
 # LDAP Service Account (required for AD user lookup/search)
 LDAP_BIND_DN=CN=ServiceAccount,OU=ServiceAccounts,DC=soniclocal,DC=com
 LDAP_BIND_PASSWORD=your-service-account-password
+
+# Timeout Settings (all in milliseconds, optional — defaults shown)
+DB_REQUEST_TIMEOUT=30000              # 30s  — general queries (admin, login)
+REPORT_REQUEST_TIMEOUT=120000         # 120s — report execution (table view)
+BACKGROUND_JOB_TIMEOUT=900000         # 900s — background job (large export, 15 min)
 ```
 
 > ⚠️ ไฟล์ `.env.local` ถูก `.gitignore` อยู่แล้ว — ค่า default ยังมี fallback ใน `db.js` สำหรับ dev environment
