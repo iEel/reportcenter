@@ -170,14 +170,20 @@ export async function POST(request) {
             }
 
             if (usePagination) {
-                // Paginated query — use original ORDER BY if exists
+                // Paginated query — use ROW_NUMBER() for SQL Server 2005+ compatibility
                 const offset = (parseInt(page) - 1) * parseInt(pageSize);
+                const endRow = offset + parseInt(pageSize);
                 const dataReq = companyPool.request();
                 bindParams(dataReq);
-                dataReq.input('_offset', sql.Int, offset);
-                dataReq.input('_pageSize', sql.Int, parseInt(pageSize));
+                dataReq.input('_startRow', sql.Int, offset + 1);
+                dataReq.input('_endRow', sql.Int, endRow);
                 dataResult = await dataReq.query(
-                    `${queryWithoutOrderBy} ${orderByClause} OFFSET @_offset ROWS FETCH NEXT @_pageSize ROWS ONLY`
+                    `SELECT * FROM (
+                        SELECT *, ROW_NUMBER() OVER (${orderByClause}) AS _rowNum
+                        FROM (${queryWithoutOrderBy}) AS _innerQuery
+                    ) AS _pagedQuery
+                    WHERE _rowNum BETWEEN @_startRow AND @_endRow
+                    ORDER BY _rowNum`
                 );
             }
         } else {
