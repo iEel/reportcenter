@@ -57,8 +57,8 @@ reportcenter/
 │   │   │   │   ├── schedules/page.tsx    # Scheduled Reports (create/edit/toggle/delete)
 │   │   │   │   └── settings/page.tsx     # System Settings
 │   │   │   └── reports/
-│   │   │       ├── standard/page.tsx     # Standard report viewer (★ favorites + category chips + export progress overlay)
-│   │   │       ├── templates/page.tsx    # Email template report viewer (★ favorites)
+│   │   │       ├── standard/page.tsx     # Standard report viewer (★ favorites + category chips + export progress overlay + empty state)
+│   │   │       ├── templates/page.tsx    # Email template report viewer (★ favorites + empty state)
 │   │   │       └── job-history/page.tsx  # Background job history
 │   │   └── api/                          # API Routes (all .js)
 │   │       ├── auth/
