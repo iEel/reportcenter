@@ -23,6 +23,7 @@ export default function StandardReportPage() {
 
     // Data execution state
     const [isExecuting, setIsExecuting] = useState(false);
+    const [isExporting, setIsExporting] = useState(false);
     const [reportData, setReportData] = useState<any[] | null>(null);
     const [executionError, setExecutionError] = useState<string | null>(null);
 
@@ -207,7 +208,8 @@ export default function StandardReportPage() {
     const columns = getColumns();
 
     const handleExportExcel = async () => {
-        if (!selectedReportId) return;
+        if (!selectedReportId || isExporting) return;
+        setIsExporting(true);
 
         const report = reports.find(r => r.ReportId.toString() === selectedReportId);
         const reportName = report ? report.ReportName : 'Report';
@@ -251,6 +253,7 @@ export default function StandardReportPage() {
             } catch {
                 toast('เกิดข้อผิดพลาด', 'error');
             }
+            setIsExporting(false);
             return;
         }
 
@@ -278,6 +281,8 @@ export default function StandardReportPage() {
             toast(`ส่งออก ${data.data.length} รายการเรียบร้อย`, 'success');
         } catch {
             toast('ไม่สามารถส่งออกข้อมูลได้', 'error');
+        } finally {
+            setIsExporting(false);
         }
     };
 
@@ -362,8 +367,8 @@ export default function StandardReportPage() {
                             <button
                                 onClick={() => setSelectedCategory('')}
                                 className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold border transition-all ${selectedCategory === ''
-                                        ? 'bg-slate-900 text-white border-slate-900 shadow-md'
-                                        : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
+                                    ? 'bg-slate-900 text-white border-slate-900 shadow-md'
+                                    : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
                                     }`}
                             >
                                 ทั้งหมด ({reports.length})
@@ -373,8 +378,8 @@ export default function StandardReportPage() {
                                     key={cat.name}
                                     onClick={() => setSelectedCategory(cat.name)}
                                     className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold border transition-all ${selectedCategory === cat.name
-                                            ? 'bg-slate-900 text-white border-slate-900 shadow-md'
-                                            : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
+                                        ? 'bg-slate-900 text-white border-slate-900 shadow-md'
+                                        : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
                                         }`}
                                 >
                                     <Tag className="w-3 h-3" />
@@ -557,11 +562,11 @@ export default function StandardReportPage() {
                         </button>
                         <button
                             onClick={handleExportExcel}
-                            disabled={!reportData || reportData.length === 0}
+                            disabled={!reportData || reportData.length === 0 || isExporting}
                             className="flex items-center gap-2 text-sm font-medium text-emerald-600 bg-emerald-50 hover:bg-emerald-100 px-3 py-1.5 rounded-lg border border-emerald-200 transition-colors disabled:opacity-50"
                         >
-                            <Download className="w-4 h-4" />
-                            Export Excel
+                            {isExporting ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+                            {isExporting ? 'กำลังส่งออก...' : 'Export Excel'}
                         </button>
                     </div>
                 </div>
