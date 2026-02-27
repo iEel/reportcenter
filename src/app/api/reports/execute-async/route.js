@@ -252,7 +252,7 @@ export async function POST(request) {
                     .input('FilePath', sql.NVarChar(500), filePath)
                     .input('FileName', sql.NVarChar(200), fileName)
                     .input('RowCount', sql.Int, data.length)
-                    .query('UPDATE ReportJobs SET Status = \'done\', FilePath = @FilePath, FileName = @FileName, [RowCount] = @RowCount WHERE JobId = @JobId');
+                    .query('UPDATE ReportJobs SET Status = \'done\', FilePath = @FilePath, FileName = @FileName, [RowCount] = @RowCount, CompletedAt = GETDATE() WHERE JobId = @JobId');
 
                 console.log(`[Job ${jobId}] Completed: ${data.length} rows → ${fileName} (CSV stream)`);
 

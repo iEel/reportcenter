@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react";
-import { Clock, Download, RefreshCw, CheckCircle2, XCircle, Loader2, FileText, AlertTriangle, StopCircle } from "lucide-react";
+import { Clock, Download, RefreshCw, CheckCircle2, XCircle, Loader2, FileText, AlertTriangle, StopCircle, Timer } from "lucide-react";
 import { timeAgo } from "@/lib/dateUtils";
 import { useToast } from "@/components/providers/ToastProvider";
 
@@ -14,6 +14,7 @@ interface Job {
     RowCount: number | null;
     ErrorMessage: string | null;
     CreatedAt: string;
+    CompletedAt: string | null;
     ReportName: string | null;
 }
 
@@ -21,6 +22,20 @@ export default function JobHistoryPage() {
     const { toast } = useToast();
     const [jobs, setJobs] = useState<Job[]>([]);
     const [isLoading, setIsLoading] = useState(true);
+
+    // Format duration in seconds to human-readable Thai
+    const formatDuration = (startStr: string, endStr: string | null) => {
+        const start = new Date(startStr).getTime();
+        const end = endStr ? new Date(endStr).getTime() : Date.now();
+        const seconds = Math.floor((end - start) / 1000);
+        if (seconds < 60) return `${seconds} วินาที`;
+        const mins = Math.floor(seconds / 60);
+        const secs = seconds % 60;
+        if (mins < 60) return `${mins} นาที ${secs} วินาที`;
+        const hrs = Math.floor(mins / 60);
+        const remainMins = mins % 60;
+        return `${hrs} ชม. ${remainMins} นาที`;
+    };
 
     const fetchJobs = async () => {
         setIsLoading(true);
@@ -181,7 +196,15 @@ export default function JobHistoryPage() {
                                                 {job.RowCount != null ? job.RowCount.toLocaleString() : '—'}
                                             </td>
                                             <td className="px-6 py-4">
-                                                <span className="text-slate-500 dark:text-slate-400 text-xs">{timeAgo(job.CreatedAt)}</span>
+                                                <div className="flex flex-col">
+                                                    <span className="text-slate-500 dark:text-slate-400 text-xs">{timeAgo(job.CreatedAt)}</span>
+                                                    <span className="text-xs mt-0.5 flex items-center gap-1">
+                                                        <Timer className="w-3 h-3 text-slate-400" />
+                                                        <span className={job.Status === 'running' ? 'text-blue-500 font-medium' : 'text-slate-400'}>
+                                                            {formatDuration(job.CreatedAt, job.CompletedAt)}
+                                                        </span>
+                                                    </span>
+                                                </div>
                                             </td>
                                             <td className="px-6 py-4 text-right">
                                                 {job.Status === 'done' && job.FileName ? (

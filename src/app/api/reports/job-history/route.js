@@ -25,8 +25,11 @@ export async function GET(request) {
                 FileName NVARCHAR(200) NULL,
                 ErrorMessage NVARCHAR(500) NULL,
                 [RowCount] INT NULL,
-                CreatedAt DATETIME DEFAULT GETDATE()
+                CreatedAt DATETIME DEFAULT GETDATE(),
+                CompletedAt DATETIME NULL
             );
+            IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('ReportJobs') AND name = 'CompletedAt')
+            ALTER TABLE ReportJobs ADD CompletedAt DATETIME NULL;
         `);
 
         // Fetch user's recent jobs (last 24 hours)
@@ -34,7 +37,7 @@ export async function GET(request) {
             .input('UserId', sql.Int, session.userId)
             .query(`
                 SELECT j.JobId, j.ReportId, j.CompanyId, j.Status, j.FileName, j.[RowCount], j.ErrorMessage, j.CreatedAt,
-                       r.ReportName
+                       j.CompletedAt, r.ReportName
                 FROM ReportJobs j
                 LEFT JOIN Reports r ON j.ReportId = r.ReportId
                 WHERE j.UserId = @UserId AND j.CreatedAt >= DATEADD(HOUR, -24, GETDATE())
