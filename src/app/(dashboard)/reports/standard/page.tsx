@@ -155,6 +155,18 @@ export default function StandardReportPage() {
             return;
         }
 
+        // IsHeavy reports: warn that preview is limited, suggest Export
+        const report = reports.find(r => r.ReportId.toString() === selectedReportId);
+        if (report?.IsHeavy && !requestedPage) {
+            const confirmed = window.confirm(
+                '⚠️ รายงานนี้ถูกตั้งเป็น "รายงานขนาดใหญ่"\n\n' +
+                'การดึงข้อมูลจะแสดงตัวอย่างเพียง 50 แถวแรก\n' +
+                'หากต้องการข้อมูลทั้งหมด กรุณาใช้ปุ่ม "Export Excel" (จะส่งออกเป็น CSV)\n\n' +
+                'ต้องการดูตัวอย่างต่อหรือไม่?'
+            );
+            if (!confirmed) return;
+        }
+
         // Validate required params visually (optional, but good UX)
         let hasEmptyFields = false;
         Object.keys(paramValues).forEach(key => {

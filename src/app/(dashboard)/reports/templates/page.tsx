@@ -154,6 +154,18 @@ export default function TemplateReportPage() {
             return;
         }
 
+        // IsHeavy reports: warn that preview is limited, suggest Export
+        const report = reports.find(r => r.ReportId.toString() === selectedReportId);
+        if (report?.IsHeavy) {
+            const confirmed = window.confirm(
+                '⚠️ รายงานนี้ถูกตั้งเป็น "รายงานขนาดใหญ่"\n\n' +
+                'การดึงข้อมูลจะแสดงตัวอย่างเพียงบางส่วน\n' +
+                'หากต้องการข้อมูลทั้งหมด กรุณาใช้ปุ่ม "Export Excel" (จะส่งออกเป็น CSV)\n\n' +
+                'ต้องการดูตัวอย่างต่อหรือไม่?'
+            );
+            if (!confirmed) return;
+        }
+
         setIsExecuting(true);
         setExecutionError(null);
         setReportData(null);
