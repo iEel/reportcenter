@@ -1,6 +1,6 @@
 # ReportCenter — Developer Handoff
 
-> **Version:** 7.5  
+> **Version:** 7.6  
 > **Last Updated:** 2026-02-27  
 > **Tech Stack:** Next.js 16.1.6 + React 19 + Tailwind CSS 4 + MSSQL (mssql driver) + Microsoft Graph API (OAuth2) / Nodemailer (SMTP fallback) + @azure/msal-node
 
@@ -57,9 +57,9 @@ reportcenter/
 │   │   │   │   ├── schedules/page.tsx    # Scheduled Reports (create/edit/toggle/delete)
 │   │   │   │   └── settings/page.tsx     # System Settings
 │   │   │   └── reports/
-│   │   │       ├── standard/page.tsx     # Standard report viewer (★ favorites + category chips + export progress overlay + empty state)
-│   │   │       ├── templates/page.tsx    # Email template report viewer (★ favorites + empty state)
-│   │   │       └── job-history/page.tsx  # Background job history
+│   │   │       ├── standard/page.tsx     # Standard report viewer (★ favorites + category chips + export progress overlay + empty state + IsHeavy guard)
+│   │   │       ├── templates/page.tsx    # Email template report viewer (★ favorites + empty state + IsHeavy guard)
+│   │   │       └── job-history/page.tsx  # Background job history (cancel button + elapsed time + auto-refresh)
 │   │   └── api/                          # API Routes (all .js)
 │   │       ├── auth/
 │   │       │   ├── login/route.js        # POST: login with bcrypt + allowedCompanies
@@ -93,7 +93,7 @@ reportcenter/
 │   │           ├── execute-async/route.js # POST: background job — CSV stream export (UTF-8 BOM + RFC 4180 + auto-cleanup 24h)
 │   │           ├── jobs/[id]/route.js    # GET: poll job status | PATCH: cancel running job
 │   │           ├── jobs/[id]/download/route.js # GET: download job file (auto-detect CSV/Excel)
-│   │           ├── job-history/route.js  # GET: list completed jobs
+│   │           ├── job-history/route.js  # GET: list completed jobs (ElapsedSeconds via DATEDIFF + CompletedAt)
 │   │           └── favorites/route.js    # GET/POST: toggle favorite reports
 │   ├── components/
 │   │   ├── layout/
