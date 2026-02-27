@@ -15,6 +15,7 @@ interface Job {
     ErrorMessage: string | null;
     CreatedAt: string;
     CompletedAt: string | null;
+    ElapsedSeconds: number | null;
     ReportName: string | null;
 }
 
@@ -24,10 +25,9 @@ export default function JobHistoryPage() {
     const [isLoading, setIsLoading] = useState(true);
 
     // Format duration in seconds to human-readable Thai
-    const formatDuration = (startStr: string, endStr: string | null) => {
-        const start = new Date(startStr).getTime();
-        const end = endStr ? new Date(endStr).getTime() : Date.now();
-        const seconds = Math.floor((end - start) / 1000);
+    const formatDuration = (seconds: number | null) => {
+        if (seconds === null || seconds === undefined) return '—';
+        if (seconds < 0) seconds = 0;
         if (seconds < 60) return `${seconds} วินาที`;
         const mins = Math.floor(seconds / 60);
         const secs = seconds % 60;
@@ -201,7 +201,7 @@ export default function JobHistoryPage() {
                                                     <span className="text-xs mt-0.5 flex items-center gap-1">
                                                         <Timer className="w-3 h-3 text-slate-400" />
                                                         <span className={job.Status === 'running' ? 'text-blue-500 font-medium' : 'text-slate-400'}>
-                                                            {formatDuration(job.CreatedAt, job.CompletedAt)}
+                                                            {formatDuration(job.ElapsedSeconds)}
                                                         </span>
                                                     </span>
                                                 </div>

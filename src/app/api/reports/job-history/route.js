@@ -37,7 +37,8 @@ export async function GET(request) {
             .input('UserId', sql.Int, session.userId)
             .query(`
                 SELECT j.JobId, j.ReportId, j.CompanyId, j.Status, j.FileName, j.[RowCount], j.ErrorMessage, j.CreatedAt,
-                       j.CompletedAt, r.ReportName
+                       j.CompletedAt, r.ReportName,
+                       DATEDIFF(SECOND, j.CreatedAt, ISNULL(j.CompletedAt, GETDATE())) AS ElapsedSeconds
                 FROM ReportJobs j
                 LEFT JOIN Reports r ON j.ReportId = r.ReportId
                 WHERE j.UserId = @UserId AND j.CreatedAt >= DATEADD(HOUR, -24, GETDATE())
