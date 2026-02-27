@@ -35,9 +35,15 @@ export async function GET(request, props) {
 
         const fileBuffer = fs.readFileSync(job.FilePath);
 
+        // Auto-detect content type from file extension
+        const isCSV = job.FileName?.endsWith('.csv');
+        const contentType = isCSV
+            ? 'text/csv; charset=utf-8'
+            : 'application/vnd.ms-excel.sheet.binary.macroEnabled.12';
+
         return new Response(fileBuffer, {
             headers: {
-                'Content-Type': 'application/vnd.ms-excel.sheet.binary.macroEnabled.12',
+                'Content-Type': contentType,
                 'Content-Disposition': `attachment; filename="${encodeURIComponent(job.FileName)}"`,
                 'Content-Length': fileBuffer.length.toString(),
             }

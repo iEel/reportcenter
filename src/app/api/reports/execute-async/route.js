@@ -3,7 +3,6 @@ import sql from 'mssql';
 import { connectToCentralDB, connectToCompanyDB } from '@/lib/db';
 import { getSession } from '@/lib/auth';
 import { validateQuery } from '@/lib/sql-validator';
-import * as xlsx from 'xlsx';
 import fs from 'fs';
 import path from 'path';
 
@@ -138,20 +137,56 @@ export async function POST(request) {
                 const dataResult = await req.query(tSqlQuery);
                 const data = dataResult.recordset;
 
-                // Generate xlsb file
+                // Prepare output directory
                 if (!fs.existsSync(JOBS_DIR)) {
                     fs.mkdirSync(JOBS_DIR, { recursive: true });
                 }
 
                 const dateStr = new Date().toISOString().split('T')[0];
-                const fileName = `${reportName}_${dateStr}_job${jobId}.xlsb`;
+
+                // CSV Stream Export — memory-efficient for large datasets
+                const fileName = `${reportName}_${dateStr}_job${jobId}.csv`;
                 const filePath = path.join(JOBS_DIR, fileName);
 
-                const ws = xlsx.utils.json_to_sheet(data);
-                const wb = xlsx.utils.book_new();
-                xlsx.utils.book_append_sheet(wb, ws, 'Report');
-                const buf = xlsx.write(wb, { type: 'buffer', bookType: 'xlsb' });
-                fs.writeFileSync(filePath, buf);
+                // Helper: escape CSV values (RFC 4180 — handles commas, quotes, newlines, Thai text)
+                const escapeCSV = (val) => {
+                    if (val === null || val === undefined) return '';
+                    const str = String(val);
+                    if (str.includes(',') || str.includes('"') || str.includes('\n') || str.includes('\r')) {
+                        return '"' + str.replace(/"/g, '""') + '"';
+                    }
+                    return str;
+                };
+
+                const writeStream = fs.createWriteStream(filePath, { encoding: 'utf8' });
+
+                // UTF-8 BOM — ensures Thai characters display correctly in Excel
+                writeStream.write('\uFEFF');
+
+                if (data.length > 0) {
+                    // Write header row
+                    const columns = Object.keys(data[0]);
+                    writeStream.write(columns.map(escapeCSV).join(',') + '\n');
+
+                    // Write data rows — streamed one at a time (constant memory)
+                    for (let i = 0; i < data.length; i++) {
+                        const row = columns.map(col => {
+                            const val = data[i][col];
+                            // Format dates as readable strings
+                            if (val instanceof Date) {
+                                return escapeCSV(val.toISOString().replace('T', ' ').substring(0, 19));
+                            }
+                            return escapeCSV(val);
+                        });
+                        writeStream.write(row.join(',') + '\n');
+                    }
+                }
+
+                // Wait for write to finish
+                await new Promise((resolve, reject) => {
+                    writeStream.end(() => resolve());
+                    writeStream.on('error', reject);
+                });
 
                 // Update job: done
                 const pool2 = await connectToCentralDB();
@@ -162,7 +197,7 @@ export async function POST(request) {
                     .input('RowCount', sql.Int, data.length)
                     .query('UPDATE ReportJobs SET Status = \'done\', FilePath = @FilePath, FileName = @FileName, [RowCount] = @RowCount WHERE JobId = @JobId');
 
-                console.log(`[Job ${jobId}] Completed: ${data.length} rows → ${fileName}`);
+                console.log(`[Job ${jobId}] Completed: ${data.length} rows → ${fileName} (CSV stream)`);
 
             } catch (error) {
                 console.error(`[Job ${jobId}] Failed:`, error.message);
