@@ -1,6 +1,6 @@
 # ReportCenter — Developer Handoff
 
-> **Version:** 7.4  
+> **Version:** 7.5  
 > **Last Updated:** 2026-02-27  
 > **Tech Stack:** Next.js 16.1.6 + React 19 + Tailwind CSS 4 + MSSQL (mssql driver) + Microsoft Graph API (OAuth2) / Nodemailer (SMTP fallback) + @azure/msal-node
 
@@ -90,8 +90,8 @@ reportcenter/
 │   │           ├── execute/route.js      # POST: run T-SQL on company DB (ROW_NUMBER pagination + client-side fallback for SQL 2005+)
 │   │           ├── parameters/route.js   # GET: report parameters (auto-migrate LookupQuery column)
 │   │           ├── search-param/route.js # GET: typeahead search for parameters with LookupQuery
-│   │           ├── execute-async/route.js # POST: background job — CSV stream export (UTF-8 BOM + RFC 4180)
-│   │           ├── jobs/[id]/route.js    # GET: poll job status
+│   │           ├── execute-async/route.js # POST: background job — CSV stream export (UTF-8 BOM + RFC 4180 + auto-cleanup 24h)
+│   │           ├── jobs/[id]/route.js    # GET: poll job status | PATCH: cancel running job
 │   │           ├── jobs/[id]/download/route.js # GET: download job file (auto-detect CSV/Excel)
 │   │           ├── job-history/route.js  # GET: list completed jobs
 │   │           └── favorites/route.js    # GET/POST: toggle favorite reports
