@@ -8,6 +8,44 @@ import path from 'path';
 
 const JOBS_DIR = path.join(process.cwd(), 'tmp', 'jobs');
 const BG_JOB_TIMEOUT = parseInt(process.env.BACKGROUND_JOB_TIMEOUT) || 900000; // 15 min default
+const JOBS_MAX_AGE_MS = 24 * 60 * 60 * 1000; // 24 hours
+
+// Auto-cleanup: delete job files older than 24 hours
+async function cleanupOldJobFiles() {
+    try {
+        if (!fs.existsSync(JOBS_DIR)) return;
+
+        const now = Date.now();
+        const files = fs.readdirSync(JOBS_DIR);
+        let deleted = 0;
+
+        for (const file of files) {
+            const filePath = path.join(JOBS_DIR, file);
+            try {
+                const stat = fs.statSync(filePath);
+                if (now - stat.mtimeMs > JOBS_MAX_AGE_MS) {
+                    fs.unlinkSync(filePath);
+                    deleted++;
+                }
+            } catch { }
+        }
+
+        // Also clean old DB records (mark files as expired)
+        if (deleted > 0) {
+            try {
+                const pool = await connectToCentralDB();
+                await pool.request().query(`
+                    UPDATE ReportJobs 
+                    SET FilePath = NULL, ErrorMessage = N'ไฟล์หมดอายุ (24 ชม.)'
+                    WHERE Status = 'done' AND FilePath IS NOT NULL AND CreatedAt < DATEADD(HOUR, -24, GETDATE())
+                `);
+            } catch { }
+            console.log(`[Cleanup] Deleted ${deleted} expired job file(s)`);
+        }
+    } catch (e) {
+        console.warn('[Cleanup] Error:', e.message);
+    }
+}
 
 export async function POST(request) {
     try {
@@ -107,6 +145,9 @@ export async function POST(request) {
         // Background execution (non-blocking)
         setImmediate(async () => {
             try {
+                // Cleanup expired files before creating new ones
+                await cleanupOldJobFiles();
+
                 const companyPool = await connectToCompanyDB(parseInt(companyId));
                 const req = companyPool.request();
 
