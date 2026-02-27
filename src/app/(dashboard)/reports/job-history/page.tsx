@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react";
-import { Clock, Download, RefreshCw, CheckCircle2, XCircle, Loader2, FileText, AlertTriangle } from "lucide-react";
+import { Clock, Download, RefreshCw, CheckCircle2, XCircle, Loader2, FileText, AlertTriangle, StopCircle } from "lucide-react";
 import { timeAgo } from "@/lib/dateUtils";
 import { useToast } from "@/components/providers/ToastProvider";
 
@@ -65,10 +65,29 @@ export default function JobHistoryPage() {
         }
     };
 
+    const handleCancelJob = async (jobId: number) => {
+        const confirmed = window.confirm('ต้องการยกเลิก Job นี้หรือไม่?');
+        if (!confirmed) return;
+
+        try {
+            const res = await fetch(`/api/reports/jobs/${jobId}`, { method: 'PATCH' });
+            const data = await res.json();
+            if (data.success) {
+                toast('ยกเลิก Job สำเร็จ', 'success');
+                fetchJobs();
+            } else {
+                toast(data.message || 'ไม่สามารถยกเลิกได้', 'error');
+            }
+        } catch {
+            toast('เกิดข้อผิดพลาด', 'error');
+        }
+    };
+
     const statusConfig: Record<string, { label: string; icon: any; color: string; bg: string }> = {
         'running': { label: 'กำลังสร้าง...', icon: Loader2, color: 'text-blue-600', bg: 'bg-blue-50' },
         'done': { label: 'สำเร็จ', icon: CheckCircle2, color: 'text-emerald-600', bg: 'bg-emerald-50' },
         'failed': { label: 'ล้มเหลว', icon: XCircle, color: 'text-red-600', bg: 'bg-red-50' },
+        'cancelled': { label: 'ยกเลิกแล้ว', icon: StopCircle, color: 'text-orange-600', bg: 'bg-orange-50' },
     };
 
     const runningJobs = jobs.filter(j => j.Status === 'running');
@@ -174,7 +193,18 @@ export default function JobHistoryPage() {
                                                         ดาวน์โหลด
                                                     </button>
                                                 ) : job.Status === 'running' ? (
-                                                    <span className="text-xs text-blue-500">รอสักครู่...</span>
+                                                    <button
+                                                        onClick={() => handleCancelJob(job.JobId)}
+                                                        className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-orange-500 text-white text-xs font-medium rounded-lg hover:bg-orange-600 transition-colors shadow-sm"
+                                                    >
+                                                        <StopCircle className="w-3.5 h-3.5" />
+                                                        ยกเลิก
+                                                    </button>
+                                                ) : job.Status === 'cancelled' ? (
+                                                    <span className="text-xs text-orange-500">
+                                                        <StopCircle className="w-3.5 h-3.5 inline mr-1" />
+                                                        ยกเลิกแล้ว
+                                                    </span>
                                                 ) : job.Status === 'failed' ? (
                                                     <span className="text-xs text-red-400" title={job.ErrorMessage || ''}>
                                                         <AlertTriangle className="w-3.5 h-3.5 inline mr-1" />

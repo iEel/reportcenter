@@ -170,6 +170,22 @@ export async function POST(request) {
 
                     // Write data rows — streamed one at a time (constant memory)
                     for (let i = 0; i < data.length; i++) {
+                        // Check for cancellation every 10,000 rows
+                        if (i > 0 && i % 10000 === 0) {
+                            try {
+                                const checkPool = await connectToCentralDB();
+                                const check = await checkPool.request()
+                                    .input('JobId', sql.Int, jobId)
+                                    .query('SELECT Status FROM ReportJobs WHERE JobId = @JobId');
+                                if (check.recordset[0]?.Status === 'cancelled') {
+                                    writeStream.destroy();
+                                    try { fs.unlinkSync(filePath); } catch { }
+                                    console.log(`[Job ${jobId}] Cancelled at row ${i}/${data.length}`);
+                                    return;
+                                }
+                            } catch { }
+                        }
+
                         const row = columns.map(col => {
                             const val = data[i][col];
                             // Format dates as readable strings
