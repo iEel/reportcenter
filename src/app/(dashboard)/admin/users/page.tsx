@@ -428,24 +428,24 @@ export default function AdminUsersPage() {
                     <h1 className="text-2xl font-bold text-slate-900 dark:text-white">จัดการผู้ใช้</h1>
                     <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">เพิ่มลบผู้ใช้งาน และกำหนดสิทธิ์เพื่อควบคุมการเข้าถึงรายงาน</p>
                 </div>
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-2">
+                    <button onClick={fetchUsersAndRoles} className="p-2.5 text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg transition-colors" title="รีเฟรช">
+                        <RefreshCw className={`w-5 h-5 ${isLoading ? 'animate-spin' : ''}`} />
+                    </button>
                     <button
                         onClick={handleSyncAD}
                         disabled={isSyncing}
-                        className="flex items-center gap-2 px-3 py-2.5 bg-amber-50 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 rounded-lg hover:bg-amber-100 dark:hover:bg-amber-900/50 transition-colors border border-amber-200 dark:border-amber-800 text-sm font-medium disabled:opacity-50"
+                        className="flex items-center gap-2 px-4 py-2.5 text-sm font-medium text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-900/30 border border-amber-200 dark:border-amber-700 rounded-lg hover:bg-amber-100 dark:hover:bg-amber-900/50 transition-colors disabled:opacity-50"
                         title="ตรวจสอบผู้ใช้ LDAP กับ Active Directory"
                     >
                         {isSyncing ? <Loader2 className="w-4 h-4 animate-spin" /> : <CloudCog className="w-4 h-4" />}
                         {isSyncing ? 'กำลัง Sync...' : 'Sync AD'}
                     </button>
-                    <button onClick={fetchUsersAndRoles} className="p-2.5 bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-600 transition-colors">
-                        <RefreshCw className={`w-5 h-5 ${isLoading ? 'animate-spin' : ''}`} />
-                    </button>
                     <button
                         onClick={handleOpenAddModal}
-                        className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-lg active:scale-95 transition-all shadow-md shadow-blue-500/30 font-medium"
+                        className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-lg active:scale-95 transition-all shadow-md shadow-blue-500/30 font-medium text-sm"
                     >
-                        <Plus className="w-5 h-5" />
+                        <Plus className="w-4 h-4" />
                         เพิ่มผู้ใช้ใหม่
                     </button>
                 </div>
