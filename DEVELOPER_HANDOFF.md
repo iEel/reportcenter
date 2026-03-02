@@ -667,7 +667,7 @@ curl http://localhost:4000/api/cron/execute-schedules?secret=rc-cron-secret-2026
 |--------|----------------|
 | **DML** | INSERT, UPDATE, DELETE, MERGE, TRUNCATE |
 | **DDL** | CREATE, ALTER, DROP |
-| **Metadata** | INFORMATION_SCHEMA.*, sys.*, sysobjects, syscolumns, master/tempdb/msdb |
+| **Metadata** | INFORMATION_SCHEMA.*, sys.*, sysobjects, syscolumns, master.*/tempdb.*/msdb.*/model.* (ทุก dot-access pattern) |
 | **Procs** | EXEC/EXECUTE, xp_*, sp_executesql, sp_help*, sp_configure |
 | **Remote** | OPENROWSET, OPENDATASOURCE, OPENQUERY |
 | **Other** | BACKUP, RESTORE, DBCC, WAITFOR DELAY, SELECT INTO, PasswordHash |
@@ -705,13 +705,13 @@ curl http://localhost:4000/api/cron/execute-schedules?secret=rc-cron-secret-2026
 - Pulse animation + dark mode support
 
 ### Automated Tests (Vitest)
-- `npm run test` → `vitest run` (75 tests)
+- `npm run test` → `vitest run` (76 tests)
 - `npm run test:watch` → watch mode
 - Test files:
   - `src/lib/__tests__/auth.test.js` (5) — JWT sign/verify, cookie name
   - `src/lib/__tests__/password-rules.test.js` (10) — complexity rules validation
   - `src/lib/__tests__/db.test.js` (5) — connection pool
-  - `src/lib/__tests__/sql-validator.test.js` (55) — DML/DDL blocking, metadata access, stored procs, remote sources, bypass prevention, edge cases
+  - `src/lib/__tests__/sql-validator.test.js` (56) — DML/DDL blocking, metadata access, stored procs, remote sources, bypass prevention, edge cases
 
 ---
 
