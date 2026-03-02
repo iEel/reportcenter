@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect, useRef } from "react";
-import { Plus, Search, Edit, Shield, User, Building, RefreshCw, X, Save, Loader2, Check, Eye, EyeOff, UserCheck, UserX, Trash2, KeyRound, ChevronLeft, ChevronRight, Link2, Search as SearchIcon, XCircle } from "lucide-react";
+import { Plus, Search, Edit, Shield, User, Building, RefreshCw, X, Save, Loader2, Check, Eye, EyeOff, UserCheck, UserX, Trash2, KeyRound, ChevronLeft, ChevronRight, Link2, Search as SearchIcon, XCircle, CloudCog } from "lucide-react";
 import { useToast } from "@/components/providers/ToastProvider";
 import { useConfirm } from "@/components/providers/ConfirmProvider";
 
@@ -32,6 +32,7 @@ export default function AdminUsersPage() {
     const [roles, setRoles] = useState<any[]>([]);
     const [companies, setCompanies] = useState<any[]>([]);
     const [isLoading, setIsLoading] = useState(true);
+    const [isSyncing, setIsSyncing] = useState(false);
     const [searchQuery, setSearchQuery] = useState('');
     const [filterRole, setFilterRole] = useState('');
     const [filterStatus, setFilterStatus] = useState('');
@@ -396,6 +397,28 @@ export default function AdminUsersPage() {
     const activeCount = users.filter(u => u.IsActive).length;
     const inactiveCount = users.filter(u => u.IsActive === false).length;
 
+    // AD Sync
+    const handleSyncAD = async () => {
+        const ok = await confirm({ title: 'Sync AD', message: 'ต้องการ Sync กับ Active Directory หรือไม่?\n\nระบบจะตรวจสอบผู้ใช้ LDAP ทั้งหมดว่ายังอยู่ใน AD หรือไม่\nถ้าไม่พบใน AD จะถูก Disable อัตโนมัติ', confirmLabel: 'Sync AD' });
+        if (!ok) return;
+
+        setIsSyncing(true);
+        try {
+            const res = await fetch('/api/admin/users/sync-ad', { method: 'POST' });
+            const data = await res.json();
+            if (data.success) {
+                toast(data.message, 'success');
+                fetchUsersAndRoles();
+            } else {
+                toast(data.message || 'Sync ล้มเหลว', 'error');
+            }
+        } catch {
+            toast('เกิดข้อผิดพลาดในการเชื่อมต่อ', 'error');
+        } finally {
+            setIsSyncing(false);
+        }
+    };
+
     return (
         <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
 
@@ -406,6 +429,15 @@ export default function AdminUsersPage() {
                     <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">เพิ่มลบผู้ใช้งาน และกำหนดสิทธิ์เพื่อควบคุมการเข้าถึงรายงาน</p>
                 </div>
                 <div className="flex items-center gap-3">
+                    <button
+                        onClick={handleSyncAD}
+                        disabled={isSyncing}
+                        className="flex items-center gap-2 px-3 py-2.5 bg-amber-50 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 rounded-lg hover:bg-amber-100 dark:hover:bg-amber-900/50 transition-colors border border-amber-200 dark:border-amber-800 text-sm font-medium disabled:opacity-50"
+                        title="ตรวจสอบผู้ใช้ LDAP กับ Active Directory"
+                    >
+                        {isSyncing ? <Loader2 className="w-4 h-4 animate-spin" /> : <CloudCog className="w-4 h-4" />}
+                        {isSyncing ? 'กำลัง Sync...' : 'Sync AD'}
+                    </button>
                     <button onClick={fetchUsersAndRoles} className="p-2.5 bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-600 transition-colors">
                         <RefreshCw className={`w-5 h-5 ${isLoading ? 'animate-spin' : ''}`} />
                     </button>
