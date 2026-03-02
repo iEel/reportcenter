@@ -1,7 +1,7 @@
 # ReportCenter — Deployment Guide (Ubuntu Server + Cloudflare Zero Trust)
 
 > **Target OS:** Ubuntu 22.04 LTS / 24.04 LTS  
-> **Last Updated:** 2026-02-26
+> **Last Updated:** 2026-03-02
 
 ---
 
@@ -329,6 +329,7 @@ Cron job รันจาก server เอง (localhost) → ไม่ผ่า�
 ```bash
 # Cron เรียก localhost โดยตรง — วิ่งเข้า Next.js ตรงๆ ได้เลย ไม่ผ่าน authentication
 curl http://localhost:4000/api/cron/execute-schedules?secret=your-cron-secret
+curl http://localhost:4000/api/cron/sync-ad?secret=your-cron-secret
 ```
 
 ถ้าต้องการเรียกจากภายนอกผ่าน Cloudflare → สร้าง **Service Token** ใน Access เพื่อ bypass auth (ดูเพิ่มเติมในเอกสาร Cloudflare)
@@ -347,16 +348,23 @@ sudo ufw status
 
 ---
 
-## 11. Cron Job (Scheduled Reports)
+## 11. Cron Jobs
 
 ```bash
 crontab -e
 ```
 
 ```bash
-# รันทุก 5 นาที — เรียกเข้า Next.js โดยตรง
-*/5 * * * * curl -s http://localhost:4000/api/cron/execute-schedules?secret=your-cron-secret-here >> /var/log/reportcenter-cron.log 2>&1
+# รันทุก 5 นาที — Scheduled Reports (ส่ง email ตามเวลา)
+*/5 * * * * curl -s "http://localhost:4000/api/cron/execute-schedules?secret=your-cron-secret-here" >> /var/log/reportcenter-cron.log 2>&1
+
+# รันทุกวัน ตี 1 — AD Sync (ตรวจสอบ LDAP users กับ Active Directory)
+0 1 * * * curl -s "http://localhost:4000/api/cron/sync-ad?secret=your-cron-secret-here" >> /var/log/reportcenter-cron.log 2>&1
 ```
+
+> 💡 **AD Sync** จะตรวจสอบผู้ใช้ LDAP ทั้งหมดใน DB ว่ายังอยู่ใน Active Directory หรือไม่  
+> ถ้าไม่พบ → จะ soft-disable (IsActive = 0) อัตโนมัติ  
+> Admin ยังสามารถกดปุ่ม **"Sync AD"** ในหน้าจัดการผู้ใช้ได้ตลอดเวลา
 
 ---
 
