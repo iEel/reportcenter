@@ -1,15 +1,24 @@
 const sql = require('mssql');
-require('dotenv').config({ path: '.env.local' });
+const path = require('path');
+require('dotenv').config({ path: path.join(__dirname, '..', '.env.local') });
+
+// Validate required env vars
+const required = ['DB_USER', 'DB_PASSWORD', 'DB_SERVER', 'DB_DATABASE'];
+const missing = required.filter(k => !process.env[k]);
+if (missing.length > 0) {
+    console.error(`Missing required environment variables: ${missing.join(', ')}`);
+    process.exit(1);
+}
 
 async function fixReports() {
     try {
         const pool = await sql.connect({
-            user: process.env.DB_USER || 'sa',
-            password: process.env.DB_PASSWORD || 'Sonic@rama3',
-            server: process.env.DB_SERVER || '192.168.110.106',
-            database: process.env.DB_DATABASE || 'ReportCenterDB',
+            user: process.env.DB_USER,
+            password: process.env.DB_PASSWORD,
+            server: process.env.DB_SERVER,
+            database: process.env.DB_DATABASE,
             options: {
-                instanceName: 'alpha',
+                instanceName: process.env.DB_INSTANCE || undefined,
                 encrypt: false,
                 trustServerCertificate: true,
             },

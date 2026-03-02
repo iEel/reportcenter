@@ -42,5 +42,11 @@ next-env.d.ts
 
 /db.js
 
+# ad-hoc test scripts at root
+/test-*.js
+
+# log files
+*.log
+
 # background job files
 /tmp/jobs/

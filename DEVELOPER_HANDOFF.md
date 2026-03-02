@@ -1,6 +1,6 @@
 # ReportCenter — Developer Handoff
 
-> **Version:** 7.7  
+> **Version:** 8.0  
 > **Last Updated:** 2026-02-27  
 > **Tech Stack:** Next.js 16.1.6 + React 19 + Tailwind CSS 4 + MSSQL (mssql driver) + Microsoft Graph API (OAuth2) / Nodemailer (SMTP fallback) + @azure/msal-node
 
@@ -121,11 +121,12 @@ reportcenter/
 │   └── middleware.ts                     # Route protection (JWT check)
 ├── scripts/
 │   ├── init_database.sql                 # Initial DB schema
+│   ├── setup-db.js                       # Create DB + run init schema (.env)
 │   ├── create_activity_logs.sql          # ActivityLogs table DDL
 │   ├── create-activity-logs.js           # Run creation via Node
 │   ├── hash-password.js                  # Utility: hash password
 │   ├── update-admin-password.js          # Utility: update admin pw in DB
-│   └── fix-reports.js                    # Legacy fix script
+│   └── fix-reports.js                    # Legacy fix script (.env, no hardcoded creds)
 └── package.json
 ```
 
@@ -713,6 +714,9 @@ curl http://localhost:4000/api/cron/execute-schedules?secret=rc-cron-secret-2026
 ## 11. Scripts Reference
 
 ```bash
+# Create database + initial schema (reads from .env.local)
+node scripts/setup-db.js
+
 # Hash a password for DB insertion
 node scripts/hash-password.js MyPassword123
 
