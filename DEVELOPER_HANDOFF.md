@@ -1,6 +1,6 @@
 # ReportCenter — Developer Handoff
 
-> **Version:** 7.6  
+> **Version:** 7.7  
 > **Last Updated:** 2026-02-27  
 > **Tech Stack:** Next.js 16.1.6 + React 19 + Tailwind CSS 4 + MSSQL (mssql driver) + Microsoft Graph API (OAuth2) / Nodemailer (SMTP fallback) + @azure/msal-node
 
@@ -50,7 +50,7 @@ reportcenter/
 │   │   │   │   │   ├── page.tsx          # Manage Reports list (search/filter/disable-toggle/hard-delete)
 │   │   │   │   │   ├── new/page.tsx      # Create new report
 │   │   │   │   │   └── [id]/edit/page.tsx # Edit existing report
-│   │   │   │   ├── users/page.tsx        # Manage Users + AD autocomplete (search by username/name/employeeId)
+│   │   │   │   ├── users/page.tsx        # Manage Users + AD autocomplete + Sync AD button (soft-disable missing AD users)
 │   │   │   │   ├── roles/page.tsx        # Manage Roles + Report access assignment
 │   │   │   │   ├── audit-logs/page.tsx   # Audit Log Viewer (paginated, refresh, BLOCKED_QUERY red badge)
 │   │   │   │   ├── categories/page.tsx   # Manage Report Categories (CRUD + color picker)
@@ -74,6 +74,7 @@ reportcenter/
 │   │       │   │   └── [id]/route.js     # GET/PUT/DELETE single report
 │   │       │   ├── users/route.js        # GET/POST/PUT/DELETE users & roles + company mappings (AD/local)
 │   │       │   ├── users/lookup-ad/route.js # GET: AD user lookup + wildcard search (autocomplete)
+│   │       │   ├── users/sync-ad/route.js # POST: AD Sync — check LDAP users against AD, soft-disable missing (admin session)
 │   │       │   ├── users/reset-password/route.js # POST: admin reset user password
 │   │       │   ├── roles/route.js        # GET/POST/PUT/DELETE roles + ReportRoleMapping (category-grouped)
 │   │       │   ├── categories/route.js   # GET/POST/PUT/DELETE report categories (auto-migration)
@@ -82,7 +83,8 @@ reportcenter/
 │   │       │   ├── settings/route.js     # GET/PUT system settings
 │   │       │   └── settings/test-ldap/route.js # POST: test LDAP connection
 │   │       ├── cron/
-│   │       │   └── execute-schedules/route.js # GET: cron endpoint (runs due reports → email)
+│   │       │   ├── execute-schedules/route.js # GET: cron endpoint (runs due reports → email)
+│   │       │   └── sync-ad/route.js       # GET: cron AD Sync (?secret=CRON_SECRET) — daily LDAP user check
 │   │       ├── settings/
 │   │       │   └── idle-timeout/route.js    # GET: idle timeout setting (any logged-in user)
 │   │       └── reports/
