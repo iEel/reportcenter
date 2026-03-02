@@ -39,10 +39,10 @@ const BLOCKED_PATTERNS = [
     /\bsysdatabases\b/i,
     /\bsysusers\b/i,
     /\bsyslogins\b/i,
-    /\bmaster\s*\.\s*\./i,
-    /\btempdb\s*\.\s*\./i,
-    /\bmsdb\s*\.\s*\./i,
-    /\bmodel\s*\.\s*\./i,
+    /\bmaster\s*\./i,
+    /\btempdb\s*\./i,
+    /\bmsdb\s*\./i,
+    /\bmodel\s*\./i,
 
     // Dangerous stored procedures & functions
     /\bxp_\w+/i,

@@ -198,8 +198,12 @@ describe('sql-validator.js', () => {
         });
 
         it('blocks msdb access', () => {
-            // Validator regex expects msdb.. (double-dot pattern)
-            const result = validateQuery("SELECT * FROM msdb..sysjobs");
+            const result = validateQuery("SELECT * FROM msdb.dbo.sysjobs");
+            expect(result.safe).toBe(false);
+        });
+
+        it('blocks model database access', () => {
+            const result = validateQuery("SELECT * FROM model.dbo.tables");
             expect(result.safe).toBe(false);
         });
     });
