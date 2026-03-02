@@ -705,9 +705,13 @@ curl http://localhost:4000/api/cron/execute-schedules?secret=rc-cron-secret-2026
 - Pulse animation + dark mode support
 
 ### Automated Tests (Vitest)
-- `npm run test` → `vitest run` (20 tests)
+- `npm run test` → `vitest run` (75 tests)
 - `npm run test:watch` → watch mode
-- Test files: `src/lib/__tests__/auth.test.js` (5), `password-rules.test.js` (10), `db.test.js` (5)
+- Test files:
+  - `src/lib/__tests__/auth.test.js` (5) — JWT sign/verify, cookie name
+  - `src/lib/__tests__/password-rules.test.js` (10) — complexity rules validation
+  - `src/lib/__tests__/db.test.js` (5) — connection pool
+  - `src/lib/__tests__/sql-validator.test.js` (55) — DML/DDL blocking, metadata access, stored procs, remote sources, bypass prevention, edge cases
 
 ---
 
