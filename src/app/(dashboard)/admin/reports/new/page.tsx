@@ -339,8 +339,11 @@ export default function NewReportPage() {
                                     <p className="font-semibold flex items-center gap-1">💡 เคล็ดลับการเขียน SQL</p>
                                     <ul className="list-disc pl-4 space-y-1 text-amber-700">
                                         <li>ใช้ <code className="bg-amber-100 px-1 rounded">@ชื่อตัวแปร</code> สำหรับค่าที่ต้องการให้ user กรอก เช่น <code className="bg-amber-100 px-1 rounded">WHERE Date &gt;= @StartDate</code></li>
-                                        <li>ถ้าใช้ <code className="bg-amber-100 px-1 rounded">IN()</code> กับ parameter ให้ใช้ <code className="bg-amber-100 px-1 rounded">STRING_SPLIT</code> แทน เพราะ @param จะถูก bind เป็นค่าเดียว:<br />
-                                            <code className="bg-amber-100 px-1 rounded mt-0.5 inline-block">WHERE Status IN (SELECT value FROM STRING_SPLIT(@Status, &apos;,&apos;))</code>
+                                        <li>ถ้าใช้ <code className="bg-amber-100 px-1 rounded">IN()</code> กับ parameter — @param จะถูก bind เป็นค่าเดียว ให้ใช้วิธีนี้แทน:
+                                            <div className="mt-1 space-y-1">
+                                                <div><span className="font-semibold text-amber-800">Level ≥ 130 (SQL 2016+):</span> <code className="bg-amber-100 px-1 rounded">WHERE Status IN (SELECT value FROM STRING_SPLIT(@Status, &apos;,&apos;))</code></div>
+                                                <div><span className="font-semibold text-amber-800">Level ≥ 100 (SQL 2008+):</span> <code className="bg-amber-100 px-1 rounded">WHERE &apos;,&apos; + @Status + &apos;,&apos; LIKE &apos;%,&apos; + Status + &apos;,%&apos;</code></div>
+                                            </div>
                                         </li>
                                         <li>หลีกเลี่ยงคำสั่ง INSERT, UPDATE, DELETE, DROP — ระบบจะบล็อกอัตโนมัติ</li>
                                     </ul>
