@@ -142,7 +142,7 @@ export async function POST(request) {
         // Return immediately — run query in background
         const responseData = { success: true, jobId };
 
-        // Background execution (non-blocking)
+        // Background execution (non-blocking) — uses STREAMING to avoid OOM on large datasets
         setImmediate(async () => {
             try {
                 // Cleanup expired files before creating new ones
@@ -173,19 +173,11 @@ export async function POST(request) {
                     }
                 }
 
-                // Execute query (no timeout limit for heavy jobs)
-                req.timeout = BG_JOB_TIMEOUT;
-                const dataResult = await req.query(tSqlQuery);
-                const data = dataResult.recordset;
-
-                // Prepare output directory
+                // Prepare output directory & file
                 if (!fs.existsSync(JOBS_DIR)) {
                     fs.mkdirSync(JOBS_DIR, { recursive: true });
                 }
-
                 const dateStr = new Date().toISOString().split('T')[0];
-
-                // CSV Stream Export — memory-efficient for large datasets
                 const fileName = `${reportName}_${dateStr}_job${jobId}.csv`;
                 const filePath = path.join(JOBS_DIR, fileName);
 
@@ -200,50 +192,85 @@ export async function POST(request) {
                 };
 
                 const writeStream = fs.createWriteStream(filePath, { encoding: 'utf8' });
-
                 // UTF-8 BOM — ensures Thai characters display correctly in Excel
                 writeStream.write('\uFEFF');
 
-                if (data.length > 0) {
-                    // Write header row
-                    const columns = Object.keys(data[0]);
-                    writeStream.write(columns.map(escapeCSV).join(',') + '\n');
+                // === STREAMING MODE ===
+                // Process rows one-at-a-time — constant memory usage (~50MB) regardless of result size
+                req.stream = true;
+                req.timeout = BG_JOB_TIMEOUT;
 
-                    // Write data rows — streamed one at a time (constant memory)
-                    for (let i = 0; i < data.length; i++) {
-                        // Check for cancellation every 10,000 rows
-                        if (i > 0 && i % 10000 === 0) {
-                            try {
-                                const checkPool = await connectToCentralDB();
-                                const check = await checkPool.request()
-                                    .input('JobId', sql.Int, jobId)
-                                    .query('SELECT Status FROM ReportJobs WHERE JobId = @JobId');
-                                if (check.recordset[0]?.Status === 'cancelled') {
-                                    writeStream.destroy();
-                                    try { fs.unlinkSync(filePath); } catch { }
-                                    console.log(`[Job ${jobId}] Cancelled at row ${i}/${data.length}`);
-                                    return;
-                                }
-                            } catch { }
-                        }
+                let columns = null;
+                let rowCount = 0;
+                let isCancelled = false;
 
-                        const row = columns.map(col => {
-                            const val = data[i][col];
-                            // Format dates as readable strings
+                await new Promise((resolve, reject) => {
+                    // Column metadata arrives first
+                    req.on('recordset', (cols) => {
+                        columns = Object.keys(cols);
+                        writeStream.write(columns.map(escapeCSV).join(',') + '\n');
+                    });
+
+                    // Each row arrives individually — write to CSV immediately
+                    req.on('row', (row) => {
+                        if (isCancelled) return;
+                        rowCount++;
+
+                        const line = columns.map(col => {
+                            const val = row[col];
                             if (val instanceof Date) {
                                 return escapeCSV(val.toISOString().replace('T', ' ').substring(0, 19));
                             }
                             return escapeCSV(val);
-                        });
-                        writeStream.write(row.join(',') + '\n');
-                    }
-                }
+                        }).join(',') + '\n';
 
-                // Wait for write to finish
-                await new Promise((resolve, reject) => {
-                    writeStream.end(() => resolve());
-                    writeStream.on('error', reject);
+                        const canContinue = writeStream.write(line);
+
+                        // Back-pressure: pause SQL stream if file writer is overwhelmed
+                        if (!canContinue) {
+                            req.pause();
+                            writeStream.once('drain', () => req.resume());
+                        }
+
+                        // Check for cancellation every 10,000 rows
+                        if (rowCount % 10000 === 0) {
+                            req.pause();
+                            connectToCentralDB().then(checkPool => {
+                                checkPool.request()
+                                    .input('JobId', sql.Int, jobId)
+                                    .query('SELECT Status FROM ReportJobs WHERE JobId = @JobId')
+                                    .then(check => {
+                                        if (check.recordset[0]?.Status === 'cancelled') {
+                                            isCancelled = true;
+                                            writeStream.destroy();
+                                            try { fs.unlinkSync(filePath); } catch { }
+                                            console.log(`[Job ${jobId}] Cancelled at row ${rowCount}`);
+                                            resolve();
+                                        } else {
+                                            req.resume();
+                                        }
+                                    })
+                                    .catch(() => req.resume());
+                            }).catch(() => req.resume());
+                        }
+                    });
+
+                    req.on('error', (err) => {
+                        writeStream.destroy();
+                        try { fs.unlinkSync(filePath); } catch { }
+                        reject(err);
+                    });
+
+                    req.on('done', () => {
+                        if (isCancelled) return;
+                        writeStream.end(() => resolve());
+                    });
+
+                    // Start the streaming query
+                    req.query(tSqlQuery);
                 });
+
+                if (isCancelled) return;
 
                 // Update job: done
                 const pool2 = await connectToCentralDB();
@@ -251,10 +278,10 @@ export async function POST(request) {
                     .input('JobId', sql.Int, jobId)
                     .input('FilePath', sql.NVarChar(500), filePath)
                     .input('FileName', sql.NVarChar(200), fileName)
-                    .input('RowCount', sql.Int, data.length)
+                    .input('RowCount', sql.Int, rowCount)
                     .query('UPDATE ReportJobs SET Status = \'done\', FilePath = @FilePath, FileName = @FileName, [RowCount] = @RowCount, CompletedAt = GETDATE() WHERE JobId = @JobId');
 
-                console.log(`[Job ${jobId}] Completed: ${data.length} rows → ${fileName} (CSV stream)`);
+                console.log(`[Job ${jobId}] Completed: ${rowCount} rows → ${fileName} (streamed)`);
 
             } catch (error) {
                 console.error(`[Job ${jobId}] Failed:`, error.message);
