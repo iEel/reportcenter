@@ -1,7 +1,7 @@
 "use client"
 
 import Link from "next/link";
-import { Plus, Search, Edit, Trash2, FileText, Database, Shield, RefreshCw, Star, Power, Tag } from "lucide-react";
+import { Plus, Search, Edit, Trash2, FileText, Database, Shield, RefreshCw, Star, Power, Tag, Filter } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useToast } from "@/components/providers/ToastProvider";
 import { useConfirm } from "@/components/providers/ConfirmProvider";
@@ -26,6 +26,8 @@ export default function AdminReportsPage() {
     const [isLoading, setIsLoading] = useState(true);
     const [searchQuery, setSearchQuery] = useState('');
     const [selectedIds, setSelectedIds] = useState<number[]>([]);
+    const [categories, setCategories] = useState<{ CategoryId: number; CategoryName: string; ColorTag: string }[]>([]);
+    const [filterCategory, setFilterCategory] = useState<string>('all');
 
     const fetchReports = async () => {
         setIsLoading(true);
@@ -88,13 +90,22 @@ export default function AdminReportsPage() {
         }
     };
 
-    const filteredReports = reports.filter(r =>
-        r.ReportName?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        r.Description?.toLowerCase().includes(searchQuery.toLowerCase())
-    );
+    const filteredReports = reports.filter(r => {
+        const matchesSearch = r.ReportName?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+            r.Description?.toLowerCase().includes(searchQuery.toLowerCase());
+        const matchesCategory = filterCategory === 'all'
+            || (filterCategory === 'none' && !r.CategoryId)
+            || (r.CategoryId && r.CategoryId.toString() === filterCategory);
+        return matchesSearch && matchesCategory;
+    });
 
     useEffect(() => {
         fetchReports();
+        // Fetch categories for filter
+        fetch('/api/admin/categories')
+            .then(r => r.json())
+            .then(d => { if (d.success) setCategories(d.categories || []); })
+            .catch(() => { });
     }, []);
 
     const handleBulkDelete = async () => {
@@ -157,19 +168,35 @@ export default function AdminReportsPage() {
             </div>
 
             <div className="bg-white border border-slate-200 shadow-sm rounded-2xl overflow-hidden">
-                <div className="p-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
-                    <div className="relative w-full max-w-sm">
-                        <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-                        <input
-                            type="text"
-                            placeholder="ค้นหาชื่อรายงาน..."
-                            value={searchQuery}
-                            onChange={e => setSearchQuery(e.target.value)}
-                            className="w-full pl-9 pr-4 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors bg-white font-medium"
-                        />
+                <div className="p-4 border-b border-slate-100 flex items-center justify-between gap-3 bg-slate-50/50">
+                    <div className="flex items-center gap-3 flex-1">
+                        <div className="relative w-full max-w-sm">
+                            <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                            <input
+                                type="text"
+                                placeholder="ค้นหาชื่อรายงาน..."
+                                value={searchQuery}
+                                onChange={e => setSearchQuery(e.target.value)}
+                                className="w-full pl-9 pr-4 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors bg-white font-medium"
+                            />
+                        </div>
+                        <div className="relative">
+                            <Filter className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                            <select
+                                value={filterCategory}
+                                onChange={e => setFilterCategory(e.target.value)}
+                                className={`pl-9 pr-8 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors bg-white font-medium appearance-none cursor-pointer ${filterCategory !== 'all' ? 'border-violet-300 bg-violet-50 text-violet-700' : ''}`}
+                            >
+                                <option value="all">ทุกหมวดหมู่</option>
+                                <option value="none">ไม่ระบุหมวดหมู่</option>
+                                {categories.map(c => (
+                                    <option key={c.CategoryId} value={c.CategoryId}>{c.CategoryName}</option>
+                                ))}
+                            </select>
+                        </div>
                     </div>
                     {selectedIds.length > 0 && (
-                        <button onClick={handleBulkDelete} className="flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors text-sm font-medium shadow-sm">
+                        <button onClick={handleBulkDelete} className="flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors text-sm font-medium shadow-sm shrink-0">
                             <Trash2 className="w-4 h-4" /> ลบที่เลือก ({selectedIds.length})
                         </button>
                     )}
@@ -284,6 +311,6 @@ export default function AdminReportsPage() {
                     </table>
                 </div>
             </div>
-        </div>
+        </div >
     );
 }
