@@ -281,6 +281,16 @@ export async function POST(request) {
                     .input('RowCount', sql.Int, rowCount)
                     .query('UPDATE ReportJobs SET Status = \'done\', FilePath = @FilePath, FileName = @FileName, [RowCount] = @RowCount, CompletedAt = GETDATE() WHERE JobId = @JobId');
 
+                // Notify user via bell 🔔
+                try {
+                    await pool2.request()
+                        .input('UserId', sql.Int, session.userId)
+                        .input('Title', sql.NVarChar(200), `✅ รายงานเสร็จแล้ว: ${reportName}`)
+                        .input('Message', sql.NVarChar(500), `สร้างเสร็จแล้ว ${rowCount.toLocaleString()} แถว — กดเพื่อดาวน์โหลด`)
+                        .input('Type', sql.NVarChar(20), 'success')
+                        .query(`INSERT INTO Notifications (UserId, Title, Message, Type) VALUES (@UserId, @Title, @Message, @Type)`);
+                } catch (e) { /* ignore */ }
+
                 console.log(`[Job ${jobId}] Completed: ${rowCount} rows → ${fileName} (streamed)`);
 
             } catch (error) {
@@ -291,6 +301,14 @@ export async function POST(request) {
                         .input('JobId', sql.Int, jobId)
                         .input('ErrorMessage', sql.NVarChar(500), error.message?.substring(0, 500))
                         .query('UPDATE ReportJobs SET Status = \'failed\', ErrorMessage = @ErrorMessage WHERE JobId = @JobId');
+
+                    // Notify user via bell 🔔
+                    await pool2.request()
+                        .input('UserId', sql.Int, session.userId)
+                        .input('Title', sql.NVarChar(200), `❌ รายงานล้มเหลว: ${reportName}`)
+                        .input('Message', sql.NVarChar(500), `${error.message?.substring(0, 300)}`)
+                        .input('Type', sql.NVarChar(20), 'error')
+                        .query(`INSERT INTO Notifications (UserId, Title, Message, Type) VALUES (@UserId, @Title, @Message, @Type)`);
                 } catch (e) { console.warn('Activity log failed:', e.message); }
             }
         });
