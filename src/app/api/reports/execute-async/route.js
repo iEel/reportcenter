@@ -252,10 +252,18 @@ export async function POST(request) {
                             writeStream.once('drain', () => req.resume());
                         }
 
-                        // Check for cancellation every 10,000 rows
+                        // Every 10,000 rows: update progress + check for cancellation
                         if (rowCount % 10000 === 0) {
                             req.pause();
                             connectToCentralDB().then(checkPool => {
+                                // Update progress (RowCount) for live tracking
+                                checkPool.request()
+                                    .input('JobId', sql.Int, jobId)
+                                    .input('RowCount', sql.Int, rowCount)
+                                    .query('UPDATE ReportJobs SET [RowCount] = @RowCount WHERE JobId = @JobId')
+                                    .catch(() => { /* ignore */ });
+
+                                // Check if user cancelled the job
                                 checkPool.request()
                                     .input('JobId', sql.Int, jobId)
                                     .query('SELECT Status FROM ReportJobs WHERE JobId = @JobId')

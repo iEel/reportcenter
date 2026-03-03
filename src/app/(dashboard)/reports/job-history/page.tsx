@@ -142,6 +142,11 @@ export default function JobHistoryPage() {
                             <div key={job.JobId} className="flex items-center gap-2 text-sm text-blue-700 dark:text-blue-400">
                                 <div className="w-2 h-2 rounded-full bg-blue-500 animate-pulse" />
                                 <span className="font-medium">{job.ReportName || `Report #${job.ReportId}`}</span>
+                                {job.RowCount != null && job.RowCount > 0 && (
+                                    <span className="text-blue-600 dark:text-blue-300 font-semibold tabular-nums">
+                                        — {job.RowCount.toLocaleString()} แถว
+                                    </span>
+                                )}
                                 <span className="text-blue-500 dark:text-blue-500">— {timeAgo(job.CreatedAt)}</span>
                             </div>
                         ))}
@@ -193,7 +198,15 @@ export default function JobHistoryPage() {
                                                 </span>
                                             </td>
                                             <td className="px-6 py-4 text-slate-500 dark:text-slate-400">
-                                                {job.RowCount != null ? job.RowCount.toLocaleString() : '—'}
+                                                {job.Status === 'running' && job.RowCount != null && job.RowCount > 0 ? (
+                                                    <span className="text-blue-600 dark:text-blue-400 font-semibold tabular-nums animate-pulse">
+                                                        {job.RowCount.toLocaleString()} แถว...
+                                                    </span>
+                                                ) : job.RowCount != null ? (
+                                                    job.RowCount.toLocaleString()
+                                                ) : (
+                                                    '—'
+                                                )}
                                             </td>
                                             <td className="px-6 py-4">
                                                 <div className="flex flex-col">
