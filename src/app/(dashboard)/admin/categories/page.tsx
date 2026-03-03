@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, Fragment } from "react";
 import { Tag, Plus, Pencil, Trash2, Loader2, Save, X, GripVertical, ChevronDown, ChevronRight, FileText } from "lucide-react";
 import { useToast } from "@/components/providers/ToastProvider";
 import { useConfirm } from "@/components/providers/ConfirmProvider";
@@ -216,7 +216,7 @@ export default function AdminCategoriesPage() {
                                     const isExpanded = expandedId === cat.CategoryId;
                                     const reports = reportsByCategory[cat.CategoryId] || [];
                                     return (
-                                        <>
+                                        <Fragment key={cat.CategoryId}>
                                             <tr key={cat.CategoryId} className={`hover:bg-slate-50 dark:hover:bg-slate-700/30 transition-colors ${isExpanded ? 'bg-slate-50 dark:bg-slate-700/30' : ''}`}>
                                                 <td className="px-6 py-4">
                                                     <div className="flex items-center gap-3">
@@ -283,7 +283,7 @@ export default function AdminCategoriesPage() {
                                                     </td>
                                                 </tr>
                                             )}
-                                        </>
+                                        </Fragment>
                                     );
                                 })}
                             </tbody>
