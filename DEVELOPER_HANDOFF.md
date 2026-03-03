@@ -446,6 +446,8 @@ BACKGROUND_JOB_TIMEOUT=900000         # 900s — background job (large export, 1
 - Dropdown panel แสดงรายการ notification
 - Auto-poll ทุก 30 วินาที
 - รองรับ mark as read (ทีละรายการ หรือทั้งหมด)
+- **Clickable notifications**: notification ที่มี `LinkUrl` กดแล้ว navigate ไปหน้าที่กำหนด + mark read อัตโนมัติ
+- แสดง **"กดเพื่อดู →"** สีน้ำเงิน สำหรับ notification ที่กดได้
 
 ### Sidebar (Mobile)
 - **Mobile**: Hamburger menu button + slide-in sidebar + overlay backdrop
@@ -580,6 +582,7 @@ curl http://localhost:4000/api/cron/execute-schedules?secret=rc-cron-secret-2026
 - Frontend poll `GET /api/reports/jobs/{id}` ทุก 3 วินาที → แสดง banner: running/done/failed
 - `GET /api/reports/jobs/{id}/download` → stream ไฟล์ให้ user, กดซ้ำได้
 - **Auto-cleanup:** ไฟล์ลบหลัง 24 ชม., DB records ลบหลัง 7 วัน (ทำตอน cron รัน)
+- **Bell notification 🔔**: เมื่อ job เสร็จ/ล้มเหลว → สร้าง Notification ให้ user (✅ สำเร็จ / ❌ ล้มเหลว) + กดแล้ว navigate ไปหน้า job-history
 - Schema: `Reports.IsHeavy BIT` (auto-add), `ReportJobs` table (auto-create)
 - ไฟล์ job เก็บที่ `tmp/jobs/` (อยู่ใน `.gitignore`)
 
@@ -807,6 +810,7 @@ npm run test:watch
 - [x] Report Categories expandable list — card-style rows (like roles page) showing reports per category as chip/tag badges
 - [x] Manage Reports category filter — dropdown next to search bar (all/none/specific category) with violet accent on active
 - [x] Background Job streaming — mssql streaming API prevents OOM on large datasets (1M+ rows, constant ~50MB memory)
+- [x] Background Job notifications — bell alert (✅/❌) when job completes/fails + clickable LinkUrl to job history page
 - [ ] Two-factor authentication (2FA)
 - [ ] PDF export support
 
