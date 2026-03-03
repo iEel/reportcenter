@@ -288,7 +288,8 @@ export async function POST(request) {
                         .input('Title', sql.NVarChar(200), `✅ รายงานเสร็จแล้ว: ${reportName}`)
                         .input('Message', sql.NVarChar(500), `สร้างเสร็จแล้ว ${rowCount.toLocaleString()} แถว — กดเพื่อดาวน์โหลด`)
                         .input('Type', sql.NVarChar(20), 'success')
-                        .query(`INSERT INTO Notifications (UserId, Title, Message, Type) VALUES (@UserId, @Title, @Message, @Type)`);
+                        .input('LinkUrl', sql.NVarChar(500), '/reports/job-history')
+                        .query(`INSERT INTO Notifications (UserId, Title, Message, Type, LinkUrl) VALUES (@UserId, @Title, @Message, @Type, @LinkUrl)`);
                 } catch (e) { /* ignore */ }
 
                 console.log(`[Job ${jobId}] Completed: ${rowCount} rows → ${fileName} (streamed)`);
@@ -308,7 +309,8 @@ export async function POST(request) {
                         .input('Title', sql.NVarChar(200), `❌ รายงานล้มเหลว: ${reportName}`)
                         .input('Message', sql.NVarChar(500), `${error.message?.substring(0, 300)}`)
                         .input('Type', sql.NVarChar(20), 'error')
-                        .query(`INSERT INTO Notifications (UserId, Title, Message, Type) VALUES (@UserId, @Title, @Message, @Type)`);
+                        .input('LinkUrl', sql.NVarChar(500), '/reports/job-history')
+                        .query(`INSERT INTO Notifications (UserId, Title, Message, Type, LinkUrl) VALUES (@UserId, @Title, @Message, @Type, @LinkUrl)`);
                 } catch (e) { console.warn('Activity log failed:', e.message); }
             }
         });

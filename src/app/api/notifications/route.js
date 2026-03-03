@@ -22,14 +22,21 @@ export async function GET(request) {
                 Message NVARCHAR(500) NOT NULL,
                 Type NVARCHAR(20) DEFAULT 'info',
                 IsRead BIT DEFAULT 0,
+                LinkUrl NVARCHAR(500) NULL,
                 CreatedAt DATETIME DEFAULT GETDATE()
             )
+        `);
+
+        // Auto-migrate: add LinkUrl column if missing
+        await pool.request().query(`
+            IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = 'Notifications' AND COLUMN_NAME = 'LinkUrl')
+            ALTER TABLE Notifications ADD LinkUrl NVARCHAR(500) NULL
         `);
 
         const result = await pool.request()
             .input('UserId', sql.Int, session.userId)
             .query(`
-                SELECT TOP 20 NotificationId, Title, Message, Type, IsRead, CreatedAt
+                SELECT TOP 20 NotificationId, Title, Message, Type, IsRead, LinkUrl, CreatedAt
                 FROM Notifications
                 WHERE UserId = @UserId OR UserId IS NULL
                 ORDER BY CreatedAt DESC

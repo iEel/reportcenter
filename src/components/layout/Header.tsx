@@ -2,6 +2,7 @@
 
 import { Bell, X, Check, CheckCheck, Moon, Sun } from 'lucide-react';
 import { useState, useEffect, useRef } from 'react';
+import { useRouter } from 'next/navigation';
 import { timeAgo } from '@/lib/dateUtils';
 import { useTheme } from '@/components/providers/ThemeProvider';
 
@@ -11,6 +12,7 @@ interface Notification {
     Message: string;
     Type: string;
     IsRead: boolean;
+    LinkUrl: string | null;
     CreatedAt: string;
 }
 
@@ -19,6 +21,7 @@ export default function Header() {
     const [unreadCount, setUnreadCount] = useState(0);
     const [showPanel, setShowPanel] = useState(false);
     const { theme, toggle: toggleTheme } = useTheme();
+    const router = useRouter();
     const panelRef = useRef<HTMLDivElement>(null);
 
 
@@ -60,6 +63,23 @@ export default function Header() {
             body: JSON.stringify({ notificationId: 'all' }),
         });
         fetchNotifications();
+    };
+
+    const handleNotificationClick = async (n: Notification) => {
+        // Mark as read
+        if (!n.IsRead) {
+            await fetch('/api/notifications', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ notificationId: n.NotificationId }),
+            });
+            fetchNotifications();
+        }
+        // Navigate if has link
+        if (n.LinkUrl) {
+            setShowPanel(false);
+            router.push(n.LinkUrl);
+        }
     };
 
 
@@ -109,13 +129,20 @@ export default function Header() {
                                         ไม่มีการแจ้งเตือน
                                     </div>
                                 ) : notifications.map(n => (
-                                    <div key={n.NotificationId} className={`px-4 py-3 hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors ${!n.IsRead ? 'bg-blue-50/50 dark:bg-blue-900/10' : ''}`}>
+                                    <div
+                                        key={n.NotificationId}
+                                        className={`px-4 py-3 transition-colors ${!n.IsRead ? 'bg-blue-50/50 dark:bg-blue-900/10' : ''} ${n.LinkUrl ? 'cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-700/50' : 'hover:bg-slate-50 dark:hover:bg-slate-700/50'}`}
+                                        onClick={() => handleNotificationClick(n)}
+                                    >
                                         <div className="flex items-start gap-2">
                                             <div className={`w-2 h-2 mt-1.5 rounded-full shrink-0 ${!n.IsRead ? 'bg-blue-500' : 'bg-transparent'}`} />
                                             <div className="flex-1 min-w-0">
                                                 <p className="text-sm font-medium text-slate-900 dark:text-white">{n.Title}</p>
                                                 <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">{n.Message}</p>
-                                                <p className="text-xs text-slate-400 mt-1">{timeAgo(n.CreatedAt)}</p>
+                                                <div className="flex items-center gap-2 mt-1">
+                                                    <span className="text-xs text-slate-400">{timeAgo(n.CreatedAt)}</span>
+                                                    {n.LinkUrl && <span className="text-xs text-blue-500 font-medium">กดเพื่อดู →</span>}
+                                                </div>
                                             </div>
                                         </div>
                                     </div>
