@@ -579,9 +579,11 @@ curl http://localhost:4000/api/cron/execute-schedules?secret=rc-cron-secret-2026
 - Report IsHeavy → `POST /api/reports/execute-async` → สร้าง Job record → รัน query ใน background (timeout 15 นาที) → สร้าง CSV → disk
 - **Streaming mode** (`req.stream = true`): ใช้ `mssql` streaming API ประมวลผลทีละแถว → memory คงที่ ~50MB ไม่ว่าจะมีกี่แถว (รองรับ 1M+ rows ไม่ OOM)
 - **Back-pressure handling**: ถ้า file writer เขียนไม่ทัน → หยุด SQL stream รอ → กลับมาเขียนต่อ
+- **Live progress**: อัพเดท `RowCount` ใน DB ทุก 10,000 แถว → frontend แสดง "กำลังประมวลผล 120,000 แถว..." แบบ live (รีเฟรชทุก 10 วินาที)
+- **Concurrent job limit**: จำกัดจำนวน job ที่รันพร้อมกันต่อ user (default 2, ตั้งค่าได้ที่ Admin Settings > ความปลอดภัย)
 - Frontend poll `GET /api/reports/jobs/{id}` ทุก 3 วินาที → แสดง banner: running/done/failed
 - `GET /api/reports/jobs/{id}/download` → stream ไฟล์ให้ user, กดซ้ำได้
-- **Auto-cleanup:** ไฟล์ลบหลัง 24 ชม., DB records ลบหลัง 7 วัน (ทำตอน cron รัน)
+- **Auto-cleanup:** ไฟล์ลบหลัง 24 ชม., DB records ลบหลัง 7 วัน, Notifications อ่านแล้วลบ 30 วัน / ยังไม่อ่านลบ 90 วัน (ทำตอน cron รัน)
 - **Bell notification 🔔**: เมื่อ job เสร็จ/ล้มเหลว → สร้าง Notification ให้ user (✅ สำเร็จ / ❌ ล้มเหลว) + กดแล้ว navigate ไปหน้า job-history
 - Schema: `Reports.IsHeavy BIT` (auto-add), `ReportJobs` table (auto-create)
 - ไฟล์ job เก็บที่ `tmp/jobs/` (อยู่ใน `.gitignore`)
@@ -811,6 +813,9 @@ npm run test:watch
 - [x] Manage Reports category filter — dropdown next to search bar (all/none/specific category) with violet accent on active
 - [x] Background Job streaming — mssql streaming API prevents OOM on large datasets (1M+ rows, constant ~50MB memory)
 - [x] Background Job notifications — bell alert (✅/❌) when job completes/fails + clickable LinkUrl to job history page
+- [x] Notification auto-cleanup — read notifications deleted after 30 days, unread after 90 days (cron)
+- [x] Concurrent job limit — admin-configurable `max_concurrent_jobs` setting (default 2, 0=unlimited) enforced on execute-async
+- [x] Live job progress — RowCount updated every 10K rows during streaming, shown live on job-history page with pulse animation
 - [ ] Two-factor authentication (2FA)
 - [ ] PDF export support
 
