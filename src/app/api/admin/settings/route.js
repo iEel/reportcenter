@@ -61,6 +61,9 @@ export async function GET(request) {
         if (!keys.includes('auto_purge_logs_days')) {
             seedSettings.push("('auto_purge_logs_days', '0', 'จำนวนวันที่เก็บ Audit Log — 0 = ไม่ลบอัตโนมัติ')");
         }
+        if (!keys.includes('max_concurrent_jobs')) {
+            seedSettings.push("('max_concurrent_jobs', '2', 'จำนวน Background Job สูงสุดที่รันพร้อมกันได้ต่อผู้ใช้ — 0 = ไม่จำกัด')");
+        }
 
         if (seedSettings.length > 0) {
             await pool.request().query(`

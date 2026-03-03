@@ -25,6 +25,7 @@ const settingLabels: Record<string, { label: string; icon: any; group: string; d
     'ldap_domain': { label: 'Domain', icon: AtSign, group: 'ldap', description: 'เช่น soniclocal.com' },
     'ldap_base_dn': { label: 'Base DN', icon: Network, group: 'ldap', description: 'เช่น DC=soniclocal,DC=com' },
     'auto_purge_logs_days': { label: 'ลบ Log อัตโนมัติ (วัน)', icon: Clock, group: 'security', description: 'ลบ Audit Log เก่ากว่ากี่วันอัตโนมัติ — ตั้ง 0 เพื่อปิด', type: 'number' },
+    'max_concurrent_jobs': { label: 'Background Job สูงสุดต่อผู้ใช้', icon: Server, group: 'security', description: 'จำนวน Background Job ที่รันพร้อมกันได้ต่อผู้ใช้ — ตั้ง 0 เพื่อไม่จำกัด', type: 'number' },
 };
 
 // Explicit LDAP field order

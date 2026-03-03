@@ -62,6 +62,26 @@ export async function POST(request) {
 
         const centralPool = await connectToCentralDB();
 
+        // Check concurrent job limit per user
+        try {
+            const limitSetting = await centralPool.request().query(`
+                SELECT SettingValue FROM SystemSettings WHERE SettingKey = 'max_concurrent_jobs'
+            `);
+            const maxJobs = parseInt(limitSetting.recordset?.[0]?.SettingValue || '0');
+            if (maxJobs > 0) {
+                const runningJobs = await centralPool.request()
+                    .input('UserId', sql.Int, session.userId)
+                    .query(`SELECT COUNT(*) AS cnt FROM ReportJobs WHERE UserId = @UserId AND Status = 'running'`);
+                const currentRunning = runningJobs.recordset[0].cnt;
+                if (currentRunning >= maxJobs) {
+                    return NextResponse.json({
+                        success: false,
+                        message: `คุณมีรายงานที่กำลังสร้างอยู่ ${currentRunning} รายการ (สูงสุด ${maxJobs}) — กรุณารอให้เสร็จก่อน`
+                    }, { status: 429 });
+                }
+            }
+        } catch (e) { /* ignore — allow if setting doesn't exist yet */ }
+
         // Auto-create ReportJobs table
         await centralPool.request().query(`
             IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME = 'ReportJobs')
