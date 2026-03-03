@@ -48,6 +48,20 @@ async function cleanupOldJobs() {
         } catch (purgeErr) {
             console.warn('[AutoPurge] Error:', purgeErr.message);
         }
+
+        // Cleanup old Notifications — read >30 days, unread >90 days
+        try {
+            const notifResult = await pool.request().query(`
+                DELETE FROM Notifications 
+                WHERE (IsRead = 1 AND CreatedAt < DATEADD(DAY, -30, GETDATE()))
+                   OR (IsRead = 0 AND CreatedAt < DATEADD(DAY, -90, GETDATE()))
+            `);
+            if (notifResult.rowsAffected[0] > 0) {
+                console.log(`[Cleanup] Deleted ${notifResult.rowsAffected[0]} old notifications`);
+            }
+        } catch (notifErr) {
+            console.warn('[Cleanup] Notification cleanup error:', notifErr.message);
+        }
     } catch (err) {
         console.warn('[Cleanup] Error:', err.message);
     }
