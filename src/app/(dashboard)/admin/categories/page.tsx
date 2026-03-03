@@ -1,7 +1,7 @@
 "use client"
 
-import { useState, useEffect, Fragment } from "react";
-import { Tag, Plus, Pencil, Trash2, Loader2, Save, X, GripVertical, ChevronDown, ChevronRight, FileText } from "lucide-react";
+import { useState, useEffect } from "react";
+import { Tag, Plus, Pencil, Trash2, Loader2, Save, X, ChevronRight, FileText } from "lucide-react";
 import { useToast } from "@/components/providers/ToastProvider";
 import { useConfirm } from "@/components/providers/ConfirmProvider";
 
@@ -201,93 +201,82 @@ export default function AdminCategoriesPage() {
                 </div>
             ) : (
                 <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden">
-                    <div className="overflow-x-auto">
-                        <table className="w-full">
-                            <thead>
-                                <tr className="bg-slate-50 dark:bg-slate-700/50 border-b border-slate-200 dark:border-slate-600">
-                                    <th className="text-left px-6 py-3.5 text-xs font-semibold text-slate-500 uppercase tracking-wider">หมวดหมู่</th>
-                                    <th className="text-center px-6 py-3.5 text-xs font-semibold text-slate-500 uppercase tracking-wider">สี</th>
-                                    <th className="text-center px-6 py-3.5 text-xs font-semibold text-slate-500 uppercase tracking-wider">จำนวนรายงาน</th>
-                                    <th className="text-right px-6 py-3.5 text-xs font-semibold text-slate-500 uppercase tracking-wider">จัดการ</th>
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
-                                {categories.map(cat => {
-                                    const isExpanded = expandedId === cat.CategoryId;
-                                    const reports = reportsByCategory[cat.CategoryId] || [];
-                                    return (
-                                        <Fragment key={cat.CategoryId}>
-                                            <tr key={cat.CategoryId} className={`hover:bg-slate-50 dark:hover:bg-slate-700/30 transition-colors ${isExpanded ? 'bg-slate-50 dark:bg-slate-700/30' : ''}`}>
-                                                <td className="px-6 py-4">
-                                                    <div className="flex items-center gap-3">
-                                                        <button
-                                                            onClick={() => setExpandedId(isExpanded ? null : cat.CategoryId)}
-                                                            className="p-0.5 text-slate-400 hover:text-slate-600 transition-colors"
-                                                            title={isExpanded ? 'ซ่อนรายการ' : 'ดูรายการ'}
-                                                        >
-                                                            {isExpanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
-                                                        </button>
-                                                        <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${getColorClass(cat.ColorTag)}`}>
-                                                            <Tag className="w-4 h-4" />
-                                                        </div>
-                                                        <span
-                                                            className="font-semibold text-slate-900 dark:text-white cursor-pointer hover:text-violet-600 transition-colors"
-                                                            onClick={() => setExpandedId(isExpanded ? null : cat.CategoryId)}
-                                                        >
-                                                            {cat.CategoryName}
+                    {/* List */}
+                    <div className="divide-y divide-slate-100 dark:divide-slate-700">
+                        {categories.map(cat => {
+                            const isExpanded = expandedId === cat.CategoryId;
+                            const reports = reportsByCategory[cat.CategoryId] || [];
+                            return (
+                                <div key={cat.CategoryId} className="group">
+                                    <div
+                                        className="p-5 hover:bg-slate-50/80 dark:hover:bg-slate-700/30 transition-colors cursor-pointer"
+                                        onClick={() => setExpandedId(isExpanded ? null : cat.CategoryId)}
+                                    >
+                                        <div className="flex items-center justify-between">
+                                            <div className="flex items-center gap-4">
+                                                {/* Category Icon */}
+                                                <div className={`w-11 h-11 rounded-xl flex items-center justify-center shadow-sm ${getColorClass(cat.ColorTag)}`}>
+                                                    <Tag className="w-5 h-5" />
+                                                </div>
+                                                <div>
+                                                    <h3 className="font-bold text-slate-900 dark:text-white text-base">{cat.CategoryName}</h3>
+                                                    <div className="flex items-center gap-4 mt-1">
+                                                        <span className="inline-flex items-center gap-1 text-xs text-slate-500 dark:text-slate-400">
+                                                            <FileText className="w-3 h-3" />
+                                                            {cat.ReportCount} รายงาน
+                                                        </span>
+                                                        <span className={`inline-flex px-2 py-0.5 rounded-full text-[10px] font-semibold border ${getColorClass(cat.ColorTag)}`}>
+                                                            {COLOR_OPTIONS.find(c => c.value === cat.ColorTag)?.label || cat.ColorTag}
                                                         </span>
                                                     </div>
-                                                </td>
-                                                <td className="px-6 py-4 text-center">
-                                                    <span className={`inline-flex px-3 py-1 rounded-full text-xs font-medium border ${getColorClass(cat.ColorTag)}`}>
-                                                        {COLOR_OPTIONS.find(c => c.value === cat.ColorTag)?.label || cat.ColorTag}
-                                                    </span>
-                                                </td>
-                                                <td className="px-6 py-4 text-center">
-                                                    <span
-                                                        className={`inline-flex items-center justify-center min-w-[28px] px-2 py-0.5 rounded-full text-xs font-bold cursor-pointer transition-colors ${cat.ReportCount > 0 ? 'bg-blue-100 text-blue-700 hover:bg-blue-200' : 'bg-slate-100 text-slate-400'}`}
-                                                        onClick={() => cat.ReportCount > 0 && setExpandedId(isExpanded ? null : cat.CategoryId)}
-                                                    >
-                                                        {cat.ReportCount}
-                                                    </span>
-                                                </td>
-                                                <td className="px-6 py-4">
-                                                    <div className="flex items-center justify-end gap-2">
-                                                        <button onClick={() => handleEdit(cat)} className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors" title="แก้ไข">
-                                                            <Pencil className="w-4 h-4" />
-                                                        </button>
-                                                        <button onClick={() => handleDelete(cat)} className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors" title="ลบ">
-                                                            <Trash2 className="w-4 h-4" />
-                                                        </button>
+                                                </div>
+                                            </div>
+
+                                            <div className="flex items-center gap-2">
+                                                <button
+                                                    onClick={(e) => { e.stopPropagation(); handleEdit(cat); }}
+                                                    className="p-2 bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400 hover:bg-blue-50 dark:hover:bg-blue-900/30 hover:text-blue-600 dark:hover:text-blue-400 rounded-lg transition-colors"
+                                                    title="แก้ไข"
+                                                >
+                                                    <Pencil className="w-4 h-4" />
+                                                </button>
+                                                <button
+                                                    onClick={(e) => { e.stopPropagation(); handleDelete(cat); }}
+                                                    className="p-2 bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400 hover:bg-red-50 dark:hover:bg-red-900/30 hover:text-red-600 dark:hover:text-red-400 rounded-lg transition-colors"
+                                                    title="ลบ"
+                                                >
+                                                    <Trash2 className="w-4 h-4" />
+                                                </button>
+                                                <ChevronRight className={`w-4 h-4 text-slate-400 transition-transform ${isExpanded ? 'rotate-90' : ''}`} />
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {/* Expanded: report list */}
+                                    {isExpanded && (
+                                        <div className="px-5 pb-5 animate-in slide-in-from-top-2 fade-in duration-200">
+                                            <div className="ml-15 pl-4 border-l-2 border-slate-200 dark:border-slate-600">
+                                                <p className="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-2">
+                                                    รายงานในหมวดหมู่นี้ ({reports.length})
+                                                </p>
+                                                {reports.length === 0 ? (
+                                                    <p className="text-sm text-slate-400 dark:text-slate-500 italic">ยังไม่มีรายงานในหมวดหมู่นี้</p>
+                                                ) : (
+                                                    <div className="flex flex-wrap gap-1.5">
+                                                        {reports.map(r => (
+                                                            <span key={r.ReportId} className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium border transition-colors bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-800">
+                                                                <FileText className="w-3 h-3" />
+                                                                {r.ReportName}
+                                                            </span>
+                                                        ))}
                                                     </div>
-                                                </td>
-                                            </tr>
-                                            {isExpanded && (
-                                                <tr key={`exp-${cat.CategoryId}`}>
-                                                    <td colSpan={4} className="px-0 py-0">
-                                                        <div className="bg-slate-50/80 dark:bg-slate-700/20 border-t border-b border-slate-100 dark:border-slate-700 px-6 py-3 animate-in slide-in-from-top-1 duration-200">
-                                                            {reports.length === 0 ? (
-                                                                <p className="text-sm text-slate-400 italic pl-12">ไม่มีรายงานในหมวดหมู่นี้</p>
-                                                            ) : (
-                                                                <div className="pl-12 space-y-1">
-                                                                    <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">รายงาน ({reports.length})</p>
-                                                                    {reports.map(r => (
-                                                                        <div key={r.ReportId} className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-300 py-1 px-3 rounded-lg hover:bg-white dark:hover:bg-slate-600/30 transition-colors">
-                                                                            <FileText className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                                                                            <span>{r.ReportName}</span>
-                                                                        </div>
-                                                                    ))}
-                                                                </div>
-                                                            )}
-                                                        </div>
-                                                    </td>
-                                                </tr>
-                                            )}
-                                        </Fragment>
-                                    );
-                                })}
-                            </tbody>
-                        </table>
+                                                )}
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                            );
+                        })}
                     </div>
 
                     {/* Summary */}
