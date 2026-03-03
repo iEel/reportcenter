@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react";
-import { Tag, Plus, Pencil, Trash2, Loader2, Save, X, GripVertical } from "lucide-react";
+import { Tag, Plus, Pencil, Trash2, Loader2, Save, X, GripVertical, ChevronDown, ChevronRight, FileText } from "lucide-react";
 import { useToast } from "@/components/providers/ToastProvider";
 import { useConfirm } from "@/components/providers/ConfirmProvider";
 
@@ -35,6 +35,8 @@ export default function AdminCategoriesPage() {
     const { confirm } = useConfirm();
     const [categories, setCategories] = useState<Category[]>([]);
     const [isLoading, setIsLoading] = useState(true);
+    const [reportsByCategory, setReportsByCategory] = useState<Record<number, { ReportId: number; ReportName: string }[]>>({});
+    const [expandedId, setExpandedId] = useState<number | null>(null);
 
     // Add/Edit form
     const [showForm, setShowForm] = useState(false);
@@ -48,7 +50,10 @@ export default function AdminCategoriesPage() {
         try {
             const res = await fetch('/api/admin/categories');
             const data = await res.json();
-            if (data.success) setCategories(data.categories);
+            if (data.success) {
+                setCategories(data.categories);
+                setReportsByCategory(data.reportsByCategory || {});
+            }
         } catch { }
         finally { setIsLoading(false); }
     };
@@ -207,38 +212,80 @@ export default function AdminCategoriesPage() {
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
-                                {categories.map(cat => (
-                                    <tr key={cat.CategoryId} className="hover:bg-slate-50 dark:hover:bg-slate-700/30 transition-colors">
-                                        <td className="px-6 py-4">
-                                            <div className="flex items-center gap-3">
-                                                <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${getColorClass(cat.ColorTag)}`}>
-                                                    <Tag className="w-4 h-4" />
-                                                </div>
-                                                <span className="font-semibold text-slate-900 dark:text-white">{cat.CategoryName}</span>
-                                            </div>
-                                        </td>
-                                        <td className="px-6 py-4 text-center">
-                                            <span className={`inline-flex px-3 py-1 rounded-full text-xs font-medium border ${getColorClass(cat.ColorTag)}`}>
-                                                {COLOR_OPTIONS.find(c => c.value === cat.ColorTag)?.label || cat.ColorTag}
-                                            </span>
-                                        </td>
-                                        <td className="px-6 py-4 text-center">
-                                            <span className={`inline-flex items-center justify-center min-w-[28px] px-2 py-0.5 rounded-full text-xs font-bold ${cat.ReportCount > 0 ? 'bg-blue-100 text-blue-700' : 'bg-slate-100 text-slate-400'}`}>
-                                                {cat.ReportCount}
-                                            </span>
-                                        </td>
-                                        <td className="px-6 py-4">
-                                            <div className="flex items-center justify-end gap-2">
-                                                <button onClick={() => handleEdit(cat)} className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors" title="แก้ไข">
-                                                    <Pencil className="w-4 h-4" />
-                                                </button>
-                                                <button onClick={() => handleDelete(cat)} className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors" title="ลบ">
-                                                    <Trash2 className="w-4 h-4" />
-                                                </button>
-                                            </div>
-                                        </td>
-                                    </tr>
-                                ))}
+                                {categories.map(cat => {
+                                    const isExpanded = expandedId === cat.CategoryId;
+                                    const reports = reportsByCategory[cat.CategoryId] || [];
+                                    return (
+                                        <>
+                                            <tr key={cat.CategoryId} className={`hover:bg-slate-50 dark:hover:bg-slate-700/30 transition-colors ${isExpanded ? 'bg-slate-50 dark:bg-slate-700/30' : ''}`}>
+                                                <td className="px-6 py-4">
+                                                    <div className="flex items-center gap-3">
+                                                        <button
+                                                            onClick={() => setExpandedId(isExpanded ? null : cat.CategoryId)}
+                                                            className="p-0.5 text-slate-400 hover:text-slate-600 transition-colors"
+                                                            title={isExpanded ? 'ซ่อนรายการ' : 'ดูรายการ'}
+                                                        >
+                                                            {isExpanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+                                                        </button>
+                                                        <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${getColorClass(cat.ColorTag)}`}>
+                                                            <Tag className="w-4 h-4" />
+                                                        </div>
+                                                        <span
+                                                            className="font-semibold text-slate-900 dark:text-white cursor-pointer hover:text-violet-600 transition-colors"
+                                                            onClick={() => setExpandedId(isExpanded ? null : cat.CategoryId)}
+                                                        >
+                                                            {cat.CategoryName}
+                                                        </span>
+                                                    </div>
+                                                </td>
+                                                <td className="px-6 py-4 text-center">
+                                                    <span className={`inline-flex px-3 py-1 rounded-full text-xs font-medium border ${getColorClass(cat.ColorTag)}`}>
+                                                        {COLOR_OPTIONS.find(c => c.value === cat.ColorTag)?.label || cat.ColorTag}
+                                                    </span>
+                                                </td>
+                                                <td className="px-6 py-4 text-center">
+                                                    <span
+                                                        className={`inline-flex items-center justify-center min-w-[28px] px-2 py-0.5 rounded-full text-xs font-bold cursor-pointer transition-colors ${cat.ReportCount > 0 ? 'bg-blue-100 text-blue-700 hover:bg-blue-200' : 'bg-slate-100 text-slate-400'}`}
+                                                        onClick={() => cat.ReportCount > 0 && setExpandedId(isExpanded ? null : cat.CategoryId)}
+                                                    >
+                                                        {cat.ReportCount}
+                                                    </span>
+                                                </td>
+                                                <td className="px-6 py-4">
+                                                    <div className="flex items-center justify-end gap-2">
+                                                        <button onClick={() => handleEdit(cat)} className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors" title="แก้ไข">
+                                                            <Pencil className="w-4 h-4" />
+                                                        </button>
+                                                        <button onClick={() => handleDelete(cat)} className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors" title="ลบ">
+                                                            <Trash2 className="w-4 h-4" />
+                                                        </button>
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                            {isExpanded && (
+                                                <tr key={`exp-${cat.CategoryId}`}>
+                                                    <td colSpan={4} className="px-0 py-0">
+                                                        <div className="bg-slate-50/80 dark:bg-slate-700/20 border-t border-b border-slate-100 dark:border-slate-700 px-6 py-3 animate-in slide-in-from-top-1 duration-200">
+                                                            {reports.length === 0 ? (
+                                                                <p className="text-sm text-slate-400 italic pl-12">ไม่มีรายงานในหมวดหมู่นี้</p>
+                                                            ) : (
+                                                                <div className="pl-12 space-y-1">
+                                                                    <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">รายงาน ({reports.length})</p>
+                                                                    {reports.map(r => (
+                                                                        <div key={r.ReportId} className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-300 py-1 px-3 rounded-lg hover:bg-white dark:hover:bg-slate-600/30 transition-colors">
+                                                                            <FileText className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                                                                            <span>{r.ReportName}</span>
+                                                                        </div>
+                                                                    ))}
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    </td>
+                                                </tr>
+                                            )}
+                                        </>
+                                    );
+                                })}
                             </tbody>
                         </table>
                     </div>

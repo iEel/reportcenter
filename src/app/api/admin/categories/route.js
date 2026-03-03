@@ -43,7 +43,22 @@ export async function GET(request) {
             ORDER BY c.SortOrder, c.CategoryName
         `);
 
-        return NextResponse.json({ success: true, categories: result.recordset });
+        // Fetch report names per category
+        const reportsResult = await pool.request().query(`
+            SELECT r.ReportId, r.ReportName, r.CategoryId
+            FROM Reports r
+            WHERE r.IsActive = 1 AND r.CategoryId IS NOT NULL
+            ORDER BY r.ReportName
+        `);
+
+        // Group reports by CategoryId
+        const reportsByCategory = {};
+        for (const r of reportsResult.recordset) {
+            if (!reportsByCategory[r.CategoryId]) reportsByCategory[r.CategoryId] = [];
+            reportsByCategory[r.CategoryId].push({ ReportId: r.ReportId, ReportName: r.ReportName });
+        }
+
+        return NextResponse.json({ success: true, categories: result.recordset, reportsByCategory });
     } catch (error) {
         console.error('Categories GET error:', error);
         return NextResponse.json({ success: false, message: 'Internal Server Error' }, { status: 500 });
