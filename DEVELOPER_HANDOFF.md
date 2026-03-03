@@ -1,7 +1,7 @@
 # ReportCenter — Developer Handoff
 
-> **Version:** 8.0  
-> **Last Updated:** 2026-02-27  
+> **Version:** 9.0  
+> **Last Updated:** 2026-03-03  
 > **Tech Stack:** Next.js 16.1.6 + React 19 + Tailwind CSS 4 + MSSQL (mssql driver) + Microsoft Graph API (OAuth2) / Nodemailer (SMTP fallback) + @azure/msal-node
 
 ---
@@ -47,13 +47,13 @@ reportcenter/
 │   │   │   ├── change-password/page.tsx  # Change password page (all users)
 │   │   │   ├── admin/
 │   │   │   │   ├── reports/
-│   │   │   │   │   ├── page.tsx          # Manage Reports list (search/filter/disable-toggle/hard-delete)
+│   │   │   │   │   ├── page.tsx          # Manage Reports list (search/category-filter/disable-toggle/hard-delete)
 │   │   │   │   │   ├── new/page.tsx      # Create new report
 │   │   │   │   │   └── [id]/edit/page.tsx # Edit existing report
 │   │   │   │   ├── users/page.tsx        # Manage Users + AD autocomplete + Sync AD button (soft-disable missing AD users)
 │   │   │   │   ├── roles/page.tsx        # Manage Roles + Report access assignment
 │   │   │   │   ├── audit-logs/page.tsx   # Audit Log Viewer (paginated, refresh, BLOCKED_QUERY red badge)
-│   │   │   │   ├── categories/page.tsx   # Manage Report Categories (CRUD + color picker)
+│   │   │   │   ├── categories/page.tsx   # Manage Report Categories (CRUD + color picker + expandable report list per category)
 │   │   │   │   ├── schedules/page.tsx    # Scheduled Reports (create/edit/toggle/delete)
 │   │   │   │   └── settings/page.tsx     # System Settings
 │   │   │   └── reports/
@@ -92,7 +92,7 @@ reportcenter/
 │   │           ├── execute/route.js      # POST: run T-SQL on company DB (ROW_NUMBER pagination + client-side fallback for SQL 2005+)
 │   │           ├── parameters/route.js   # GET: report parameters (auto-migrate LookupQuery column)
 │   │           ├── search-param/route.js # GET: typeahead search for parameters with LookupQuery
-│   │           ├── execute-async/route.js # POST: background job — CSV stream export (UTF-8 BOM + RFC 4180 + auto-cleanup 24h)
+│   │           ├── execute-async/route.js # POST: background job — mssql streaming + CSV (constant memory, no OOM on 1M+ rows)
 │   │           ├── jobs/[id]/route.js    # GET: poll job status | PATCH: cancel running job
 │   │           ├── jobs/[id]/download/route.js # GET: download job file (auto-detect CSV/Excel)
 │   │           ├── job-history/route.js  # GET: list completed jobs (ElapsedSeconds via DATEDIFF + CompletedAt)
@@ -307,7 +307,7 @@ CreatedAt DATETIME DEFAULT GETDATE()
 | POST   | `/api/admin/roles`           | Create role + report mappings    |
 | PUT    | `/api/admin/roles`           | Update role name + report mappings |
 | DELETE | `/api/admin/roles?roleId=`   | Delete role (blocked if users assigned) |
-| GET    | `/api/admin/categories`      | List categories + report counts         |
+| GET    | `/api/admin/categories`      | List categories + report counts + reportsByCategory map |
 | POST   | `/api/admin/categories`      | Create category (name + colorTag)       |
 | PUT    | `/api/admin/categories`      | Update category name/color              |
 | DELETE | `/api/admin/categories?categoryId=` | Delete category (unassigns reports) |
@@ -574,7 +574,9 @@ curl http://localhost:4000/api/cron/execute-schedules?secret=rc-cron-secret-2026
 ### Background Job System (Heavy Reports)
 - Admin ติ๊ก **"รายงานขนาดใหญ่ (Background Job)"** ที่หน้าเพิ่ม/แก้ไขรายงาน → เซ็ต `IsHeavy = 1`
 - Report ปกติ → export client-side เหมือนเดิม
-- Report IsHeavy → `POST /api/reports/execute-async` → สร้าง Job record → รัน query ใน background (timeout 15 นาที) → สร้าง xlsb → disk
+- Report IsHeavy → `POST /api/reports/execute-async` → สร้าง Job record → รัน query ใน background (timeout 15 นาที) → สร้าง CSV → disk
+- **Streaming mode** (`req.stream = true`): ใช้ `mssql` streaming API ประมวลผลทีละแถว → memory คงที่ ~50MB ไม่ว่าจะมีกี่แถว (รองรับ 1M+ rows ไม่ OOM)
+- **Back-pressure handling**: ถ้า file writer เขียนไม่ทัน → หยุด SQL stream รอ → กลับมาเขียนต่อ
 - Frontend poll `GET /api/reports/jobs/{id}` ทุก 3 วินาที → แสดง banner: running/done/failed
 - `GET /api/reports/jobs/{id}/download` → stream ไฟล์ให้ user, กดซ้ำได้
 - **Auto-cleanup:** ไฟล์ลบหลัง 24 ชม., DB records ลบหลัง 7 วัน (ทำตอน cron รัน)
@@ -801,6 +803,10 @@ npm run test:watch
 - [x] Favicon — RC branded icon (icon.png replaces default Next.js favicon.ico)
 - [x] Dynamic company names — `/api/companies` endpoint + all pages load from `CompanyDatabases` table (no hardcode)
 - [x] Audit Trail bulk delete — date picker + quick-select (30/60/90/180 days) + DELETE API endpoint
+- [x] SQL Editor hint — IN() clause usage tip with STRING_SPLIT + Compatibility Level requirement (≥130)
+- [x] Report Categories expandable list — card-style rows (like roles page) showing reports per category as chip/tag badges
+- [x] Manage Reports category filter — dropdown next to search bar (all/none/specific category) with violet accent on active
+- [x] Background Job streaming — mssql streaming API prevents OOM on large datasets (1M+ rows, constant ~50MB memory)
 - [ ] Two-factor authentication (2FA)
 - [ ] PDF export support
 
