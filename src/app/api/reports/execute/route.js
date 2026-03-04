@@ -146,10 +146,10 @@ export async function POST(request) {
 
             let queryWithoutOrderBy, orderByClause;
             if (finalOrderByIndex >= 0) {
-                queryWithoutOrderBy = tSqlQuery.substring(0, finalOrderByIndex).trim();
-                orderByClause = tSqlQuery.substring(finalOrderByIndex).trim();
+                queryWithoutOrderBy = tSqlQuery.substring(0, finalOrderByIndex).trim().replace(/;\s*$/, '');
+                orderByClause = tSqlQuery.substring(finalOrderByIndex).trim().replace(/;\s*$/, '');
             } else {
-                queryWithoutOrderBy = tSqlQuery;
+                queryWithoutOrderBy = tSqlQuery.replace(/;\s*$/, '');
                 orderByClause = 'ORDER BY (SELECT NULL)';
             }
 
