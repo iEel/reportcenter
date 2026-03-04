@@ -84,8 +84,6 @@ export async function POST(request) {
         // Helper: bind parameters to a request + set report timeout
         const bindParams = (req) => {
             req.timeout = REPORT_TIMEOUT;
-            // DEBUG: log parameter binding
-            const debugParams = [];
             if (parameters && expectedParams.length > 0) {
                 for (const expectedParam of expectedParams) {
                     const paramName = expectedParam.ParameterName.replace('@', '');
@@ -95,23 +93,18 @@ export async function POST(request) {
                         switch (expectedParam.InputType) {
                             case 'date':
                                 req.input(paramName, sql.Date, value);
-                                debugParams.push(`@${paramName}=${value} (Date)`);
                                 break;
                             case 'number':
                                 req.input(paramName, sql.Decimal, parseFloat(value));
-                                debugParams.push(`@${paramName}=${value} (Decimal)`);
                                 break;
                             default:
                                 req.input(paramName, sql.NVarChar(sql.MAX), value);
-                                debugParams.push(`@${paramName}='${value}' (NVarChar)`);
                         }
                     } else {
                         req.input(paramName, sql.NVarChar(sql.MAX), null);
-                        debugParams.push(`@${paramName}=NULL`);
                     }
                 }
             }
-            console.log(`[Execute] Params: companyId=${companyId}, ${debugParams.join(', ') || 'none'}`);
         };
 
         // 4. Execute — with or without pagination
@@ -276,9 +269,6 @@ export async function POST(request) {
         // Use captured column order, fallback to Object.keys if metadata wasn't available
         const columns = capturedColumns
             || (dataResult.recordset.length > 0 ? Object.keys(dataResult.recordset[0]) : []);
-
-        // DEBUG: log actual response data
-        console.log(`[Execute] Response: ${dataResult.recordset.length} rows, ${columns.length} columns [${columns.slice(0, 5).join(', ')}...], totalRows=${totalRows}, page=${page}`);
 
         return NextResponse.json({
             success: true,
