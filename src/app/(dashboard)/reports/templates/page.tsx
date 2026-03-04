@@ -301,14 +301,13 @@ export default function TemplateReportPage() {
             return;
         }
 
-        // Normal export (client-side) — preserve SQL column order
+        // Normal export (client-side) — preserve SQL column order via header option
         const exportCols = reportColumns.length > 0 ? reportColumns : Object.keys(reportData[0]).filter(k => k !== '_rowId');
         const exportData = reportData.map(row => {
-            const ordered: any = {};
-            exportCols.forEach(col => { ordered[col] = row[col]; });
-            return ordered;
+            const { _rowId, ...rest } = row;
+            return rest;
         });
-        const worksheet = xlsx.utils.json_to_sheet(exportData);
+        const worksheet = xlsx.utils.json_to_sheet(exportData, { header: exportCols });
         const workbook = xlsx.utils.book_new();
         xlsx.utils.book_append_sheet(workbook, worksheet, "Report Data");
         xlsx.writeFile(workbook, `${reportName}_${dateStr}.xlsb`, { bookType: 'xlsb' });

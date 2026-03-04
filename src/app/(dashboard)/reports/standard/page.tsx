@@ -311,14 +311,9 @@ export default function StandardReportPage() {
             setExportStatus(`กำลังสร้างไฟล์ Excel (${data.data.length.toLocaleString()} แถว)...`);
             // Small delay to let UI update before heavy xlsx work
             await new Promise(r => setTimeout(r, 100));
-            // Use API column order if available to preserve SQL SELECT order
+            // Use API column order via header option (Object.keys reorders numeric keys)
             const exportCols = data.columns || Object.keys(data.data[0]);
-            const orderedData = data.data.map((row: any) => {
-                const ordered: any = {};
-                exportCols.forEach((col: string) => { ordered[col] = row[col]; });
-                return ordered;
-            });
-            const worksheet = xlsx.utils.json_to_sheet(orderedData);
+            const worksheet = xlsx.utils.json_to_sheet(data.data, { header: exportCols });
             const workbook = xlsx.utils.book_new();
             xlsx.utils.book_append_sheet(workbook, worksheet, "Report Data");
             xlsx.writeFile(workbook, `${reportName}_${dateStr}.xlsb`, { bookType: 'xlsb' });
