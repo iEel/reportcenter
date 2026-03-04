@@ -1,7 +1,7 @@
 # ReportCenter — Developer Handoff
 
-> **Version:** 9.0  
-> **Last Updated:** 2026-03-03  
+> **Version:** 10.0  
+> **Last Updated:** 2026-03-04  
 > **Tech Stack:** Next.js 16.1.6 + React 19 + Tailwind CSS 4 + MSSQL (mssql driver) + Microsoft Graph API (OAuth2) / Nodemailer (SMTP fallback) + @azure/msal-node
 
 ---
@@ -57,7 +57,7 @@ reportcenter/
 │   │   │   │   ├── schedules/page.tsx    # Scheduled Reports (create/edit/toggle/delete)
 │   │   │   │   └── settings/page.tsx     # System Settings
 │   │   │   └── reports/
-│   │   │       ├── standard/page.tsx     # Standard report viewer (★ favorites + category chips + export progress overlay + empty state + IsHeavy guard)
+│   │   │       ├── standard/page.tsx     # Standard report viewer (★ favorites + category chips + export progress overlay + empty state + IsHeavy guard + direct Background Export button)
 │   │   │       ├── templates/page.tsx    # Email template report viewer (★ favorites + empty state + IsHeavy guard)
 │   │   │       └── job-history/page.tsx  # Background job history (cancel button + elapsed time + auto-refresh)
 │   │   └── api/                          # API Routes (all .js)
@@ -89,7 +89,7 @@ reportcenter/
 │   │       │   └── idle-timeout/route.js    # GET: idle timeout setting (any logged-in user)
 │   │       └── reports/
 │   │           ├── available/route.js    # GET: reports user can access
-│   │           ├── execute/route.js      # POST: run T-SQL on company DB (ROW_NUMBER pagination + client-side fallback for SQL 2005+)
+│   │           ├── execute/route.js      # POST: run T-SQL on company DB (ROW_NUMBER pagination + client-side fallback + column order from mssql metadata + ORDER BY semicolon auto-strip)
 │   │           ├── parameters/route.js   # GET: report parameters (auto-migrate LookupQuery column)
 │   │           ├── search-param/route.js # GET: typeahead search for parameters with LookupQuery
 │   │           ├── execute-async/route.js # POST: background job — mssql streaming + CSV (constant memory, no OOM on 1M+ rows)
@@ -577,6 +577,7 @@ curl http://localhost:4000/api/cron/execute-schedules?secret=rc-cron-secret-2026
 - Admin ติ๊ก **"รายงานขนาดใหญ่ (Background Job)"** ที่หน้าเพิ่ม/แก้ไขรายงาน → เซ็ต `IsHeavy = 1`
 - Report ปกติ → export client-side เหมือนเดิม
 - Report IsHeavy → `POST /api/reports/execute-async` → สร้าง Job record → รัน query ใน background (timeout 15 นาที) → สร้าง CSV → disk
+- **Direct Background Export button** 📤: รายงาน IsHeavy แสดงปุ่ม **"Export (Background)"** สีเขียวข้างปุ่ม "ดึงข้อมูล" → กดแล้วส่งตรงไป Background Job **โดยไม่ต้องดึงข้อมูลมาแสดงก่อน** (ประหยัดเวลาและ RAM)
 - **Streaming mode** (`req.stream = true`): ใช้ `mssql` streaming API ประมวลผลทีละแถว → memory คงที่ ~50MB ไม่ว่าจะมีกี่แถว (รองรับ 1M+ rows ไม่ OOM)
 - **Back-pressure handling**: ถ้า file writer เขียนไม่ทัน → หยุด SQL stream รอ → กลับมาเขียนต่อ
 - **Live progress**: อัพเดท `RowCount` ใน DB ทุก 10,000 แถว → frontend แสดง "กำลังประมวลผล 120,000 แถว..." แบบ live (รีเฟรชทุก 10 วินาที)
@@ -704,7 +705,24 @@ curl http://localhost:4000/api/cron/execute-schedules?secret=rc-cron-secret-2026
 - `requestTimeout: 30s`, `connectionTimeout: 10s` — ป้องกัน server hang จาก slow query
 - `pool: { min: 2, max: 20, idleTimeoutMillis: 30000 }` — รองรับ concurrent users
 - ทุกค่าตั้งผ่าน `.env`: `DB_REQUEST_TIMEOUT`, `DB_CONNECTION_TIMEOUT`, `DB_POOL_MIN`, `DB_POOL_MAX`
+- **Dynamic company DB** ก็ได้ timeout/pool settings เดียวกัน (ก่อนหน้านี้ใช้ default 15s timeout)
 - Pool health check: ถ้า DB restart → auto-reconnect
+
+### Report Column Ordering
+- `execute/route.js` ใช้ `mssql` recordset **columns metadata** (`index` property) เรียงคอลัมน์ตาม SQL SELECT order
+- แก้ปัญหา JavaScript `Object.keys()` เรียง numeric key ก่อน string key (เช่น "1", "2" ขึ้นก่อน "FY")
+- ส่ง `columns` array กลับใน API response → frontend + Excel export ใช้ลำดับเดียวกัน
+- Excel export ใช้ `xlsx.utils.json_to_sheet()` พร้อม `{ header }` option บังคับลำดับคอลัมน์
+
+### Report Parameter Reordering
+- หน้าเพิ่ม/แก้ไขรายงาน: แต่ละ parameter card มีปุ่ม **▲▼** สำหรับเลื่อนลำดับ
+- แสดงเลขลำดับ (1, 2, 3...) ที่แต่ละ card
+- ลำดับบันทึกเป็น `OrderIndex` ใน `ReportParameters` table
+- ป้องกันปัญหา ParameterName สลับกับ DisplayLabel จากลำดับที่ผิด
+
+### ORDER BY Semicolon Auto-Strip
+- `execute/route.js` ตัด trailing `;` ออกจาก ORDER BY clause อัตโนมัติ
+- ป้องกัน syntax error ใน ROW_NUMBER pagination wrapper
 
 ### Loading Skeletons
 - `LoadingSkeleton.tsx` — 5 variants: `card` (dashboard), `table`, `form`, `text`, `chart`
@@ -816,6 +834,11 @@ npm run test:watch
 - [x] Notification auto-cleanup — read notifications deleted after 30 days, unread after 90 days (cron)
 - [x] Concurrent job limit — admin-configurable `max_concurrent_jobs` setting (default 2, 0=unlimited) enforced on execute-async
 - [x] Live job progress — RowCount updated every 10K rows during streaming, shown live on job-history page with pulse animation
+- [x] Column ordering fix — mssql metadata `index` property preserves SQL SELECT order (fixes JS numeric key sorting)
+- [x] Dynamic company DB timeout — `requestTimeout`/`pool` settings applied to company connections (fixes 15s default timeout)
+- [x] ORDER BY semicolon auto-strip — prevents ROW_NUMBER pagination syntax errors
+- [x] Parameter reorder UI — up/down arrows on report edit/new pages to control parameter display order
+- [x] Direct Background Export button — IsHeavy reports show "Export (Background)" button to skip data preview
 - [ ] Two-factor authentication (2FA)
 - [ ] PDF export support
 
