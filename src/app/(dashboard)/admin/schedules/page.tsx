@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react";
-import { Calendar, Plus, Clock, Trash2, RefreshCw, Play, Pause, Edit3, X, Mail, Send, FileText, Building2, Timer, Zap, ChevronDown } from "lucide-react";
+import { Calendar, Plus, Clock, Trash2, RefreshCw, Play, Pause, Edit3, X, Mail, Send, FileText, Building2, Timer, Zap, ChevronDown, AlertTriangle } from "lucide-react";
 import { useToast } from "@/components/providers/ToastProvider";
 import { useConfirm } from "@/components/providers/ConfirmProvider";
 import { formatDateTime } from "@/lib/dateUtils";
@@ -33,6 +33,7 @@ interface Report {
     ReportId: number;
     ReportName: string;
     ReportType: number;
+    IsHeavy?: boolean;
 }
 
 interface Param {
@@ -411,6 +412,11 @@ export default function ScheduledReportsPage() {
                                                     <FileText className="w-3.5 h-3.5 text-blue-400" />
                                                     {s.ReportName}
                                                 </span>
+                                                {reports.find(r => r.ReportId === s.ReportId)?.IsHeavy && (
+                                                    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-orange-50 text-orange-600 border border-orange-200">
+                                                        <AlertTriangle className="w-2.5 h-2.5" /> Heavy
+                                                    </span>
+                                                )}
                                                 <span className="text-slate-300 dark:text-slate-600">•</span>
                                                 <span className="inline-flex items-center gap-1.5">
                                                     <Building2 className="w-3.5 h-3.5 text-slate-400" />
@@ -520,6 +526,17 @@ export default function ScheduledReportsPage() {
                                     </div>
                                 </div>
                             </section>
+
+                            {/* IsHeavy warning */}
+                            {form.reportId && reports.find(r => r.ReportId.toString() === form.reportId)?.IsHeavy && (
+                                <div className="flex items-start gap-2.5 p-3 bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800/40 rounded-xl mx-0">
+                                    <AlertTriangle className="w-4 h-4 text-orange-500 shrink-0 mt-0.5" />
+                                    <div>
+                                        <p className="text-xs font-semibold text-orange-700 dark:text-orange-400">รายงานขนาดใหญ่ (Background Job)</p>
+                                        <p className="text-[11px] text-orange-600/80 dark:text-orange-400/70 mt-0.5">รายงานนี้มีข้อมูลจำนวนมาก อาจใช้เวลานานในการประมวลผลและสร้างไฟล์แนบ</p>
+                                    </div>
+                                </div>
+                            )}
 
                             {/* ── Section 1.5: Dynamic Parameters ── */}
                             {params.length > 0 && (

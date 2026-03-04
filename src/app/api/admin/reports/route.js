@@ -163,7 +163,7 @@ export async function GET(request) {
 
         const query = `
             SELECT r.ReportId, r.ReportName, r.Description, r.ReportType, r.IsPublic, r.IsActive,
-                   r.CategoryId, c.CategoryName, c.ColorTag AS CategoryColor
+                   ISNULL(r.IsHeavy, 0) AS IsHeavy, r.CategoryId, c.CategoryName, c.ColorTag AS CategoryColor
             FROM Reports r
             LEFT JOIN ReportCategories c ON r.CategoryId = c.CategoryId
             ORDER BY ReportId DESC;
