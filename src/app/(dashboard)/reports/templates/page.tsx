@@ -25,6 +25,7 @@ export default function TemplateReportPage() {
     // Data execution state
     const [isExecuting, setIsExecuting] = useState(false);
     const [reportData, setReportData] = useState<any[] | null>(null);
+    const [reportColumns, setReportColumns] = useState<string[]>([]);
     const [executionError, setExecutionError] = useState<string | null>(null);
     const [templateText, setTemplateText] = useState<string>('');
 
@@ -192,6 +193,7 @@ export default function TemplateReportPage() {
                     ...row
                 }));
                 setReportData(dataWithIds);
+                if (data.columns) setReportColumns(data.columns);
             } else {
                 setExecutionError(data.message || 'เกิดข้อผิดพลาดในการดึงข้อมูล');
             }
@@ -240,8 +242,9 @@ export default function TemplateReportPage() {
         }
     };
 
-    // Calculate dynamic columns based on the first row of return data
+    // Use column order from API (preserves SQL SELECT order) or fallback to Object.keys
     const getColumns = () => {
+        if (reportColumns.length > 0) return reportColumns;
         if (!reportData || reportData.length === 0) return [];
         return Object.keys(reportData[0]).filter(k => k !== '_rowId');
     };
@@ -298,10 +301,12 @@ export default function TemplateReportPage() {
             return;
         }
 
-        // Normal export (client-side)
+        // Normal export (client-side) — preserve SQL column order
+        const exportCols = reportColumns.length > 0 ? reportColumns : Object.keys(reportData[0]).filter(k => k !== '_rowId');
         const exportData = reportData.map(row => {
-            const { _rowId, ...rest } = row;
-            return rest;
+            const ordered: any = {};
+            exportCols.forEach(col => { ordered[col] = row[col]; });
+            return ordered;
         });
         const worksheet = xlsx.utils.json_to_sheet(exportData);
         const workbook = xlsx.utils.book_new();

@@ -247,9 +247,23 @@ export async function POST(request) {
             console.warn('Activity log failed (table may not exist):', logErr.message);
         }
 
+        // Extract column names in original SQL order (using mssql metadata index)
+        // JavaScript Object.keys() reorders numeric-like keys (e.g. "1","2","10") before string keys
+        // recordset.columns has { colName: { index: N, ... } } which preserves SQL SELECT order
+        let columns;
+        const colsMeta = dataResult.recordset?.columns || dataResult.columns;
+        if (colsMeta) {
+            columns = Object.entries(colsMeta)
+                .sort((a, b) => (a[1].index ?? 0) - (b[1].index ?? 0))
+                .map(([name]) => name);
+        } else {
+            columns = dataResult.recordset.length > 0 ? Object.keys(dataResult.recordset[0]) : [];
+        }
+
         return NextResponse.json({
             success: true,
             data: dataResult.recordset,
+            columns,
             totalRows,
             page: usePagination ? parseInt(page) : 1,
             pageSize: usePagination ? parseInt(pageSize) : totalRows,

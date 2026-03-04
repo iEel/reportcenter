@@ -28,6 +28,7 @@ export default function StandardReportPage() {
     const [exportElapsed, setExportElapsed] = useState(0);
     const exportTimerRef = useRef<NodeJS.Timeout | null>(null);
     const [reportData, setReportData] = useState<any[] | null>(null);
+    const [reportColumns, setReportColumns] = useState<string[]>([]);
     const [executionError, setExecutionError] = useState<string | null>(null);
 
     // Pagination state
@@ -202,6 +203,7 @@ export default function StandardReportPage() {
 
             if (data.success) {
                 setReportData(data.data);
+                if (data.columns) setReportColumns(data.columns);
                 setTotalRows(data.totalRows || data.data.length);
                 setCurrentPage(pg);
             } else {
@@ -214,8 +216,9 @@ export default function StandardReportPage() {
         }
     };
 
-    // Calculate dynamic columns based on the first row of return data
+    // Use column order from API (preserves SQL SELECT order) or fallback to Object.keys
     const getColumns = () => {
+        if (reportColumns.length > 0) return reportColumns;
         if (!reportData || reportData.length === 0) return [];
         return Object.keys(reportData[0]);
     };
@@ -308,7 +311,14 @@ export default function StandardReportPage() {
             setExportStatus(`กำลังสร้างไฟล์ Excel (${data.data.length.toLocaleString()} แถว)...`);
             // Small delay to let UI update before heavy xlsx work
             await new Promise(r => setTimeout(r, 100));
-            const worksheet = xlsx.utils.json_to_sheet(data.data);
+            // Use API column order if available to preserve SQL SELECT order
+            const exportCols = data.columns || Object.keys(data.data[0]);
+            const orderedData = data.data.map((row: any) => {
+                const ordered: any = {};
+                exportCols.forEach((col: string) => { ordered[col] = row[col]; });
+                return ordered;
+            });
+            const worksheet = xlsx.utils.json_to_sheet(orderedData);
             const workbook = xlsx.utils.book_new();
             xlsx.utils.book_append_sheet(workbook, worksheet, "Report Data");
             xlsx.writeFile(workbook, `${reportName}_${dateStr}.xlsb`, { bookType: 'xlsb' });
