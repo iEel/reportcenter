@@ -608,7 +608,7 @@ export default function StandardReportPage() {
                                 <button
                                     onClick={() => handleExecuteReport()}
                                     disabled={isExecuting}
-                                    className="flex-1 bg-slate-900 hover:bg-slate-800 text-white py-2 px-4 rounded-lg flex items-center justify-center gap-2 font-medium transition-colors shadow-sm active:scale-95 disabled:opacity-70 disabled:active:scale-100"
+                                    className="bg-slate-900 hover:bg-slate-800 text-white py-2 px-5 rounded-lg flex items-center justify-center gap-2 font-medium transition-colors shadow-sm active:scale-95 disabled:opacity-70 disabled:active:scale-100 whitespace-nowrap"
                                 >
                                     {isExecuting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
                                     {isExecuting ? 'กำลังประมวลผล...' : 'ดึงข้อมูล'}
