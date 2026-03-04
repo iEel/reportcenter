@@ -84,6 +84,8 @@ export async function POST(request) {
         // Helper: bind parameters to a request + set report timeout
         const bindParams = (req) => {
             req.timeout = REPORT_TIMEOUT;
+            // DEBUG: log parameter binding
+            const debugParams = [];
             if (parameters && expectedParams.length > 0) {
                 for (const expectedParam of expectedParams) {
                     const paramName = expectedParam.ParameterName.replace('@', '');
@@ -93,18 +95,23 @@ export async function POST(request) {
                         switch (expectedParam.InputType) {
                             case 'date':
                                 req.input(paramName, sql.Date, value);
+                                debugParams.push(`@${paramName}=${value} (Date)`);
                                 break;
                             case 'number':
                                 req.input(paramName, sql.Decimal, parseFloat(value));
+                                debugParams.push(`@${paramName}=${value} (Decimal)`);
                                 break;
                             default:
                                 req.input(paramName, sql.NVarChar(sql.MAX), value);
+                                debugParams.push(`@${paramName}='${value}' (NVarChar)`);
                         }
                     } else {
                         req.input(paramName, sql.NVarChar(sql.MAX), null);
+                        debugParams.push(`@${paramName}=NULL`);
                     }
                 }
             }
+            console.log(`[Execute] Params: companyId=${companyId}, ${debugParams.join(', ') || 'none'}`);
         };
 
         // 4. Execute — with or without pagination
