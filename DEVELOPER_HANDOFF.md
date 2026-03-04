@@ -54,7 +54,7 @@ reportcenter/
 │   │   │   │   ├── roles/page.tsx        # Manage Roles + Report access assignment
 │   │   │   │   ├── audit-logs/page.tsx   # Audit Log Viewer (paginated, refresh, BLOCKED_QUERY red badge)
 │   │   │   │   ├── categories/page.tsx   # Manage Report Categories (CRUD + color picker + expandable report list per category)
-│   │   │   │   ├── schedules/page.tsx    # Scheduled Reports (create/edit/toggle/delete)
+│   │   │   │   ├── schedules/page.tsx    # Scheduled Reports (create/edit/toggle/delete + IsHeavy warning badge)
 │   │   │   │   └── settings/page.tsx     # System Settings
 │   │   │   └── reports/
 │   │   │       ├── standard/page.tsx     # Standard report viewer (★ favorites + category chips + export progress overlay + empty state + IsHeavy guard + direct Background Export button)
@@ -839,6 +839,7 @@ npm run test:watch
 - [x] ORDER BY semicolon auto-strip — prevents ROW_NUMBER pagination syntax errors
 - [x] Parameter reorder UI — up/down arrows on report edit/new pages to control parameter display order
 - [x] Direct Background Export button — IsHeavy reports show "Export (Background)" button to skip data preview
+- [x] IsHeavy warning on schedules — orange badge on schedule cards + AlertTriangle banner in create/edit modal for heavy reports
 - [ ] Two-factor authentication (2FA)
 - [ ] PDF export support
 
