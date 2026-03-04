@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react";
-import { ArrowLeft, Database, Save, Code, Sliders, Type, Loader2, Tag } from "lucide-react";
+import { ArrowLeft, Database, Save, Code, Sliders, Type, Loader2, Tag, ChevronUp, ChevronDown } from "lucide-react";
 import Link from "next/link";
 import TemplateEditor from "@/components/TemplateEditor";
 import { useRouter } from "next/navigation";
@@ -81,6 +81,14 @@ export default function NewReportPage() {
     const handleParamChange = (index: number, field: string, value: string) => {
         const newParams = [...parameters];
         newParams[index] = { ...newParams[index], [field]: value };
+        setParameters(newParams);
+    };
+
+    const moveParameter = (index: number, direction: 'up' | 'down') => {
+        const newParams = [...parameters];
+        const targetIndex = direction === 'up' ? index - 1 : index + 1;
+        if (targetIndex < 0 || targetIndex >= newParams.length) return;
+        [newParams[index], newParams[targetIndex]] = [newParams[targetIndex], newParams[index]];
         setParameters(newParams);
     };
 
@@ -373,43 +381,60 @@ export default function NewReportPage() {
                                     <div className="space-y-4 max-h-[400px] overflow-y-auto pr-2">
                                         {parameters.map((param, index) => (
                                             <div key={index} className="p-4 border border-blue-100 bg-blue-50/30 rounded-xl relative group">
-                                                <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-end">
-                                                    <div className="md:col-span-3">
-                                                        <label className="block text-xs font-semibold text-slate-500 uppercase tracking-widest mb-1">ตัวแปร (ใน SQL)</label>
-                                                        <input type="text" value={param.ParameterName} readOnly className="w-full bg-slate-100 text-slate-600 px-3 py-1.5 rounded-md text-sm font-mono border border-slate-200" />
+                                                <div className="flex gap-3">
+                                                    {/* Reorder arrows */}
+                                                    <div className="flex flex-col items-center justify-center gap-0.5 pt-5">
+                                                        <button type="button" onClick={() => moveParameter(index, 'up')} disabled={index === 0}
+                                                            className="p-1 rounded hover:bg-blue-100 text-slate-400 hover:text-blue-600 disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-slate-400 transition-colors"
+                                                            title="เลื่อนขึ้น">
+                                                            <ChevronUp className="w-4 h-4" />
+                                                        </button>
+                                                        <span className="text-[10px] font-bold text-slate-400 select-none">{index + 1}</span>
+                                                        <button type="button" onClick={() => moveParameter(index, 'down')} disabled={index === parameters.length - 1}
+                                                            className="p-1 rounded hover:bg-blue-100 text-slate-400 hover:text-blue-600 disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-slate-400 transition-colors"
+                                                            title="เลื่อนลง">
+                                                            <ChevronDown className="w-4 h-4" />
+                                                        </button>
                                                     </div>
-                                                    <div className="md:col-span-5">
-                                                        <label className="block text-xs font-semibold text-slate-500 uppercase tracking-widest mb-1">ชื่อที่จะแสดงบนหน้าจอ</label>
-                                                        <input
-                                                            type="text"
-                                                            value={param.DisplayLabel}
-                                                            onChange={e => handleParamChange(index, 'DisplayLabel', e.target.value)}
-                                                            className="w-full px-3 py-1.5 border border-slate-200 rounded-md text-sm focus:ring-1 focus:ring-blue-500 outline-none"
-                                                        />
-                                                    </div>
-                                                    <div className="md:col-span-4">
-                                                        <label className="block text-xs font-semibold text-slate-500 uppercase tracking-widest mb-1">ประเภทช่องกรอกข้อมูล</label>
-                                                        <select
-                                                            value={param.InputType}
-                                                            onChange={e => handleParamChange(index, 'InputType', e.target.value)}
-                                                            className="w-full px-3 py-1.5 border border-slate-200 rounded-md text-sm bg-white focus:ring-1 focus:ring-blue-500 outline-none"
-                                                        >
-                                                            <option value="date">วันที่ (Date Picker)</option>
-                                                            <option value="text">ข้อความ (Textbox)</option>
-                                                            <option value="number">ตัวเลข</option>
-                                                        </select>
-                                                    </div>
-                                                    <div className="md:col-span-12">
-                                                        <label className="block text-xs font-semibold text-slate-500 uppercase tracking-widest mb-1">
-                                                            Lookup Query <span className="text-slate-400 normal-case font-normal">(SQL ค้นหาแบบ Typeahead — ใช้ @q แทนค่าที่ user พิมพ์, ต้อง return คอลัมน์ value และ label)</span>
-                                                        </label>
-                                                        <textarea
-                                                            value={param.LookupQuery || ''}
-                                                            onChange={e => handleParamChange(index, 'LookupQuery', e.target.value)}
-                                                            placeholder={`ตัวอย่าง: SELECT TOP 20 JOBNO AS value, JOBNO + ' - ' + EXPORTERNAME AS label FROM SFJOB WHERE JOBNO LIKE @q + '%' ORDER BY JOBNO DESC`}
-                                                            rows={2}
-                                                            className="w-full px-3 py-1.5 border border-slate-200 rounded-md text-xs font-mono focus:ring-1 focus:ring-blue-500 outline-none resize-none bg-slate-50"
-                                                        />
+                                                    {/* Parameter fields */}
+                                                    <div className="flex-1 grid grid-cols-1 md:grid-cols-12 gap-4 items-end">
+                                                        <div className="md:col-span-3">
+                                                            <label className="block text-xs font-semibold text-slate-500 uppercase tracking-widest mb-1">ตัวแปร (ใน SQL)</label>
+                                                            <input type="text" value={param.ParameterName} readOnly className="w-full bg-slate-100 text-slate-600 px-3 py-1.5 rounded-md text-sm font-mono border border-slate-200" />
+                                                        </div>
+                                                        <div className="md:col-span-5">
+                                                            <label className="block text-xs font-semibold text-slate-500 uppercase tracking-widest mb-1">ชื่อที่จะแสดงบนหน้าจอ</label>
+                                                            <input
+                                                                type="text"
+                                                                value={param.DisplayLabel}
+                                                                onChange={e => handleParamChange(index, 'DisplayLabel', e.target.value)}
+                                                                className="w-full px-3 py-1.5 border border-slate-200 rounded-md text-sm focus:ring-1 focus:ring-blue-500 outline-none"
+                                                            />
+                                                        </div>
+                                                        <div className="md:col-span-4">
+                                                            <label className="block text-xs font-semibold text-slate-500 uppercase tracking-widest mb-1">ประเภทช่องกรอกข้อมูล</label>
+                                                            <select
+                                                                value={param.InputType}
+                                                                onChange={e => handleParamChange(index, 'InputType', e.target.value)}
+                                                                className="w-full px-3 py-1.5 border border-slate-200 rounded-md text-sm bg-white focus:ring-1 focus:ring-blue-500 outline-none"
+                                                            >
+                                                                <option value="date">วันที่ (Date Picker)</option>
+                                                                <option value="text">ข้อความ (Textbox)</option>
+                                                                <option value="number">ตัวเลข</option>
+                                                            </select>
+                                                        </div>
+                                                        <div className="md:col-span-12">
+                                                            <label className="block text-xs font-semibold text-slate-500 uppercase tracking-widest mb-1">
+                                                                Lookup Query <span className="text-slate-400 normal-case font-normal">(SQL ค้นหาแบบ Typeahead — ใช้ @q แทนค่าที่ user พิมพ์, ต้อง return คอลัมน์ value และ label)</span>
+                                                            </label>
+                                                            <textarea
+                                                                value={param.LookupQuery || ''}
+                                                                onChange={e => handleParamChange(index, 'LookupQuery', e.target.value)}
+                                                                placeholder={`ตัวอย่าง: SELECT TOP 20 JOBNO AS value, JOBNO + ' - ' + EXPORTERNAME AS label FROM SFJOB WHERE JOBNO LIKE @q + '%' ORDER BY JOBNO DESC`}
+                                                                rows={2}
+                                                                className="w-full px-3 py-1.5 border border-slate-200 rounded-md text-xs font-mono focus:ring-1 focus:ring-blue-500 outline-none resize-none bg-slate-50"
+                                                            />
+                                                        </div>
                                                     </div>
                                                 </div>
                                             </div>
