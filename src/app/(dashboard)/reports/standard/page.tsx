@@ -1,6 +1,6 @@
 "use client"
 
-import { Search, Filter, Download, FileText, ChevronDown, ChevronLeft, ChevronRight, RefreshCw, Loader2, AlertCircle, Star, Tag, BarChart3, Calendar, Play, ArrowRight } from "lucide-react";
+import { Search, Filter, Download, FileText, ChevronDown, ChevronLeft, ChevronRight, RefreshCw, Loader2, AlertCircle, Star, Tag, BarChart3, Calendar, Play, ArrowRight, Send } from "lucide-react";
 import { useState, useEffect, useRef } from "react";
 import * as xlsx from 'xlsx';
 import { useAuth } from "@/components/providers/AuthProvider";
@@ -224,6 +224,59 @@ export default function StandardReportPage() {
     };
 
     const columns = getColumns();
+
+    // Direct Background Export — skip data preview, go straight to Background Job
+    const handleBackgroundExport = async () => {
+        if (!selectedReportId) {
+            toast('กรุณาเลือกรายงานก่อน', 'info');
+            return;
+        }
+        if (!selectedCompany) {
+            toast('กรุณาเลือกบริษัทก่อน', 'info');
+            return;
+        }
+        if (activeJob?.status === 'running') {
+            toast('มี Job กำลังทำงานอยู่ กรุณารอสักครู่', 'info');
+            return;
+        }
+
+        try {
+            const res = await fetch('/api/reports/execute-async', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    reportId: selectedReportId,
+                    companyId: selectedCompany,
+                    parameters: paramValues,
+                }),
+            });
+            const data = await res.json();
+            if (data.success) {
+                setActiveJob({ jobId: data.jobId, status: 'running' });
+                toast('🚀 กำลังสร้างรายงานในพื้นหลัง...', 'info');
+                const poll = setInterval(async () => {
+                    try {
+                        const jr = await fetch(`/api/reports/jobs/${data.jobId}`);
+                        const jd = await jr.json();
+                        if (jd.success) {
+                            setActiveJob(jd.job);
+                            if (jd.job.status === 'done') {
+                                clearInterval(poll);
+                                toast(`✅ รายงานพร้อมดาวน์โหลด (${jd.job.rowCount?.toLocaleString()} แถว)`, 'success');
+                            } else if (jd.job.status === 'failed') {
+                                clearInterval(poll);
+                                toast(`สร้างรายงานไม่สำเร็จ: ${jd.job.error}`, 'error');
+                            }
+                        }
+                    } catch { clearInterval(poll); }
+                }, 3000);
+            } else {
+                toast(data.message || 'ไม่สามารถสร้าง Job ได้', 'error');
+            }
+        } catch {
+            toast('เกิดข้อผิดพลาดในการเชื่อมต่อ', 'error');
+        }
+    };
 
     const handleExportExcel = async () => {
         if (!selectedReportId || isExporting) return;
@@ -551,15 +604,27 @@ export default function StandardReportPage() {
                                 </div>
                             ))}
 
-                            <div className="flex items-end mt-2 lg:mt-0">
+                            <div className="flex items-end gap-2 mt-2 lg:mt-0">
                                 <button
                                     onClick={() => handleExecuteReport()}
                                     disabled={isExecuting}
-                                    className="w-full bg-slate-900 hover:bg-slate-800 text-white py-2 px-4 rounded-lg flex items-center justify-center gap-2 font-medium transition-colors shadow-sm active:scale-95 disabled:opacity-70 disabled:active:scale-100"
+                                    className="flex-1 bg-slate-900 hover:bg-slate-800 text-white py-2 px-4 rounded-lg flex items-center justify-center gap-2 font-medium transition-colors shadow-sm active:scale-95 disabled:opacity-70 disabled:active:scale-100"
                                 >
                                     {isExecuting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
                                     {isExecuting ? 'กำลังประมวลผล...' : 'ดึงข้อมูล'}
                                 </button>
+                                {/* Direct Background Export button for IsHeavy reports */}
+                                {reports.find(r => r.ReportId.toString() === selectedReportId)?.IsHeavy && (
+                                    <button
+                                        onClick={handleBackgroundExport}
+                                        disabled={activeJob?.status === 'running'}
+                                        className="bg-emerald-600 hover:bg-emerald-700 text-white py-2 px-4 rounded-lg flex items-center justify-center gap-2 font-medium transition-colors shadow-sm active:scale-95 disabled:opacity-70 disabled:active:scale-100 whitespace-nowrap"
+                                        title="ส่งออก Excel ผ่าน Background Job โดยไม่ต้องดึงข้อมูลก่อน"
+                                    >
+                                        {activeJob?.status === 'running' ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+                                        {activeJob?.status === 'running' ? 'กำลังสร้าง...' : 'Export (Background)'}
+                                    </button>
+                                )}
                             </div>
                         </div>
                     )}
