@@ -270,6 +270,9 @@ export async function POST(request) {
         const columns = capturedColumns
             || (dataResult.recordset.length > 0 ? Object.keys(dataResult.recordset[0]) : []);
 
+        // DEBUG: log actual response data
+        console.log(`[Execute] Response: ${dataResult.recordset.length} rows, ${columns.length} columns [${columns.slice(0, 5).join(', ')}...], totalRows=${totalRows}, page=${page}`);
+
         return NextResponse.json({
             success: true,
             data: dataResult.recordset,
