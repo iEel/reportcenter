@@ -112,6 +112,21 @@ export async function POST(request) {
         let dataResult;
         let totalRows = 0;
 
+        // Track column order from SQL — must capture BEFORE .slice() strips metadata
+        let capturedColumns = null;
+        const captureColumns = (result) => {
+            if (capturedColumns) return; // already captured
+            const meta = result?.recordset?.columns;
+            if (meta) {
+                // Sort by mssql index to preserve original SQL SELECT order
+                // (Object.keys/entries reorders numeric-like keys like "1","2","10")
+                capturedColumns = Object.entries(meta)
+                    .sort((a, b) => (a[1].index ?? 0) - (b[1].index ?? 0))
+                    .map(([name]) => name)
+                    .filter(n => n !== '_rowNum'); // exclude pagination helper column
+            }
+        };
+
         if (usePagination) {
             // Detect CTE queries (start with ;WITH or WITH)
             const isCTE = /^\s*;?\s*WITH\b/i.test(tSqlQuery.trim());
@@ -162,6 +177,7 @@ export async function POST(request) {
                 const fallbackReq = companyPool.request();
                 bindParams(fallbackReq);
                 dataResult = await fallbackReq.query(tSqlQuery);
+                captureColumns(dataResult); // capture BEFORE slicing
                 totalRows = dataResult.recordset.length;
 
                 // Apply client-side pagination
@@ -190,12 +206,14 @@ export async function POST(request) {
                         WHERE _rowNum BETWEEN @_startRow AND @_endRow
                         ORDER BY _rowNum`
                     );
+                    captureColumns(dataResult);
                 } catch (paginationErr) {
                     // Fallback: run original full query, paginate client-side
                     console.warn('ROW_NUMBER pagination failed, falling back to client-side:', paginationErr.message);
                     const fallbackReq = companyPool.request();
                     bindParams(fallbackReq);
                     dataResult = await fallbackReq.query(tSqlQuery);
+                    captureColumns(dataResult); // capture BEFORE slicing
                     totalRows = dataResult.recordset.length;
                     const paginatedData = dataResult.recordset.slice(offset, offset + parseInt(pageSize));
                     dataResult = { recordset: paginatedData };
@@ -206,6 +224,7 @@ export async function POST(request) {
             const req = companyPool.request();
             bindParams(req);
             dataResult = await req.query(tSqlQuery);
+            captureColumns(dataResult);
             totalRows = dataResult.recordset.length;
         }
 
@@ -247,18 +266,9 @@ export async function POST(request) {
             console.warn('Activity log failed (table may not exist):', logErr.message);
         }
 
-        // Extract column names in original SQL order (using mssql metadata index)
-        // JavaScript Object.keys() reorders numeric-like keys (e.g. "1","2","10") before string keys
-        // recordset.columns has { colName: { index: N, ... } } which preserves SQL SELECT order
-        let columns;
-        const colsMeta = dataResult.recordset?.columns || dataResult.columns;
-        if (colsMeta) {
-            columns = Object.entries(colsMeta)
-                .sort((a, b) => (a[1].index ?? 0) - (b[1].index ?? 0))
-                .map(([name]) => name);
-        } else {
-            columns = dataResult.recordset.length > 0 ? Object.keys(dataResult.recordset[0]) : [];
-        }
+        // Use captured column order, fallback to Object.keys if metadata wasn't available
+        const columns = capturedColumns
+            || (dataResult.recordset.length > 0 ? Object.keys(dataResult.recordset[0]) : []);
 
         return NextResponse.json({
             success: true,
