@@ -1,7 +1,7 @@
 # ReportCenter — Developer Handoff
 
-> **Version:** 10.0  
-> **Last Updated:** 2026-03-04  
+> **Version:** 10.1  
+> **Last Updated:** 2026-03-13  
 > **Tech Stack:** Next.js 16.1.6 + React 19 + Tailwind CSS 4 + MSSQL (mssql driver) + Microsoft Graph API (OAuth2) / Nodemailer (SMTP fallback) + @azure/msal-node
 
 ---
@@ -298,7 +298,7 @@ CreatedAt DATETIME DEFAULT GETDATE()
 | GET    | `/api/admin/users`           | List users + roles + allowedCompanies + AD info |
 | POST   | `/api/admin/users`           | Create user (local bcrypt / AD LDAP_AUTH) + company mappings + logs CREATE_USER |
 | PUT    | `/api/admin/users`           | Update user + company mappings + logs UPDATE_USER |
-| DELETE | `/api/admin/users`           | Delete user + cleanup mappings/favorites + logs DELETE_USER |
+| DELETE | `/api/admin/users`           | Delete user + cleanup mappings/favorites/ActivityLogs(nullify) + logs DELETE_USER |
 | GET    | `/api/admin/users/lookup-ad` | AD lookup (`?username=exact`) or search (`?search=wildcard`) — filters out computer accounts ($) |
 | POST   | `/api/admin/users/reset-password` | Admin reset user password (no old pw required) + logs RESET_PASSWORD |
 | GET    | `/api/admin/audit-logs`      | Paginated audit logs + ChangeData JSON (?page=&limit=) |
@@ -807,7 +807,7 @@ npm run test:watch
 - [x] Query timeout (30s) + Pool config (min:2/max:20) via `.env`
 - [x] Automated tests — Vitest, 20 tests (auth, password-rules, db)
 - [x] Loading skeletons — `LoadingSkeleton` component + 4 `loading.tsx` pages
-- [x] Admin delete user — ลบ user + cleanup mappings/favorites + session invalidation + audit log
+- [x] Admin delete user — ลบ user + cleanup mappings/favorites + nullify ActivityLogs FK + session invalidation + audit log
 - [x] Admin reset password — รีเซ็ตรหัสผ่านให้ user + force re-login + audit log
 - [x] User management pagination — client-side 10/page + page numbers + filter reset
 - [x] SQL Query Validator — blocklist DML/DDL/metadata/procs + audit log BLOCKED_QUERY

@@ -298,12 +298,16 @@ export async function DELETE(request) {
 
         const targetUser = userResult.recordset[0];
 
-        // Delete related data first
+        // Clear related data first
         await pool.request().input('UserId', sql.Int, uid)
             .query('DELETE FROM UserCompanyMapping WHERE UserId = @UserId');
 
         await pool.request().input('UserId', sql.Int, uid)
             .query('DELETE FROM UserFavorites WHERE UserId = @UserId');
+
+        // Nullify ActivityLogs references (preserve audit trail, clear FK)
+        await pool.request().input('UserId', sql.Int, uid)
+            .query('UPDATE ActivityLogs SET UserId = NULL WHERE UserId = @UserId');
 
         // Delete the user
         await pool.request().input('UserId', sql.Int, uid)
