@@ -1,17 +1,22 @@
 "use client"
 
-import { useState, useEffect } from "react";
-import { ArrowLeft, Database, Save, Code, Sliders, Type, Loader2, Tag, ChevronUp, ChevronDown } from "lucide-react";
+import { useState, useEffect, useCallback } from "react";
+import { ArrowLeft, Database, Save, Code, Sliders, Type, Loader2, Tag, ChevronUp, ChevronDown, History, RotateCcw, Eye, GitCompareArrows } from "lucide-react";
 import Link from "next/link";
 import TemplateEditor from "@/components/TemplateEditor";
+import VersionDiffModal from "@/components/VersionDiffModal";
 import { useRouter, useParams } from "next/navigation";
+import { useToast } from "@/components/providers/ToastProvider";
+import { useConfirm } from "@/components/providers/ConfirmProvider";
 
 export default function EditReportPage() {
     const router = useRouter();
     const params = useParams();
     const reportId = params?.id;
 
-    const [activeTab, setActiveTab] = useState<'general' | 'sql' | 'template' | 'params'>('general');
+    const { toast } = useToast();
+    const { confirm } = useConfirm();
+    const [activeTab, setActiveTab] = useState<'general' | 'sql' | 'template' | 'params' | 'history'>('general');
     const [isLoading, setIsLoading] = useState(true);
     const [isSaving, setIsSaving] = useState(false);
 
@@ -56,6 +61,101 @@ export default function EditReportPage() {
 
     // Parameters State
     const [parameters, setParameters] = useState<any[]>([]);
+
+    // Version History State
+    const [versions, setVersions] = useState<any[]>([]);
+    const [isLoadingVersions, setIsLoadingVersions] = useState(false);
+    const [expandedVersion, setExpandedVersion] = useState<number | null>(null);
+    const [expandedVersionData, setExpandedVersionData] = useState<any>(null);
+    const [isLoadingPreview, setIsLoadingPreview] = useState(false);
+    const [diffModal, setDiffModal] = useState<{ isOpen: boolean; oldVersion: any; newVersion: any }>({ isOpen: false, oldVersion: null, newVersion: null });
+    const [isRollingBack, setIsRollingBack] = useState(false);
+
+    const fetchVersions = useCallback(async () => {
+        if (!reportId) return;
+        setIsLoadingVersions(true);
+        try {
+            const res = await fetch(`/api/admin/reports/${reportId}/versions`);
+            const data = await res.json();
+            if (data.success) setVersions(data.versions || []);
+        } catch (e) { console.error('Failed to fetch versions:', e); }
+        finally { setIsLoadingVersions(false); }
+    }, [reportId]);
+
+    const fetchVersionPreview = async (versionId: number) => {
+        setIsLoadingPreview(true);
+        try {
+            const res = await fetch(`/api/admin/reports/${reportId}/versions?versionId=${versionId}`);
+            const data = await res.json();
+            if (data.success) setExpandedVersionData(data.version);
+        } catch (e) { console.error('Failed to fetch version:', e); }
+        finally { setIsLoadingPreview(false); }
+    };
+
+    const handleTogglePreview = (versionId: number) => {
+        if (expandedVersion === versionId) {
+            setExpandedVersion(null);
+            setExpandedVersionData(null);
+        } else {
+            setExpandedVersion(versionId);
+            fetchVersionPreview(versionId);
+        }
+    };
+
+    const handleDiffCompare = async (versionId: number, versionNumber: number, changedByName: string, createdAt: string) => {
+        try {
+            const res = await fetch(`/api/admin/reports/${reportId}/versions?versionId=${versionId}`);
+            const data = await res.json();
+            if (data.success) {
+                setDiffModal({
+                    isOpen: true,
+                    oldVersion: {
+                        versionNumber,
+                        reportName: data.version.ReportName,
+                        sql: data.version.TSqlQuery || '',
+                        changedByName,
+                        createdAt,
+                    },
+                    newVersion: {
+                        versionNumber: 'ปัจจุบัน',
+                        reportName: reportName,
+                        sql: tSqlQuery || '',
+                    },
+                });
+            }
+        } catch (e) { toast('ไม่สามารถโหลดข้อมูลเวอร์ชันได้', 'error'); }
+    };
+
+    const handleRollback = async (versionId: number, versionNumber: number) => {
+        const ok = await confirm({
+            title: `ย้อนกลับไป v${versionNumber}`,
+            message: `ต้องการย้อนกลับรายงานนี้ไปเป็นเวอร์ชัน ${versionNumber} หรือไม่? ข้อมูลปัจจุบันจะถูกบันทึกเป็นเวอร์ชันใหม่ก่อนย้อนกลับ`,
+            confirmLabel: 'ย้อนกลับ',
+            variant: 'danger',
+        });
+        if (!ok) return;
+
+        setIsRollingBack(true);
+        try {
+            const res = await fetch(`/api/admin/reports/${reportId}/versions`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ versionId }),
+            });
+            const data = await res.json();
+            if (data.success) {
+                toast(data.message, 'success');
+                // Reload the report to show the restored data
+                window.location.reload();
+            } else {
+                toast(data.message || 'ย้อนกลับไม่สำเร็จ', 'error');
+            }
+        } catch (e) {
+            toast('ไม่สามารถเชื่อมต่อเซิร์ฟเวอร์ได้', 'error');
+        } finally {
+            setIsRollingBack(false);
+        }
+    };
 
     useEffect(() => {
         if (!reportId) return;
@@ -232,6 +332,14 @@ export default function EditReportPage() {
                             </div>
                         </div>
                     </button>
+                    <div className="mt-2 pt-2 border-t border-slate-200">
+                        <button onClick={() => { setActiveTab('history'); fetchVersions(); }}
+                            className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all ${activeTab === 'history' ? 'bg-violet-50 text-violet-600 shadow-sm ring-1 ring-violet-500/20' : 'text-slate-600 hover:bg-slate-100'}`}
+                        >
+                            <History className="w-4 h-4" /> ประวัติเวอร์ชัน
+                            {versions.length > 0 && <span className="ml-auto text-xs bg-violet-100 text-violet-600 px-2 py-0.5 rounded-full font-semibold">{versions.length}</span>}
+                        </button>
+                    </div>
                 </div>
 
                 {/* Content Area */}
@@ -438,9 +546,127 @@ export default function EditReportPage() {
                                 )}
                             </div>
                         )}
+
+                        {/* Tab 5: Version History */}
+                        {activeTab === 'history' && (
+                            <div className="p-6 space-y-5 animate-in fade-in duration-300">
+                                <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                                    <h3 className="text-lg font-semibold flex items-center gap-2">
+                                        <History className="w-5 h-5 text-violet-500" />
+                                        ประวัติเวอร์ชัน
+                                    </h3>
+                                    <button onClick={fetchVersions} className="text-xs text-slate-500 hover:text-slate-700 transition-colors">
+                                        รีเฟรช
+                                    </button>
+                                </div>
+
+                                {isLoadingVersions ? (
+                                    <div className="flex flex-col items-center justify-center py-16 text-slate-400">
+                                        <Loader2 className="w-6 h-6 animate-spin mb-2" />
+                                        กำลังโหลด...
+                                    </div>
+                                ) : versions.length === 0 ? (
+                                    <div className="text-center py-16 text-slate-400">
+                                        <History className="w-10 h-10 mx-auto mb-3 opacity-40" />
+                                        <p className="font-medium">ยังไม่มีประวัติการแก้ไข</p>
+                                        <p className="text-xs mt-1">เมื่อแก้ไขรายงานและบันทึก ระบบจะเก็บ snapshot อัตโนมัติ</p>
+                                    </div>
+                                ) : (
+                                    <div className="space-y-3 max-h-[500px] overflow-y-auto pr-1">
+                                        {versions.map((v: any, idx: number) => (
+                                            <div key={v.VersionId} className={`border rounded-xl transition-all ${
+                                                idx === 0
+                                                    ? 'border-violet-200 bg-violet-50/30'
+                                                    : 'border-slate-200 hover:border-slate-300 bg-white'
+                                            }`}>
+                                                {/* Version header */}
+                                                <div className="px-4 py-3 flex items-center justify-between gap-3">
+                                                    <div className="flex items-center gap-3 min-w-0">
+                                                        <div className={`shrink-0 w-10 h-10 rounded-full flex items-center justify-center text-xs font-bold ${
+                                                            idx === 0
+                                                                ? 'bg-violet-100 text-violet-700 ring-2 ring-violet-300'
+                                                                : 'bg-slate-100 text-slate-500'
+                                                        }`}>
+                                                            v{v.VersionNumber}
+                                                        </div>
+                                                        <div className="min-w-0">
+                                                            <div className="flex items-center gap-2">
+                                                                <span className="font-semibold text-sm text-slate-900 truncate">{v.ReportName}</span>
+                                                                {idx === 0 && <span className="text-[10px] px-1.5 py-0.5 bg-violet-200 text-violet-800 rounded font-bold shrink-0">ล่าสุด</span>}
+                                                                {v.ChangeSummary?.includes('ย้อนกลับ') && <span className="text-[10px] px-1.5 py-0.5 bg-amber-200 text-amber-800 rounded font-bold shrink-0">Rollback</span>}
+                                                            </div>
+                                                            <div className="text-xs text-slate-500 truncate mt-0.5">
+                                                                {v.ChangedByName || 'ไม่ทราบ'} • {new Date(v.CreatedAt).toLocaleDateString('th-TH', { timeZone: 'UTC', year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                                                            </div>
+                                                            {v.ChangeSummary && (
+                                                                <p className="text-xs text-slate-400 mt-0.5 truncate">{v.ChangeSummary}</p>
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                    <div className="flex items-center gap-1.5 shrink-0">
+                                                        <button
+                                                            onClick={() => handleTogglePreview(v.VersionId)}
+                                                            className={`p-2 rounded-lg transition-colors text-xs ${
+                                                                expandedVersion === v.VersionId
+                                                                    ? 'bg-blue-100 text-blue-600'
+                                                                    : 'bg-slate-100 hover:bg-slate-200 text-slate-500'
+                                                            }`}
+                                                            title="ดู SQL"
+                                                        >
+                                                            <Eye className="w-4 h-4" />
+                                                        </button>
+                                                        <button
+                                                            onClick={() => handleDiffCompare(v.VersionId, v.VersionNumber, v.ChangedByName, v.CreatedAt)}
+                                                            className="p-2 bg-slate-100 hover:bg-blue-100 text-slate-500 hover:text-blue-600 rounded-lg transition-colors"
+                                                            title="เปรียบเทียบกับปัจจุบัน"
+                                                        >
+                                                            <GitCompareArrows className="w-4 h-4" />
+                                                        </button>
+                                                        <button
+                                                            onClick={() => handleRollback(v.VersionId, v.VersionNumber)}
+                                                            disabled={isRollingBack}
+                                                            className="p-2 bg-slate-100 hover:bg-amber-100 text-slate-500 hover:text-amber-600 rounded-lg transition-colors disabled:opacity-50"
+                                                            title="ย้อนกลับไปเวอร์ชันนี้"
+                                                        >
+                                                            <RotateCcw className={`w-4 h-4 ${isRollingBack ? 'animate-spin' : ''}`} />
+                                                        </button>
+                                                    </div>
+                                                </div>
+
+                                                {/* Expanded SQL preview */}
+                                                {expandedVersion === v.VersionId && (
+                                                    <div className="border-t border-slate-200 bg-[#1e1e1e] rounded-b-xl">
+                                                        {isLoadingPreview ? (
+                                                            <div className="flex items-center justify-center py-8 text-slate-400">
+                                                                <Loader2 className="w-5 h-5 animate-spin" />
+                                                            </div>
+                                                        ) : expandedVersionData ? (
+                                                            <pre className="p-4 text-xs text-slate-300 font-mono overflow-x-auto max-h-[300px] overflow-y-auto whitespace-pre-wrap">{expandedVersionData.TSqlQuery || '(ไม่มี SQL)'}</pre>
+                                                        ) : (
+                                                            <div className="p-4 text-xs text-slate-500">ไม่สามารถโหลดข้อมูลได้</div>
+                                                        )}
+                                                    </div>
+                                                )}
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+                        )}
+
                     </div>
                 </div>
             </div>
+
+            {/* Diff Modal */}
+            {diffModal.isOpen && diffModal.oldVersion && diffModal.newVersion && (
+                <VersionDiffModal
+                    isOpen={diffModal.isOpen}
+                    onClose={() => setDiffModal({ isOpen: false, oldVersion: null, newVersion: null })}
+                    oldVersion={diffModal.oldVersion}
+                    newVersion={diffModal.newVersion}
+                />
+            )}
         </div>
     );
 }

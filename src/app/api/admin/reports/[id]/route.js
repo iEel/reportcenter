@@ -69,19 +69,100 @@ export async function PUT(request, props) {
 
         pool = await connectToCentralDB();
 
-        // Fetch old report for change comparison
+        // Fetch old report for change comparison + version snapshot
         let oldReport = {};
+        let oldParams = [];
         try {
             const oldResult = await pool.request()
                 .input('OldReportId', sql.Int, parseInt(id))
-                .query('SELECT ReportName, Description, ReportType, TSqlQuery, EmailTemplateContent, IsPublic, IsActive, IsHeavy FROM Reports WHERE ReportId = @OldReportId');
+                .query('SELECT ReportName, Description, ReportType, TSqlQuery, EmailTemplateContent, IsPublic, IsActive, IsHeavy, CategoryId FROM Reports WHERE ReportId = @OldReportId');
             if (oldResult.recordset.length > 0) oldReport = oldResult.recordset[0];
+
+            const oldParamResult = await pool.request()
+                .input('OldReportId2', sql.Int, parseInt(id))
+                .query('SELECT ParameterName, DisplayLabel, InputType, LookupQuery, OrderIndex FROM ReportParameters WHERE ReportId = @OldReportId2 ORDER BY OrderIndex');
+            oldParams = oldParamResult.recordset || [];
         } catch (e) { /* ignore */ }
+
+        // Auto-create ReportVersions table if missing
+        try {
+            await pool.request().query(`
+                IF OBJECT_ID('ReportVersions') IS NULL
+                CREATE TABLE ReportVersions (
+                    VersionId            INT IDENTITY(1,1) PRIMARY KEY,
+                    ReportId             INT NOT NULL,
+                    VersionNumber        INT NOT NULL,
+                    ReportName           NVARCHAR(200),
+                    Description          NVARCHAR(500),
+                    ReportType           INT,
+                    TSqlQuery            NVARCHAR(MAX),
+                    EmailTemplateContent NVARCHAR(MAX),
+                    IsPublic             BIT,
+                    IsActive             BIT,
+                    IsHeavy              BIT,
+                    CategoryId           INT,
+                    ParametersJson       NVARCHAR(MAX),
+                    ChangeSummary        NVARCHAR(500),
+                    ChangeNote           NVARCHAR(500),
+                    ChangedBy            INT,
+                    ChangedByName        NVARCHAR(100),
+                    CreatedAt            DATETIME DEFAULT GETDATE(),
+                    FOREIGN KEY (ReportId) REFERENCES Reports(ReportId) ON DELETE CASCADE
+                );
+                IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_ReportVersions_ReportId' AND object_id = OBJECT_ID('ReportVersions'))
+                CREATE INDEX IX_ReportVersions_ReportId ON ReportVersions(ReportId, VersionNumber DESC);
+            `);
+        } catch (e) { console.warn('ReportVersions table check:', e.message); }
 
         transaction = new sql.Transaction(pool);
         await transaction.begin();
 
         try {
+            // 0. Snapshot old version into ReportVersions (before update)
+            if (oldReport.ReportName) {
+                try {
+                    // Get next version number
+                    const versionResult = await transaction.request()
+                        .input('VReportId', sql.Int, parseInt(id))
+                        .query('SELECT ISNULL(MAX(VersionNumber), 0) + 1 AS NextVersion FROM ReportVersions WHERE ReportId = @VReportId');
+                    const nextVersion = versionResult.recordset[0].NextVersion;
+
+                    // Build change summary
+                    const vChanges = [];
+                    if (oldReport.ReportName !== report.ReportName) vChanges.push('ชื่อเปลี่ยน');
+                    if ((oldReport.TSqlQuery || '') !== (report.TSqlQuery || '')) vChanges.push('SQL เปลี่ยน');
+                    if ((oldReport.Description || '') !== (report.Description || '')) vChanges.push('คำอธิบายเปลี่ยน');
+                    if ((oldReport.EmailTemplateContent || '') !== (report.EmailTemplateContent || '')) vChanges.push('Template เปลี่ยน');
+                    if (!!oldReport.IsPublic !== !!report.IsPublic) vChanges.push('สิทธิ์เปลี่ยน');
+                    if (!!oldReport.IsHeavy !== !!report.IsHeavy) vChanges.push('Heavy flag เปลี่ยน');
+                    const changeSummary = vChanges.length > 0 ? vChanges.join(', ') : 'แก้ไขรายงาน';
+
+                    await transaction.request()
+                        .input('VReportId2', sql.Int, parseInt(id))
+                        .input('VersionNumber', sql.Int, nextVersion)
+                        .input('VReportName', sql.NVarChar(200), oldReport.ReportName)
+                        .input('VDescription', sql.NVarChar(500), oldReport.Description || null)
+                        .input('VReportType', sql.Int, oldReport.ReportType)
+                        .input('VTSqlQuery', sql.NVarChar(sql.MAX), oldReport.TSqlQuery || null)
+                        .input('VEmailTemplate', sql.NVarChar(sql.MAX), oldReport.EmailTemplateContent || null)
+                        .input('VIsPublic', sql.Bit, oldReport.IsPublic ? 1 : 0)
+                        .input('VIsActive', sql.Bit, oldReport.IsActive ? 1 : 0)
+                        .input('VIsHeavy', sql.Bit, oldReport.IsHeavy ? 1 : 0)
+                        .input('VCategoryId', sql.Int, oldReport.CategoryId || null)
+                        .input('VParametersJson', sql.NVarChar(sql.MAX), JSON.stringify(oldParams))
+                        .input('VChangeSummary', sql.NVarChar(500), changeSummary)
+                        .input('VChangeNote', sql.NVarChar(500), body.changeNote || null)
+                        .input('VChangedBy', sql.Int, session.userId)
+                        .input('VChangedByName', sql.NVarChar(100), session.fullName || session.username || null)
+                        .query(`
+                            INSERT INTO ReportVersions 
+                                (ReportId, VersionNumber, ReportName, Description, ReportType, TSqlQuery, EmailTemplateContent, IsPublic, IsActive, IsHeavy, CategoryId, ParametersJson, ChangeSummary, ChangeNote, ChangedBy, ChangedByName)
+                            VALUES 
+                                (@VReportId2, @VersionNumber, @VReportName, @VDescription, @VReportType, @VTSqlQuery, @VEmailTemplate, @VIsPublic, @VIsActive, @VIsHeavy, @VCategoryId, @VParametersJson, @VChangeSummary, @VChangeNote, @VChangedBy, @VChangedByName)
+                        `);
+                } catch (e) { console.warn('Version snapshot failed (non-blocking):', e.message); }
+            }
+
             // 1. Update Report
             const reportQuery = `
                 UPDATE Reports 

@@ -226,6 +226,14 @@ ReportType INT (1=Standard, 2=Template), TSqlQuery NVARCHAR(MAX),
 EmailTemplateContent NVARCHAR(MAX), IsPublic BIT, IsActive BIT,
 CategoryId INT NULL FK → ReportCategories (auto-migrated)
 
+-- ReportVersions (auto-created on first report edit)
+VersionId INT PK IDENTITY, ReportId INT FK, VersionNumber INT,
+ReportName NVARCHAR(200), Description NVARCHAR(500), ReportType INT, 
+TSqlQuery NVARCHAR(MAX), EmailTemplateContent NVARCHAR(MAX),
+IsPublic BIT, IsActive BIT, IsHeavy BIT, CategoryId INT,
+ParametersJson NVARCHAR(MAX), ChangeSummary NVARCHAR(500), ChangeNote NVARCHAR(500),
+ChangedBy INT, ChangedByName NVARCHAR(100), CreatedAt DATETIME
+
 -- ReportParameters
 ParameterId INT PK IDENTITY, ReportId INT FK, ParameterName NVARCHAR(50),
 DisplayLabel NVARCHAR(100), InputType NVARCHAR(20), DropdownQuery NVARCHAR(MAX) NULL,
@@ -292,7 +300,9 @@ CreatedAt DATETIME DEFAULT GETDATE()
 | GET    | `/api/admin/reports`         | List all reports                  |
 | POST   | `/api/admin/reports`         | Create report + params            |
 | GET    | `/api/admin/reports/[id]`    | Get single report + roles         |
-| PUT    | `/api/admin/reports/[id]`    | Update report + roles             |
+| PUT    | `/api/admin/reports/[id]`    | Update report + roles (auto-creates version snapshot) |
+| GET    | `/api/admin/reports/[id]/versions` | Get version history / single snapshot |
+| POST   | `/api/admin/reports/[id]/versions` | Rollback report to a specific version |
 | DELETE | `/api/admin/reports/[id]`    | **Hard-delete** (removes params + roles + favorites + report) |
 | PATCH  | `/api/admin/reports/[id]`    | Toggle IsActive (enable/disable)  |
 | GET    | `/api/admin/users`           | List users + roles + allowedCompanies + AD info |
@@ -798,6 +808,7 @@ npm run test:watch
 - [x] Dashboard charts (usage per day + top reports + active users)
 - [x] Job History page (re-download within 24h, auto-refresh)
 - [x] Bulk actions for admin (reports bulk delete + users bulk toggle)
+- [x] Report Version Control (auto-snapshot, history tab, diff compare, rollback)
 - [x] Schedule failure notifications (auto-notify admin users)
 - [x] Report authorization — ReportRoleMapping enforced on all execute/parameter APIs
 - [x] Security hardening — admin checks, no hardcoded secrets, error hiding, input validation
