@@ -1,7 +1,7 @@
 # ReportCenter — Developer Handoff
 
-> **Version:** 10.1  
-> **Last Updated:** 2026-03-13  
+> **Version:** 10.2
+> **Last Updated:** 2026-08-14
 > **Tech Stack:** Next.js 16.1.6 + React 19 + Tailwind CSS 4 + MSSQL (mssql driver) + Microsoft Graph API (OAuth2) / Nodemailer (SMTP fallback) + @azure/msal-node
 
 ---
@@ -12,7 +12,7 @@
 # Install dependencies
 npm install
 
-# Development server (http://localhost:3000)
+# Development server (http://localhost:4000)
 npm run dev
 
 # Production build
@@ -57,7 +57,7 @@ reportcenter/
 │   │   │   │   ├── schedules/page.tsx    # Scheduled Reports (create/edit/toggle/delete + IsHeavy warning badge)
 │   │   │   │   └── settings/page.tsx     # System Settings
 │   │   │   └── reports/
-│   │   │       ├── standard/page.tsx     # Standard report viewer (★ favorites + category chips + export progress overlay + empty state + IsHeavy guard + direct Background Export button)
+│   │   │       ├── standard/page.tsx     # Standard report viewer (★ favorites + searchable category-grouped combobox + export progress + IsHeavy guard/background export)
 │   │   │       ├── templates/page.tsx    # Email template report viewer (★ favorites + empty state + IsHeavy guard)
 │   │   │       └── job-history/page.tsx  # Background job history (cancel button + elapsed time + auto-refresh)
 │   │   └── api/                          # API Routes (all .js)
@@ -109,6 +109,7 @@ reportcenter/
 │   │   │   └── IdleTimeoutProvider.tsx   # Session idle timeout detection + warning modal
 │   │   ├── ErrorBoundary.tsx             # Global error boundary
 │   │   ├── Skeletons.tsx                 # Reusable loading skeletons
+│   │   ├── ReportSelector.tsx             # Accessible searchable combobox grouped by report category
 │   │   ├── TypeaheadInput.tsx            # Debounced server-side search input (for parameters with LookupQuery)
 │   │   └── TemplateEditor.tsx            # Click-to-Insert email template editor
 │   ├── lib/
@@ -117,6 +118,7 @@ reportcenter/
 │   │   ├── email.js                      # Email sender (Microsoft Graph API primary + SMTP password fallback)
 │   │   ├── ldap.js                       # LDAP/AD integration (bind, lookup, search with person-only filter)
 │   │   ├── sql-validator.js              # SQL query security validator (blocklist DML/DDL/metadata/procs)
+│   │   ├── report-selector.ts             # Pure report filtering/grouping/keyboard navigation helpers
 │   │   └── dateUtils.ts                  # Date/time utilities (Asia/Bangkok, 24h)
 │   └── middleware.ts                     # Route protection (JWT check)
 ├── scripts/
@@ -739,17 +741,29 @@ curl http://localhost:4000/api/cron/execute-schedules?secret=rc-cron-secret-2026
 - `loading.tsx` × 4 หน้า: dashboard, standard reports, admin/reports, admin/users
 - Pulse animation + dark mode support
 
+### Standard Report Selector
+- `/reports/standard` ใช้ `ReportSelector.tsx` เป็น searchable combobox เดียว แทน category chips + search input + native select แบบเดิม
+- ค้นหาแบบ case-insensitive จากชื่อรายงาน คำอธิบาย และหมวดหมู่
+- Dropdown แบ่งกลุ่มด้วยหัวหมวดสีฟ้าแบบ sticky พร้อมจำนวนรายงาน; หมวด `อื่น ๆ` อยู่ท้ายรายการ
+- แต่ละแถวแสดงไอคอนเอกสาร ชื่อรายงาน และคำอธิบาย; รายงานที่เลือกใช้พื้นหลังสีฟ้าโดยไม่มี checkbox/checkmark
+- แสดง badge `ข้อมูลขนาดใหญ่` เฉพาะรายงานที่ `IsHeavy=true`; ไม่มี badge `STD`
+- หลังเลือกแล้ว ช่องหลักแสดงเฉพาะชื่อรายงาน ส่วนหมวดหมู่และคำอธิบายแสดงเป็นข้อมูลรองด้านล่าง
+- รองรับ Arrow Up/Down, Enter, Escape, clear selection และ combobox/listbox ARIA semantics
+- Favorite shortcuts และ favorite persistence ใช้ flow/API เดิม
+- Logic ที่ทดสอบได้แยกอยู่ใน `src/lib/report-selector.ts`
+
 ### Automated Tests (Vitest)
-- `npm run test` → `vitest run` (103 tests)
+- `npm run test` → `vitest run` (114 passing, 1 todo)
 - `npm run test:watch` → watch mode
 - Test files:
   - `src/lib/__tests__/auth.test.js` (5) — JWT sign/verify, cookie name
   - `src/lib/__tests__/password-rules.test.js` (10) — complexity rules validation
   - `src/lib/__tests__/db.test.js` (5) — connection pool
   - `src/lib/__tests__/sql-validator.test.js` (56) — DML/DDL blocking, metadata access, stored procs, remote sources, bypass prevention, edge cases
+  - `src/lib/__tests__/report-selector.test.ts` (11) — name/description/category search, grouping/sorting, fallback category, keyboard index wrapping
   - `src/app/api/auth/login/__tests__/route.test.js` (9) — validation, rate limiting, auth flow, password check, session
   - `src/app/api/reports/execute/__tests__/route.test.js` (10) — SQL validator enforcement, session auth, role mapping, report execution
-  - `src/app/api/admin/reports/__tests__/route.test.js` (8) — admin authorization, validation, GET list, error handling
+  - `src/app/api/admin/reports/__tests__/route.test.js` (9, 1 todo) — admin authorization, validation, GET list, error handling
 
 ---
 
@@ -786,7 +800,7 @@ npm run test:watch
 - [x] Email notification integration (Microsoft Graph API + SMTP fallback)
 - [x] Report Favorites (star/pin reports)
 - [x] Export Excel on Standard + Template report pages
-- [x] Search/Filter for report dropdown (by name + description)
+- [x] Searchable grouped report selector (name + description + category, keyboard navigation, mobile responsive)
 - [x] Server-side pagination (OFFSET/FETCH + totalRows count + ORDER BY handling)
 - [x] Email via Azure AD MSAL → Microsoft Graph API (`src/lib/email.js`)
 - [x] Dashboard schedule status card (active/failed/nextRun)
