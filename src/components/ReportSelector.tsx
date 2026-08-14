@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
-import { Check, ChevronDown, FileText, Loader2, Search, Star, Tag, X } from 'lucide-react';
+import { ChevronDown, FileText, Loader2, Search, Star, Tag, X } from 'lucide-react';
 import {
     filterReports,
     getNextActiveIndex,
@@ -210,8 +210,17 @@ export default function ReportSelector({
                                                         onMouseEnter={() => setActiveIndex(reportIndex)}
                                                         onMouseDown={(event) => event.preventDefault()}
                                                         onClick={() => selectReport(report)}
-                                                        className={`group flex cursor-pointer items-start gap-3 px-3 py-3 transition-colors ${isActive ? 'bg-blue-50' : 'hover:bg-slate-50'}`}
+                                                        className={`group flex cursor-pointer items-start gap-3 border-b border-slate-100 px-3 py-3 transition-colors last:border-b-0 ${isActive
+                                                            ? 'bg-blue-100'
+                                                            : isSelected
+                                                                ? 'bg-blue-50'
+                                                                : 'hover:bg-slate-50'
+                                                            }`}
                                                     >
+                                                        <FileText
+                                                            className={`mt-0.5 h-4 w-4 shrink-0 ${isSelected ? 'text-blue-600' : 'text-slate-400'}`}
+                                                            aria-hidden="true"
+                                                        />
                                                         <div className="min-w-0 flex-1">
                                                             <div className="flex min-w-0 items-center gap-2">
                                                                 <span className={`truncate text-sm font-medium ${isSelected ? 'text-blue-700' : 'text-slate-800'}`}>
@@ -228,9 +237,6 @@ export default function ReportSelector({
                                                                     {report.Description}
                                                                 </p>
                                                             )}
-                                                        </div>
-                                                        <div className="flex shrink-0 items-center pt-0.5">
-                                                            {isSelected && <Check className="h-4 w-4 text-blue-600" aria-hidden="true" />}
                                                         </div>
                                                     </div>
                                                 );

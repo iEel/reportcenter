@@ -50,7 +50,10 @@ Replace the separate search input and native `<select>` with one searchable comb
 
 - Preserve the current ReportCenter visual system: slate surfaces, blue focus and selected states, rounded-lg controls, subtle borders, and compact enterprise spacing.
 - Increase the selector width from `max-w-sm` to a practical desktop width while keeping it full-width on narrow screens.
-- Each option uses a two-level hierarchy: report name first, description second, with category as a small badge.
+- Follow the report-permission list language from `/admin/roles`: each category uses a clear sticky blue-tinted header with its report count, and each report row uses the shared document icon, report name, and optional description.
+- A selected report row is communicated by its blue background and text treatment only; do not add a checkbox or checkmark because this is a single-select control.
+- Do not show a generic `STD` badge. Show only the existing `ข้อมูลขนาดใหญ่` badge when `IsHeavy` is true.
+- Outside the dropdown, keep the selected category as a clearly labelled badge and the description as supporting text on the next line.
 - Avoid introducing a new UI library or a new visual language.
 
 ## Component Boundary
