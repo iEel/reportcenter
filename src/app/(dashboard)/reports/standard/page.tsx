@@ -1,11 +1,12 @@
 "use client"
 
-import { Search, Filter, Download, FileText, ChevronDown, ChevronLeft, ChevronRight, RefreshCw, Loader2, AlertCircle, Star, Tag, BarChart3, Calendar, Play, ArrowRight, Send } from "lucide-react";
+import { Search, Filter, Download, FileText, ChevronLeft, ChevronRight, RefreshCw, Loader2, AlertCircle, Star, BarChart3, Calendar, Play, ArrowRight, Send } from "lucide-react";
 import { useState, useEffect, useRef } from "react";
 import * as xlsx from 'xlsx';
 import { useAuth } from "@/components/providers/AuthProvider";
 import { useToast } from "@/components/providers/ToastProvider";
 import TypeaheadInput from "@/components/TypeaheadInput";
+import ReportSelector from "@/components/ReportSelector";
 import { formatDate } from '@/lib/dateUtils';
 
 export default function StandardReportPage() {
@@ -38,10 +39,6 @@ export default function StandardReportPage() {
 
     // Favorites
     const [favoriteIds, setFavoriteIds] = useState<number[]>([]);
-
-    // Search & Category filter
-    const [searchQuery, setSearchQuery] = useState('');
-    const [selectedCategory, setSelectedCategory] = useState('');
 
     // Background Job state
     const [activeJob, setActiveJob] = useState<{ jobId: number; status: string; rowCount?: number; fileName?: string; error?: string } | null>(null);
@@ -444,95 +441,17 @@ export default function StandardReportPage() {
                     </div>
                 )}
 
-                {/* Category Filter Chips */}
-                {(() => {
-                    const cats = reports.reduce((acc: Record<string, { name: string; color: string; count: number }>, r: any) => {
-                        if (r.CategoryName) {
-                            if (!acc[r.CategoryName]) acc[r.CategoryName] = { name: r.CategoryName, color: r.CategoryColor || 'slate', count: 0 };
-                            acc[r.CategoryName].count++;
-                        }
-                        return acc;
-                    }, {} as Record<string, { name: string; color: string; count: number }>);
-                    const catList = Object.values(cats) as { name: string; color: string; count: number }[];
-                    if (catList.length === 0) return null;
-                    return (
-                        <div className="flex flex-wrap gap-2 mb-5">
-                            <button
-                                onClick={() => setSelectedCategory('')}
-                                className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold border transition-all ${selectedCategory === ''
-                                    ? 'bg-slate-900 text-white border-slate-900 shadow-md'
-                                    : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
-                                    }`}
-                            >
-                                ทั้งหมด ({reports.length})
-                            </button>
-                            {catList.map(cat => (
-                                <button
-                                    key={cat.name}
-                                    onClick={() => setSelectedCategory(cat.name)}
-                                    className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold border transition-all ${selectedCategory === cat.name
-                                        ? 'bg-slate-900 text-white border-slate-900 shadow-md'
-                                        : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
-                                        }`}
-                                >
-                                    <Tag className="w-3 h-3" />
-                                    {cat.name} ({cat.count})
-                                </button>
-                            ))}
-                        </div>
-                    );
-                })()}
-
                 <div className="flex flex-col md:flex-row md:items-end gap-6 justify-between">
-                    <div className="w-full max-w-sm">
-                        <label className="text-sm font-semibold text-slate-700 mb-2 flex items-center gap-2">
-                            <FileText className="w-4 h-4 text-blue-500" />
-                            เลือกรายงานมาตรฐาน
-                            {isLoadingReports && <RefreshCw className="w-3 h-3 animate-spin text-slate-400" />}
-                        </label>
-                        <div className="relative mb-2">
-                            <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-                            <input
-                                type="text"
-                                value={searchQuery}
-                                onChange={e => setSearchQuery(e.target.value)}
-                                placeholder="ค้นหารายงาน..."
-                                className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
-                            />
-                        </div>
-                        <div className="flex gap-2">
-                            <div className="relative flex-1">
-                                <select
-                                    value={selectedReportId}
-                                    onChange={e => setSelectedReportId(e.target.value)}
-                                    disabled={isLoadingReports || isExecuting}
-                                    className="appearance-none w-full bg-slate-50 border border-slate-200 text-slate-900 py-2.5 pl-4 pr-10 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 font-medium disabled:opacity-60"
-                                >
-                                    <option value="">-- กรุณาเลือกรายงาน --</option>
-                                    {reports.filter(r => {
-                                        if (selectedCategory && r.CategoryName !== selectedCategory) return false;
-                                        if (!searchQuery) return true;
-                                        const q = searchQuery.toLowerCase();
-                                        return r.ReportName?.toLowerCase().includes(q) || r.Description?.toLowerCase().includes(q);
-                                    }).map(r => (
-                                        <option key={r.ReportId} value={r.ReportId}>{r.ReportName} {r.Description ? `(${r.Description})` : ''}</option>
-                                    ))}
-                                </select>
-                                <ChevronDown className="w-5 h-5 absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
-                            </div>
-                            {selectedReportId && (
-                                <button
-                                    onClick={() => toggleFavorite(parseInt(selectedReportId))}
-                                    className={`p-2.5 rounded-lg border transition-all ${favoriteIds.includes(parseInt(selectedReportId))
-                                        ? 'bg-amber-50 border-amber-200 text-amber-500 hover:bg-amber-100'
-                                        : 'bg-white border-slate-200 text-slate-400 hover:bg-slate-50 hover:text-amber-500'
-                                        }`}
-                                    title={favoriteIds.includes(parseInt(selectedReportId)) ? 'นำออกจากรายการโปรด' : 'เพิ่มลงรายการโปรด'}
-                                >
-                                    <Star className={`w-5 h-5 ${favoriteIds.includes(parseInt(selectedReportId)) ? 'fill-amber-500' : ''}`} />
-                                </button>
-                            )}
-                        </div>
+                    <div className="w-full max-w-2xl">
+                        <ReportSelector
+                            reports={reports}
+                            selectedReportId={selectedReportId}
+                            favoriteIds={favoriteIds}
+                            isLoading={isLoadingReports}
+                            disabled={isExecuting}
+                            onSelect={setSelectedReportId}
+                            onToggleFavorite={toggleFavorite}
+                        />
                     </div>
                 </div>
 
