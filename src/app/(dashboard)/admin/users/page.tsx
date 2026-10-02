@@ -1,9 +1,101 @@
 "use client"
 
-import { useState, useEffect, useRef } from "react";
-import { Plus, Search, Edit, Shield, User, Building, RefreshCw, X, Save, Loader2, Check, Eye, EyeOff, UserCheck, UserX, Trash2, KeyRound, ChevronLeft, ChevronRight, Link2, Search as SearchIcon, XCircle, CloudCog } from "lucide-react";
+import { useState, useEffect, useRef, useCallback, useId, type KeyboardEvent } from "react";
+import { Plus, Search, Edit, Shield, User, Building, RefreshCw, Save, Loader2, Eye, EyeOff, Trash2, KeyRound, ChevronLeft, ChevronRight, ChevronDown, Check, FileText, CloudCog } from "lucide-react";
 import { useToast } from "@/components/providers/ToastProvider";
 import { useConfirm } from "@/components/providers/ConfirmProvider";
+import { useAuth } from "@/components/providers/AuthProvider";
+import AccessibleDialog from "@/components/ui/AccessibleDialog";
+import useUnsavedChanges from "@/hooks/useUnsavedChanges";
+import { getUserAccessSummary, hasUserDraftChanges, isAdAccount, isCurrentUser, type UserAccessRole, type UserAccessReport, type UserAccessCompany } from "@/lib/user-access";
+
+interface ManagedUser {
+    UserId: number; Username: string; FullName: string; RoleId: number | null;
+    RoleName?: string; CompanyId: number | null; IsActive: boolean;
+    AuthType?: string; allowedCompanies: number[]; Email?: string; EmployeeId?: string;
+    ADCompany?: string; Department?: string; Branch?: string;
+}
+interface AdUser {
+    username: string; fullName?: string; email?: string; employeeId?: string;
+    company?: string; department?: string; branch?: string;
+}
+interface Company extends UserAccessCompany { color: string; }
+interface RoleOption extends UserAccessRole { activeReportCount: number | null; }
+const inputClass = "w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-slate-100 disabled:text-slate-500 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 dark:disabled:bg-slate-700";
+const labelClass = "mb-1.5 block text-sm font-medium text-slate-700 dark:text-slate-200";
+const secondaryButton = "inline-flex items-center justify-center gap-2 rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100 focus-visible:outline-2 focus-visible:outline-blue-500 disabled:opacity-50 dark:border-slate-600 dark:text-slate-200 dark:hover:bg-slate-700";
+const primaryButton = "inline-flex items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-500 disabled:opacity-50";
+
+function UserRoleSelector({ id, value, options, onChange, disabled }: {
+    id: string; value: string; options: RoleOption[]; onChange: (value: string) => void; disabled: boolean;
+}) {
+    const [open, setOpen] = useState(false);
+    const [query, setQuery] = useState('');
+    const [activeIndex, setActiveIndex] = useState(-1);
+    const inputRef = useRef<HTMLInputElement>(null);
+    const rootRef = useRef<HTMLDivElement>(null);
+    const listId = useId();
+    const selected = options.find(option => String(option.RoleId) === value);
+    const filtered = options.filter(option => option.RoleName.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase()));
+    const active = filtered[activeIndex];
+    const isOpen = open && !disabled;
+    const close = () => { setOpen(false); setQuery(''); setActiveIndex(-1); };
+    const openList = () => {
+        if (disabled || isOpen) return;
+        setQuery('');
+        setActiveIndex(Math.max(0, options.findIndex(option => String(option.RoleId) === value)));
+        setOpen(true);
+    };
+    const selectRole = (option: RoleOption) => {
+        onChange(String(option.RoleId));
+        close();
+        inputRef.current?.focus();
+    };
+
+    useEffect(() => {
+        if (!isOpen) return;
+        const outside = (event: PointerEvent) => {
+            if (!rootRef.current?.contains(event.target as Node)) {
+                setOpen(false); setQuery(''); setActiveIndex(-1);
+            }
+        };
+        document.addEventListener('pointerdown', outside);
+        return () => document.removeEventListener('pointerdown', outside);
+    }, [isOpen]);
+
+    useEffect(() => {
+        if (isOpen && active) document.getElementById(`${listId}-${active.RoleId}`)?.scrollIntoView({ block: 'nearest' });
+    }, [isOpen, active, listId]);
+
+    const onKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
+        if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+            event.preventDefault();
+            if (!isOpen) openList();
+            else setActiveIndex(current => filtered.length ? (current + (event.key === 'ArrowDown' ? 1 : -1) + filtered.length) % filtered.length : -1);
+        } else if (isOpen && (event.key === 'Home' || event.key === 'End')) {
+            event.preventDefault(); setActiveIndex(event.key === 'Home' ? 0 : filtered.length - 1);
+        } else if (isOpen && event.key === 'Enter') {
+            event.preventDefault(); if (active) selectRole(active);
+        } else if (isOpen && event.key === 'Escape') {
+            event.preventDefault(); event.stopPropagation(); close();
+        } else if (event.key === 'Tab') close();
+    };
+
+    return <div ref={rootRef} className="relative min-w-0" onBlur={event => { if (!event.currentTarget.contains(event.relatedTarget)) close(); }}>
+        <div className="relative">
+            <Search aria-hidden="true" className="pointer-events-none absolute left-3 top-3 h-4 w-4 text-slate-400" />
+            <input ref={inputRef} id={id} role="combobox" aria-autocomplete="list" aria-expanded={isOpen} aria-controls={listId} aria-activedescendant={isOpen && active ? `${listId}-${active.RoleId}` : undefined} aria-describedby="user-role-hint" disabled={disabled} autoComplete="off" value={isOpen ? query : selected?.RoleName || ''} placeholder={isOpen ? 'ค้นหากลุ่มสิทธิ์...' : 'เลือกกลุ่มสิทธิ์'} onFocus={openList} onClick={openList} onChange={event => { setQuery(event.target.value); setOpen(true); setActiveIndex(0); }} onKeyDown={onKeyDown} className={`${inputClass} pl-9 pr-9`} />
+            <ChevronDown aria-hidden="true" className={`pointer-events-none absolute right-3 top-3 h-4 w-4 text-slate-400 ${isOpen ? 'rotate-180' : ''}`} />
+        </div>
+        {isOpen && <div id={listId} role="listbox" aria-label="กลุ่มสิทธิ์" className="absolute inset-x-0 z-20 mt-1 max-h-60 overflow-y-auto rounded-xl border border-slate-200 bg-white p-1 shadow-lg dark:border-slate-600 dark:bg-slate-800">
+            {filtered.length === 0 ? <p role="status" className="px-3 py-5 text-center text-sm text-slate-500 dark:text-slate-400">ไม่พบกลุ่มสิทธิ์</p> : filtered.map((option, index) => <div key={option.RoleId} id={`${listId}-${option.RoleId}`} role="option" aria-selected={String(option.RoleId) === value} onMouseEnter={() => setActiveIndex(index)} onMouseDown={event => event.preventDefault()} onClick={() => selectRole(option)} className={`flex cursor-pointer items-center gap-3 rounded-lg px-3 py-2.5 ${index === activeIndex ? 'bg-blue-100 text-blue-900 dark:bg-blue-900/50 dark:text-blue-100' : 'text-slate-800 hover:bg-slate-50 dark:text-slate-100 dark:hover:bg-slate-700'}`}>
+                <span aria-hidden="true" className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-xs font-semibold text-slate-600 dark:bg-slate-700 dark:text-slate-200">{option.RoleName.toLowerCase() === 'admin' ? <Shield className="h-4 w-4" /> : option.RoleName.slice(0, 2).toUpperCase()}</span>
+                <span className="min-w-0 flex-1"><span className="block truncate text-sm font-medium">{option.RoleName}</span><span className="block text-xs text-slate-500 dark:text-slate-400">{option.activeReportCount === null ? 'ยังโหลดจำนวนรายงานไม่ได้' : `${option.activeReportCount} รายงานที่ใช้งาน`}{option.RoleName.toLowerCase() === 'admin' ? ' · ทุกรายงาน' : ''}</span></span>
+                {String(option.RoleId) === value && <Check aria-hidden="true" className="h-4 w-4 shrink-0 text-blue-600 dark:text-blue-300" />}
+            </div>)}
+        </div>}
+    </div>;
+}
 
 const COMPANY_COLORS = ['blue', 'emerald', 'purple', 'amber', 'cyan', 'rose'];
 
@@ -28,14 +120,18 @@ const avatarColors = [
 export default function AdminUsersPage() {
     const { toast } = useToast();
     const { confirm } = useConfirm();
-    const [users, setUsers] = useState<any[]>([]);
-    const [roles, setRoles] = useState<any[]>([]);
-    const [companies, setCompanies] = useState<any[]>([]);
+    const { user: signedInUser } = useAuth();
+    const [users, setUsers] = useState<ManagedUser[]>([]);
+    const [roles, setRoles] = useState<UserAccessRole[]>([]);
+    const [companies, setCompanies] = useState<Company[]>([]);
+    const [allReports, setAllReports] = useState<UserAccessReport[] | null>(null);
+    const [companyLoadError, setCompanyLoadError] = useState(false);
     const [isLoading, setIsLoading] = useState(true);
     const [isSyncing, setIsSyncing] = useState(false);
     const [searchQuery, setSearchQuery] = useState('');
     const [filterRole, setFilterRole] = useState('');
     const [filterStatus, setFilterStatus] = useState('');
+    const [filterKind, setFilterKind] = useState('');
     const [currentPage, setCurrentPage] = useState(1);
     const perPage = 10;
 
@@ -44,23 +140,24 @@ export default function AdminUsersPage() {
     const [isSaving, setIsSaving] = useState(false);
     const [editMode, setEditMode] = useState(false);
     const [showPassword, setShowPassword] = useState(false);
+    const [isRolePreviewOpen, setIsRolePreviewOpen] = useState(false);
 
     // Reset Password Modal
     const [isResetPwOpen, setIsResetPwOpen] = useState(false);
-    const [resetPwUser, setResetPwUser] = useState<any>(null);
+    const [resetPwUser, setResetPwUser] = useState<ManagedUser | null>(null);
     const [resetPwValue, setResetPwValue] = useState('');
     const [showResetPw, setShowResetPw] = useState(false);
     const [isResetting, setIsResetting] = useState(false);
 
     const [formData, setFormData] = useState({
-        UserId: '',
+        UserId: '' as string | number,
         Username: '',
         PasswordHash: '',
         FullName: '',
         CompanyId: '',
         RoleId: '',
         IsActive: true,
-        allowedCompanies: [1, 2, 3] as number[],
+        allowedCompanies: [] as number[],
         AuthType: 'local',
         Email: '',
         EmployeeId: '',
@@ -73,63 +170,110 @@ export default function AdminUsersPage() {
     const [isAdUser, setIsAdUser] = useState(false);
     const [isLookingUp, setIsLookingUp] = useState(false);
     const [adLookupError, setAdLookupError] = useState('');
-    const [adSuggestions, setAdSuggestions] = useState<any[]>([]);
+    const [adSuggestions, setAdSuggestions] = useState<AdUser[]>([]);
     const [isSearching, setIsSearching] = useState(false);
     const [showSuggestions, setShowSuggestions] = useState(false);
     const searchTimerRef = useRef<NodeJS.Timeout | null>(null);
 
-    const fetchUsersAndRoles = async () => {
+    const initialFormRef = useRef<typeof formData | null>(null);
+    const formDirty = isModalOpen && initialFormRef.current !== null && hasUserDraftChanges(initialFormRef.current, formData);
+    const { confirmDiscard } = useUnsavedChanges(formDirty || (isResetPwOpen && resetPwValue.length > 0));
+    const accessSummary = getUserAccessSummary(formData.RoleId, formData.allowedCompanies, roles, allReports, companies);
+    const editingSelf = editMode && isCurrentUser(formData.UserId, signedInUser?.userId);
+    const roleOptions = roles.map(role => ({
+        ...role,
+        activeReportCount: getUserAccessSummary(role.RoleId, [], roles, allReports, []).activeReportCount,
+    }));
+    const selectedRoleReports = new Set(roles.find(role => String(role.RoleId) === formData.RoleId)?.assignedReports ?? []);
+    const rolePreviewReports = (allReports ?? []).filter(report =>
+        report.IsActive !== false && report.IsActive !== 0 && (accessSummary.isAdmin || selectedRoleReports.has(report.ReportId)));
+
+    const fetchUsersAndRoles = useCallback(async () => {
         setIsLoading(true);
-        try {
-            const res = await fetch('/api/admin/users');
-            const data = await res.json();
-            if (data.success) {
+        const results = await Promise.allSettled([
+            fetch('/api/admin/users').then(async response => {
+                const data = await response.json();
+                if (!response.ok || !data.success) throw new Error('users');
                 setUsers(data.users);
-                setRoles(data.roles);
-            }
-        } catch (error) {
-            console.error("Error fetching users:", error);
-            toast('ไม่สามารถโหลดข้อมูลได้', 'error');
-        } finally {
-            setIsLoading(false);
+                return data.roles as UserAccessRole[];
+            }),
+            fetch('/api/admin/roles').then(async response => {
+                const data = await response.json();
+                if (!response.ok || !data.success) throw new Error('roles');
+                return { roles: data.roles as UserAccessRole[], allReports: data.allReports as UserAccessReport[] };
+            }),
+            fetch('/api/companies').then(async response => {
+                const data = await response.json();
+                if (!response.ok || !data.success) throw new Error('companies');
+                setCompanies(data.companies.map((company: { companyId: number; label: string; name: string }, index: number) => ({
+                    id: company.companyId, name: company.name, code: company.label,
+                    color: COMPANY_COLORS[index % COMPANY_COLORS.length],
+                })));
+                setCompanyLoadError(false);
+            }),
+        ]);
+        if (results[0].status === 'rejected') toast('ไม่สามารถโหลดข้อมูลผู้ใช้ได้ กรุณาลองใหม่', 'error');
+        if (results[1].status === 'fulfilled') {
+            setRoles(results[1].value.roles);
+            setAllReports(results[1].value.allReports);
+        } else {
+            if (results[0].status === 'fulfilled') setRoles(results[0].value);
+            setAllReports(null);
+            toast('ไม่สามารถโหลดจำนวนรายงานของกลุ่มสิทธิ์ได้', 'error');
         }
-    };
+        if (results[2].status === 'rejected') {
+            setCompanyLoadError(true);
+            toast('ไม่สามารถโหลดรายชื่อบริษัทได้ กรุณาลองใหม่', 'error');
+        }
+        setIsLoading(false);
+    }, [toast]);
 
     useEffect(() => {
-        fetchUsersAndRoles();
-        fetch('/api/companies').then(r => r.json()).then(d => {
-            if (d.success) setCompanies(d.companies.map((c: any, i: number) => ({
-                id: c.companyId, name: c.name, short: c.label, color: COMPANY_COLORS[i % COMPANY_COLORS.length],
-            })));
-        }).catch(() => { });
-    }, []);
+        void fetchUsersAndRoles();
+        return () => { if (searchTimerRef.current) clearTimeout(searchTimerRef.current); };
+    }, [fetchUsersAndRoles]);
+
+    const closeUserForm = async () => {
+        if (isSaving || !(await confirmDiscard())) return;
+        if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
+        setIsRolePreviewOpen(false);
+        setIsModalOpen(false);
+        setShowSuggestions(false);
+    };
+    const closeResetPassword = async () => {
+        if (!isResetting && await confirmDiscard()) setIsResetPwOpen(false);
+    };
 
     const handleOpenAddModal = () => {
+        setIsRolePreviewOpen(false);
         setEditMode(false);
         setShowPassword(false);
         setIsAdUser(false);
         setAdLookupError('');
         setAdSuggestions([]);
         setShowSuggestions(false);
-        setFormData({
+        const nextForm = {
             UserId: '', Username: '', PasswordHash: '',
             FullName: '', CompanyId: '', RoleId: '',
-            IsActive: true, allowedCompanies: [1, 2, 3],
+            IsActive: true, allowedCompanies: [1, 2, 3].filter(id => companies.some(company => company.id === id)),
             AuthType: 'local', Email: '', EmployeeId: '',
             ADCompany: '', Department: '', Branch: '',
-        });
+        };
+        setFormData(nextForm);
+        initialFormRef.current = nextForm;
         setIsModalOpen(true);
     };
 
-    const handleOpenEditModal = (user: any) => {
+    const handleOpenEditModal = (user: ManagedUser) => {
+        setIsRolePreviewOpen(false);
         setEditMode(true);
         setShowPassword(false);
-        const isAd = (user.AuthType || 'local').toLowerCase() === 'ldap';
+        const isAd = isAdAccount(user.AuthType);
         setIsAdUser(isAd);
         setAdLookupError('');
         setAdSuggestions([]);
         setShowSuggestions(false);
-        setFormData({
+        const nextForm = {
             UserId: user.UserId,
             Username: user.Username,
             PasswordHash: '',
@@ -144,7 +288,9 @@ export default function AdminUsersPage() {
             ADCompany: user.ADCompany || '',
             Department: user.Department || '',
             Branch: user.Branch || '',
-        });
+        };
+        setFormData(nextForm);
+        initialFormRef.current = nextForm;
         setIsModalOpen(true);
     };
 
@@ -222,7 +368,7 @@ export default function AdminUsersPage() {
         }, 300);
     };
 
-    const handleSelectAdUser = (user: any) => {
+    const handleSelectAdUser = (user: AdUser) => {
         setFormData(prev => ({
             ...prev,
             Username: user.username,
@@ -239,6 +385,7 @@ export default function AdminUsersPage() {
     };
 
     const handleSaveUser = async () => {
+        if (isSaving || companyLoadError) return;
         if (!formData.FullName.trim()) {
             toast('กรุณากรอกชื่อ-นามสกุล', 'error');
             return;
@@ -248,7 +395,7 @@ export default function AdminUsersPage() {
             return;
         }
         if (!formData.RoleId) {
-            toast('กรุณาเลือกสิทธิ์การใช้งาน (Role)', 'error');
+            toast('กรุณาเลือกกลุ่มสิทธิ์', 'error');
             return;
         }
         if (formData.allowedCompanies.length === 0) {
@@ -266,19 +413,21 @@ export default function AdminUsersPage() {
             const data = await res.json();
             if (data.success) {
                 toast(editMode ? 'อัปเดตข้อมูลผู้ใช้สำเร็จ' : 'เพิ่มผู้ใช้ใหม่สำเร็จ', 'success');
+                setIsRolePreviewOpen(false);
                 setIsModalOpen(false);
                 fetchUsersAndRoles();
             } else {
                 toast('เกิดข้อผิดพลาด: ' + data.message, 'error');
             }
-        } catch (error) {
+        } catch {
             toast('ไม่สามารถเชื่อมต่อกับเซิร์ฟเวอร์ได้', 'error');
         } finally {
             setIsSaving(false);
         }
     };
 
-    const handleToggleActive = async (user: any) => {
+    const handleToggleActive = async (user: ManagedUser) => {
+        if (isCurrentUser(user.UserId, signedInUser?.userId)) return;
         const action = user.IsActive ? 'ระงับ' : 'เปิดใช้งาน';
         const ok = await confirm({
             title: `${action}ผู้ใช้`,
@@ -319,7 +468,8 @@ export default function AdminUsersPage() {
         return avatarColors[idx];
     };
 
-    const handleDeleteUser = async (user: any) => {
+    const handleDeleteUser = async (user: ManagedUser) => {
+        if (isCurrentUser(user.UserId, signedInUser?.userId)) return;
         const ok = await confirm({
             title: 'ลบผู้ใช้',
             message: `คุณต้องการลบผู้ใช้ "${user.FullName}" (@${user.Username}) ออกจากระบบหรือไม่?\n\nข้อมูลการตั้งค่าและสิทธิ์ของผู้ใช้จะถูกลบทั้งหมด การกระทำนี้ไม่สามารถย้อนกลับได้`,
@@ -342,7 +492,8 @@ export default function AdminUsersPage() {
         }
     };
 
-    const handleOpenResetPw = (user: any) => {
+    const handleOpenResetPw = (user: ManagedUser) => {
+        if (isAdAccount(user.AuthType)) return;
         setResetPwUser(user);
         setResetPwValue('');
         setShowResetPw(false);
@@ -350,6 +501,7 @@ export default function AdminUsersPage() {
     };
 
     const handleResetPassword = async () => {
+        if (isResetting || !resetPwUser || isAdAccount(resetPwUser.AuthType)) return;
         if (!resetPwValue.trim()) {
             toast('กรุณากรอกรหัสผ่านใหม่', 'error');
             return;
@@ -376,7 +528,7 @@ export default function AdminUsersPage() {
     };
 
     const filteredUsers = users.filter(u => {
-        const q = searchQuery.toLowerCase();
+        const q = searchQuery.trim().toLowerCase();
         const matchSearch = u.Username?.toLowerCase().includes(q) ||
             u.FullName?.toLowerCase().includes(q) ||
             u.EmployeeId?.toLowerCase().includes(q);
@@ -384,7 +536,8 @@ export default function AdminUsersPage() {
         const matchStatus = !filterStatus ||
             (filterStatus === 'active' && u.IsActive) ||
             (filterStatus === 'inactive' && !u.IsActive);
-        return matchSearch && matchRole && matchStatus;
+        const matchKind = !filterKind || (filterKind === 'ad' ? isAdAccount(u.AuthType) : !isAdAccount(u.AuthType));
+        return matchSearch && matchRole && matchStatus && matchKind;
     });
 
     const totalPages = Math.max(1, Math.ceil(filteredUsers.length / perPage));
@@ -395,7 +548,8 @@ export default function AdminUsersPage() {
     const resetPage = () => setCurrentPage(1);
 
     const activeCount = users.filter(u => u.IsActive).length;
-    const inactiveCount = users.filter(u => u.IsActive === false).length;
+    const inactiveCount = users.length - activeCount;
+    const adCount = users.filter(user => isAdAccount(user.AuthType)).length;
 
     // AD Sync
     const handleSyncAD = async () => {
@@ -419,697 +573,140 @@ export default function AdminUsersPage() {
         }
     };
 
+    const clearFilters = () => {
+        setSearchQuery(''); setFilterRole(''); setFilterStatus(''); setFilterKind(''); resetPage();
+    };
+    const switchAccountType = (ad: boolean) => {
+        setIsAdUser(ad);
+        if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
+        setFormData(prev => ({ ...prev, AuthType: ad ? 'ldap' : 'local', Email: '', EmployeeId: '', ADCompany: '', Department: '', Branch: '', FullName: ad ? '' : prev.FullName }));
+        setAdLookupError(''); setAdSuggestions([]); setShowSuggestions(false);
+    };
+    const accessSummaryView = (
+        <section aria-label="สรุปสิทธิ์ก่อนบันทึก" aria-live="polite" className="rounded-xl border border-blue-200 bg-blue-50/60 p-4 dark:border-blue-900 dark:bg-blue-950/30">
+            <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold text-slate-900 dark:text-white"><Shield className="h-4 w-4 text-blue-600" />สรุปสิทธิ์ก่อนบันทึก</h3>
+            <dl className="grid gap-3 text-sm sm:grid-cols-3">
+                <div><dt className="text-xs text-slate-500 dark:text-slate-400">กลุ่มสิทธิ์</dt><dd className="mt-1 font-medium">{accessSummary.roleName || 'ยังไม่ได้เลือกกลุ่มสิทธิ์'}</dd></div>
+                <div><dt className="text-xs text-slate-500 dark:text-slate-400">รายงานที่ใช้งาน</dt><dd className="mt-1 font-medium">{!formData.RoleId ? 'รอเลือกกลุ่มสิทธิ์' : accessSummary.activeReportCount === null ? 'ยังโหลดจำนวนไม่ได้' : `${accessSummary.activeReportCount} รายงาน`}{accessSummary.isAdmin && <span className="block text-xs font-normal text-slate-500 dark:text-slate-400">ทุกรายงานที่ใช้งาน</span>}</dd></div>
+                <div><dt className="text-xs text-slate-500 dark:text-slate-400">บริษัทที่เข้าถึง</dt><dd className="mt-1 break-words font-medium">{accessSummary.companyCodes.join(', ') || (formData.allowedCompanies.length ? 'ยังโหลดชื่อบริษัทไม่ได้' : 'ยังไม่ได้เลือกบริษัท')}{accessSummary.unknownCompanyIds.length > 0 && <span className="block text-xs font-normal text-amber-700 dark:text-amber-300">ไม่พบข้อมูลบริษัท #{accessSummary.unknownCompanyIds.join(', #')}</span>}</dd></div>
+            </dl>
+        </section>
+    );
+
     return (
-        <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
-
-            {/* Header */}
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700">
-                <div>
-                    <h1 className="text-2xl font-bold text-slate-900 dark:text-white">จัดการผู้ใช้</h1>
-                    <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">เพิ่มลบผู้ใช้งาน และกำหนดสิทธิ์เพื่อควบคุมการเข้าถึงรายงาน</p>
+        <div className="space-y-5 text-slate-900 dark:text-slate-100">
+            <header className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
+                <div><h1 className="text-2xl font-semibold tracking-tight">ผู้ใช้</h1><p className="mt-1 text-sm text-slate-500 dark:text-slate-400">บัญชีผู้ใช้ กลุ่มสิทธิ์ และบริษัทที่เข้าถึงได้</p></div>
+                <div className="flex flex-wrap items-center gap-2">
+                    <button onClick={fetchUsersAndRoles} disabled={isLoading} className={secondaryButton} aria-label="รีเฟรชข้อมูลผู้ใช้"><RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} /></button>
+                    <button onClick={handleSyncAD} disabled={isSyncing} className={secondaryButton}>{isSyncing ? <Loader2 className="h-4 w-4 animate-spin" /> : <CloudCog className="h-4 w-4" />}{isSyncing ? 'กำลังตรวจสอบ...' : 'ตรวจสอบกับ AD'}</button>
+                    <button onClick={handleOpenAddModal} disabled={isLoading || companyLoadError} className={primaryButton}><Plus className="h-4 w-4" />เพิ่มผู้ใช้</button>
                 </div>
-                <div className="flex items-center gap-2">
-                    <button onClick={fetchUsersAndRoles} className="p-2.5 text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg transition-colors" title="รีเฟรช">
-                        <RefreshCw className={`w-5 h-5 ${isLoading ? 'animate-spin' : ''}`} />
-                    </button>
-                    <button
-                        onClick={handleSyncAD}
-                        disabled={isSyncing}
-                        className="flex items-center gap-2 px-4 py-2.5 text-sm font-medium text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-900/30 border border-amber-200 dark:border-amber-700 rounded-lg hover:bg-amber-100 dark:hover:bg-amber-900/50 transition-colors disabled:opacity-50"
-                        title="ตรวจสอบผู้ใช้ LDAP กับ Active Directory"
-                    >
-                        {isSyncing ? <Loader2 className="w-4 h-4 animate-spin" /> : <CloudCog className="w-4 h-4" />}
-                        {isSyncing ? 'กำลัง Sync...' : 'Sync AD'}
-                    </button>
-                    <button
-                        onClick={handleOpenAddModal}
-                        className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-lg active:scale-95 transition-all shadow-md shadow-blue-500/30 font-medium text-sm"
-                    >
-                        <Plus className="w-4 h-4" />
-                        เพิ่มผู้ใช้ใหม่
-                    </button>
+            </header>
+            {companyLoadError && <p role="alert" className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-200">โหลดรายชื่อบริษัทไม่สำเร็จ กรุณารีเฟรชก่อนเพิ่มหรือบันทึกผู้ใช้</p>}
+            <section className="overflow-hidden rounded-xl border border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-800">
+                <div className="grid grid-cols-1 items-center gap-3 border-b border-slate-200 p-4 sm:grid-cols-2 xl:grid-cols-[minmax(12rem,1fr)_minmax(9rem,12rem)_auto_minmax(8rem,10rem)_auto] dark:border-slate-700">
+                    <div className="relative min-w-0"><Search className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-slate-400" /><input aria-label="ค้นหาผู้ใช้" placeholder="ชื่อ, username หรือรหัสพนักงาน" value={searchQuery} onChange={event => { setSearchQuery(event.target.value); resetPage(); }} className={`${inputClass} pl-9`} /></div>
+                    <select aria-label="กรองกลุ่มสิทธิ์" value={filterRole} onChange={event => { setFilterRole(event.target.value); resetPage(); }} className={`${inputClass} min-w-0`}><option value="">ทุกกลุ่มสิทธิ์</option>{roles.map(role => <option key={role.RoleId} value={role.RoleId}>{role.RoleName}</option>)}</select>
+                    <div className="inline-flex w-fit whitespace-nowrap rounded-lg border border-slate-200 p-0.5 dark:border-slate-600" role="group" aria-label="ชนิดบัญชี">
+                        {([['', 'ทุกบัญชี', users.length], ['ad', 'AD', adCount], ['local', 'Local', users.length - adCount]] as const).map(([value, label, count]) => <button key={value} aria-pressed={filterKind === value} onClick={() => { setFilterKind(value); resetPage(); }} className={`rounded-md px-2.5 py-1.5 text-xs font-medium ${filterKind === value ? 'bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900' : 'text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-700'}`}>{label} <span className="ml-1 opacity-70">{count}</span></button>)}
+                    </div>
+                    <select aria-label="กรองสถานะผู้ใช้" value={filterStatus} onChange={event => { setFilterStatus(event.target.value); resetPage(); }} className={`${inputClass} min-w-0`}><option value="">ทุกสถานะ ({users.length})</option><option value="active">ใช้งาน ({activeCount})</option><option value="inactive">ระงับ ({inactiveCount})</option></select>
+                    {(searchQuery || filterRole || filterStatus || filterKind) && <button className="justify-self-start whitespace-nowrap text-xs text-blue-600 hover:underline dark:text-blue-400" onClick={clearFilters}>ล้างตัวกรอง</button>}
                 </div>
-            </div>
-
-            {/* Stats Cards */}
-            <div className="grid grid-cols-3 gap-4">
-                <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-100 dark:border-slate-700 p-4 flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-lg bg-blue-50 dark:bg-blue-900/30 flex items-center justify-center">
-                        <User className="w-5 h-5 text-blue-600 dark:text-blue-400" />
-                    </div>
-                    <div>
-                        <p className="text-2xl font-bold text-slate-900 dark:text-white">{users.length}</p>
-                        <p className="text-xs text-slate-500 dark:text-slate-400">ผู้ใช้ทั้งหมด</p>
-                    </div>
-                </div>
-                <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-100 dark:border-slate-700 p-4 flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-lg bg-emerald-50 dark:bg-emerald-900/30 flex items-center justify-center">
-                        <UserCheck className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
-                    </div>
-                    <div>
-                        <p className="text-2xl font-bold text-emerald-600 dark:text-emerald-400">{activeCount}</p>
-                        <p className="text-xs text-slate-500 dark:text-slate-400">ใช้งานอยู่</p>
-                    </div>
-                </div>
-                <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-100 dark:border-slate-700 p-4 flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-lg bg-slate-100 dark:bg-slate-700 flex items-center justify-center">
-                        <UserX className="w-5 h-5 text-slate-500 dark:text-slate-400" />
-                    </div>
-                    <div>
-                        <p className="text-2xl font-bold text-slate-500 dark:text-slate-400">{inactiveCount}</p>
-                        <p className="text-xs text-slate-500 dark:text-slate-400">ถูกระงับ</p>
-                    </div>
-                </div>
-            </div>
-
-            {/* Table */}
-            <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-sm rounded-2xl overflow-hidden">
-                {/* Toolbar */}
-                <div className="p-4 border-b border-slate-100 dark:border-slate-700 flex flex-wrap items-center gap-3 bg-slate-50/50 dark:bg-slate-800">
-                    <div className="relative flex-1 min-w-[200px] max-w-sm">
-                        <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-                        <input
-                            type="text"
-                            placeholder="ค้นหาชื่อผู้ใช้ / รหัสพนักงาน..."
-                            value={searchQuery}
-                            onChange={e => { setSearchQuery(e.target.value); resetPage(); }}
-                            className="w-full pl-9 pr-4 py-2 border border-slate-200 dark:border-slate-600 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors bg-white dark:bg-slate-700 dark:text-white font-medium"
-                        />
-                    </div>
-                    <select
-                        value={filterRole}
-                        onChange={e => { setFilterRole(e.target.value); resetPage(); }}
-                        className="px-3 py-2 border border-slate-200 dark:border-slate-600 rounded-lg text-sm bg-white dark:bg-slate-700 dark:text-white"
-                    >
-                        <option value="">ทุก Role</option>
-                        {roles.map(r => (
-                            <option key={r.RoleId} value={r.RoleId}>{r.RoleName}</option>
-                        ))}
-                    </select>
-                    <select
-                        value={filterStatus}
-                        onChange={e => { setFilterStatus(e.target.value); resetPage(); }}
-                        className="px-3 py-2 border border-slate-200 dark:border-slate-600 rounded-lg text-sm bg-white dark:bg-slate-700 dark:text-white"
-                    >
-                        <option value="">ทุกสถานะ</option>
-                        <option value="active">ใช้งานอยู่</option>
-                        <option value="inactive">ถูกระงับ</option>
-                    </select>
-                    {(searchQuery || filterRole || filterStatus) && (
-                        <span className="text-xs text-slate-500 dark:text-slate-400 ml-auto">
-                            แสดง {filteredUsers.length} จาก {users.length} รายการ
-                        </span>
-                    )}
-                </div>
-
                 <div className="overflow-x-auto">
-                    <table className="w-full text-left text-sm whitespace-nowrap">
-                        <thead className="bg-slate-50 dark:bg-slate-700/50 text-slate-600 dark:text-slate-300 font-medium border-b border-slate-200 dark:border-slate-600">
-                            <tr>
-                                <th className="px-6 py-3.5">ผู้ใช้</th>
-                                <th className="px-6 py-3.5">บริษัทที่เข้าถึง</th>
-                                <th className="px-6 py-3.5">สิทธิ์ (Role)</th>
-                                <th className="px-6 py-3.5">สถานะ</th>
-                                <th className="px-6 py-3.5 text-right">จัดการ</th>
-                            </tr>
-                        </thead>
+                    <table className="w-full text-left text-sm">
+                        <thead className="border-b border-slate-200 bg-slate-50 text-xs text-slate-500 dark:border-slate-700 dark:bg-slate-900/30 dark:text-slate-400"><tr><th className="px-4 py-3 font-medium">ผู้ใช้</th><th className="px-4 py-3 font-medium">บัญชี</th><th className="px-4 py-3 font-medium">กลุ่มสิทธิ์</th><th className="px-4 py-3 font-medium">บริษัทที่เข้าถึง</th><th className="px-4 py-3 font-medium">สถานะ</th><th className="px-4 py-3 text-right font-medium">จัดการ</th></tr></thead>
                         <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
-                            {isLoading ? (
-                                <tr>
-                                    <td colSpan={5} className="px-6 py-16 text-center">
-                                        <div className="flex flex-col items-center justify-center text-slate-500 dark:text-slate-400">
-                                            <RefreshCw className="w-6 h-6 animate-spin text-blue-500 mb-3" />
-                                            <p>กำลังโหลดข้อมูลผู้ใช้...</p>
-                                        </div>
-                                    </td>
-                                </tr>
-                            ) : filteredUsers.length === 0 ? (
-                                <tr>
-                                    <td colSpan={5} className="px-6 py-16 text-center text-slate-400 dark:text-slate-500">
-                                        {searchQuery || filterRole || filterStatus ? 'ไม่พบผู้ใช้ตามเงื่อนไข' : 'ยังไม่มีผู้ใช้ในระบบ'}
-                                    </td>
-                                </tr>
-                            ) : paginatedUsers.map((user) => (
-                                <tr key={user.UserId} className="hover:bg-slate-50/80 dark:hover:bg-slate-700/30 transition-colors group">
-                                    <td className="px-6 py-4">
-                                        <div className="flex items-center gap-3">
-                                            <div className={`w-9 h-9 rounded-full bg-gradient-to-br ${getAvatarColor(user.FullName)} flex items-center justify-center text-white font-bold text-sm shadow-sm`}>
-                                                {user.FullName?.charAt(0)?.toUpperCase() || 'U'}
-                                            </div>
-                                            <div>
-                                                <p className="font-semibold text-slate-900 dark:text-white group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">{user.FullName}</p>
-                                                <p className="text-xs text-slate-400 font-mono">@{user.Username}</p>
-                                            </div>
-                                        </div>
-                                    </td>
-                                    <td className="px-6 py-4">
-                                        <div className="flex flex-wrap gap-1.5">
-                                            {(user.allowedCompanies || []).length > 0 ? (
-                                                user.allowedCompanies.map((cid: number) => {
-                                                    const comp = companies.find(c => c.id === cid);
-                                                    const colors = companyColorMap[comp?.color || 'blue'];
-                                                    return (
-                                                        <span key={cid} className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${colors.bg} ${colors.text} border ${colors.border}`}>
-                                                            <Building className="w-3 h-3" />
-                                                            {comp?.short || cid}
-                                                        </span>
-                                                    );
-                                                })
-                                            ) : (
-                                                <span className="text-slate-400 dark:text-slate-500 italic text-xs">ไม่มีสิทธิ์</span>
-                                            )}
-                                        </div>
-                                    </td>
-                                    <td className="px-6 py-4">
-                                        {user.RoleName ? (
-                                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800">
-                                                <Shield className="w-3 h-3" />
-                                                {user.RoleName}
-                                            </span>
-                                        ) : (
-                                            <span className="text-slate-400 italic text-xs">ไม่ได้กำหนด</span>
-                                        )}
-                                    </td>
-                                    <td className="px-6 py-4">
-                                        <button
-                                            onClick={() => handleToggleActive(user)}
-                                            className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium cursor-pointer transition-all hover:scale-105 ${user.IsActive
-                                                ? 'bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800'
-                                                : 'bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-600'
-                                                }`}
-                                            title={user.IsActive ? 'คลิกเพื่อระงับ' : 'คลิกเพื่อเปิดใช้งาน'}
-                                        >
-                                            <span className={`w-2 h-2 rounded-full ${user.IsActive ? 'bg-emerald-500' : 'bg-slate-400'}`}></span>
-                                            {user.IsActive ? 'ใช้งาน' : 'ถูกระงับ'}
-                                        </button>
-                                    </td>
-                                    <td className="px-6 py-4 text-right">
-                                        <div className="flex items-center justify-end gap-1.5">
-                                            <button
-                                                onClick={() => handleOpenResetPw(user)}
-                                                className="p-2 bg-amber-50 dark:bg-amber-900/20 hover:bg-amber-100 dark:hover:bg-amber-900/40 text-amber-600 dark:text-amber-400 rounded-lg transition-colors"
-                                                title="รีเซ็ตรหัสผ่าน"
-                                            >
-                                                <KeyRound className="w-4 h-4" />
-                                            </button>
-                                            <button
-                                                onClick={() => handleOpenEditModal(user)}
-                                                className="p-2 bg-blue-50 dark:bg-blue-900/30 hover:bg-blue-100 dark:hover:bg-blue-900/50 text-blue-600 dark:text-blue-400 rounded-lg transition-colors"
-                                                title="แก้ไข"
-                                            >
-                                                <Edit className="w-4 h-4" />
-                                            </button>
-                                            <button
-                                                onClick={() => handleDeleteUser(user)}
-                                                className="p-2 bg-red-50 dark:bg-red-900/20 hover:bg-red-100 dark:hover:bg-red-900/40 text-red-500 dark:text-red-400 rounded-lg transition-colors"
-                                                title="ลบผู้ใช้"
-                                            >
-                                                <Trash2 className="w-4 h-4" />
-                                            </button>
-                                        </div>
-                                    </td>
-                                </tr>
-                            ))}
+                            {isLoading ? <tr><td colSpan={6} className="px-4 py-16 text-center text-slate-500"><Loader2 className="mx-auto mb-2 h-5 w-5 animate-spin" />กำลังโหลดข้อมูลผู้ใช้...</td></tr> : paginatedUsers.length === 0 ? <tr><td colSpan={6} className="px-4 py-16 text-center text-slate-500">ไม่พบผู้ใช้ตามเงื่อนไข</td></tr> : paginatedUsers.map(user => {
+                                const self = isCurrentUser(user.UserId, signedInUser?.userId);
+                                const ad = isAdAccount(user.AuthType);
+                                return <tr key={user.UserId} className="hover:bg-slate-50 dark:hover:bg-slate-700/30">
+                                    <td className="min-w-56 px-4 py-3"><div className="flex items-center gap-3"><div aria-hidden="true" className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gradient-to-br ${getAvatarColor(user.FullName)} text-sm font-semibold text-white`}>{user.FullName?.charAt(0)?.toUpperCase() || 'U'}</div><div><button onClick={() => handleOpenEditModal(user)} className="text-left font-medium hover:text-blue-600 hover:underline">{user.FullName}</button>{self && <span className="ml-2 rounded bg-blue-50 px-1.5 py-0.5 text-xs text-blue-600 dark:bg-blue-900/30 dark:text-blue-300">คุณ</span>}<p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">@{user.Username}{user.EmployeeId ? ` · ${user.EmployeeId}` : ''}</p></div></div></td>
+                                    <td className="px-4 py-3"><span className={`rounded-md border px-2 py-1 text-xs ${ad ? 'border-indigo-200 bg-indigo-50 text-indigo-700 dark:border-indigo-800 dark:bg-indigo-900/20 dark:text-indigo-300' : 'border-slate-200 text-slate-600 dark:border-slate-600 dark:text-slate-300'}`}>{ad ? 'AD' : 'Local'}</span></td>
+                                    <td className="px-4 py-3"><span className="whitespace-nowrap rounded-md bg-slate-100 px-2 py-1 text-xs dark:bg-slate-700">{user.RoleName || 'ยังไม่กำหนดกลุ่ม'}</span></td>
+                                    <td className="px-4 py-3"><div className="flex flex-wrap gap-1">{user.allowedCompanies?.length ? user.allowedCompanies.map(id => { const company = companies.find(item => item.id === id); return <span key={id} title={company?.name} className="rounded border border-slate-200 px-1.5 py-0.5 text-xs dark:border-slate-600">{company?.code || `#${id}`}</span>; }) : <span className="text-xs text-amber-700 dark:text-amber-300">ไม่มีบริษัท</span>}</div></td>
+                                    <td className="px-4 py-3"><button onClick={() => handleToggleActive(user)} disabled={self} title={self ? 'เปลี่ยนสถานะบัญชีของตัวเองไม่ได้' : user.IsActive ? 'ระงับผู้ใช้' : 'เปิดใช้งาน'} aria-label={`${user.IsActive ? 'ระงับ' : 'เปิดใช้งาน'} ${user.FullName}`} className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-full px-2 py-1 text-xs disabled:cursor-default ${user.IsActive ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-300' : 'bg-slate-100 text-slate-500 dark:bg-slate-700 dark:text-slate-400'}`}><span className={`h-1.5 w-1.5 rounded-full ${user.IsActive ? 'bg-emerald-500' : 'bg-slate-400'}`} />{user.IsActive ? 'ใช้งาน' : 'ระงับ'}</button></td>
+                                    <td className="px-4 py-3"><div className="flex items-center justify-end gap-1"><button onClick={() => handleOpenEditModal(user)} className="inline-flex items-center gap-1 rounded-lg p-2 text-sm hover:bg-slate-100 dark:hover:bg-slate-700" aria-label={`แก้ไข ${user.FullName}`}><Edit className="h-4 w-4" /><span className="hidden xl:inline">แก้ไข</span></button>{!ad && <button onClick={() => handleOpenResetPw(user)} className="rounded-lg p-2 text-amber-600 hover:bg-amber-50 dark:text-amber-300 dark:hover:bg-amber-900/20" aria-label={`รีเซ็ตรหัสผ่านของ ${user.FullName}`} title="รีเซ็ตรหัสผ่าน"><KeyRound className="h-4 w-4" /></button>}{!self && <button onClick={() => handleDeleteUser(user)} className="rounded-lg p-2 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20" aria-label={`ลบ ${user.FullName}`} title="ลบผู้ใช้"><Trash2 className="h-4 w-4" /></button>}</div></td>
+                                </tr>;
+                            })}
                         </tbody>
                     </table>
                 </div>
-
-                {/* Pagination */}
-                {filteredUsers.length > perPage && (
-                    <div className="px-6 py-3 border-t border-slate-100 dark:border-slate-700 flex items-center justify-between bg-slate-50/50 dark:bg-slate-800">
-                        <p className="text-xs text-slate-500 dark:text-slate-400">
-                            แสดง {(safePage - 1) * perPage + 1}-{Math.min(safePage * perPage, filteredUsers.length)} จาก {filteredUsers.length} รายการ
-                        </p>
-                        <div className="flex items-center gap-1">
-                            <button
-                                onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-                                disabled={safePage <= 1}
-                                className="p-1.5 rounded-lg text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-                            >
-                                <ChevronLeft className="w-4 h-4" />
-                            </button>
-                            {Array.from({ length: totalPages }, (_, i) => i + 1)
-                                .filter(p => p === 1 || p === totalPages || Math.abs(p - safePage) <= 1)
-                                .reduce<(number | string)[]>((acc, p, idx, arr) => {
-                                    if (idx > 0 && p - (arr[idx - 1] as number) > 1) acc.push('...');
-                                    acc.push(p);
-                                    return acc;
-                                }, [])
-                                .map((p, i) =>
-                                    typeof p === 'string' ? (
-                                        <span key={`dot-${i}`} className="px-1 text-slate-400 text-xs">...</span>
-                                    ) : (
-                                        <button
-                                            key={p}
-                                            onClick={() => setCurrentPage(p)}
-                                            className={`w-8 h-8 rounded-lg text-xs font-medium transition-all ${p === safePage
-                                                ? 'bg-blue-600 text-white shadow-sm'
-                                                : 'text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700'
-                                                }`}
-                                        >
-                                            {p}
-                                        </button>
-                                    )
-                                )}
-                            <button
-                                onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
-                                disabled={safePage >= totalPages}
-                                className="p-1.5 rounded-lg text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-                            >
-                                <ChevronRight className="w-4 h-4" />
-                            </button>
-                        </div>
-                    </div>
-                )}
-            </div>
-
-            {/* Modal */}
-            {
-                isModalOpen && (
-                    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm animate-in fade-in">
-                        <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-xl w-full max-w-lg overflow-hidden animate-in zoom-in-95 duration-200 max-h-[90vh] flex flex-col">
-
-                            {/* Modal Header — gradient changes for AD vs local */}
-                            <div className={`px-6 py-4 border-b flex items-center justify-between ${isAdUser
-                                ? 'bg-gradient-to-r from-indigo-600 to-indigo-700 border-indigo-500'
-                                : 'bg-gradient-to-r from-blue-600 to-blue-700 border-blue-500'
-                                }`}>
-                                <h3 className="font-bold text-lg text-white flex items-center gap-2">
-                                    {isAdUser ? <Link2 className="w-5 h-5" /> : <User className="w-5 h-5" />}
-                                    {editMode ? 'แก้ไขข้อมูลผู้ใช้' : isAdUser ? 'เพิ่มผู้ใช้ AD' : 'เพิ่มผู้ใช้ใหม่'}
-                                </h3>
-                                <button onClick={() => setIsModalOpen(false)} className="text-white/70 hover:text-white transition-colors p-1 hover:bg-white/10 rounded-lg">
-                                    <X className="w-5 h-5" />
-                                </button>
-                            </div>
-
-                            {/* Modal Body */}
-                            <div className="p-6 space-y-5 overflow-y-auto flex-1">
-
-                                {/* AD Toggle (only for new users) */}
-                                {!editMode && (
-                                    <div className={`flex items-center justify-between p-3.5 rounded-xl border transition-all ${isAdUser
-                                        ? 'bg-indigo-50 dark:bg-indigo-900/20 border-indigo-200 dark:border-indigo-800'
-                                        : 'bg-slate-50 dark:bg-slate-700/50 border-slate-200 dark:border-slate-600'
-                                        }`}>
-                                        <div className="flex items-center gap-3">
-                                            <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${isAdUser
-                                                ? 'bg-indigo-100 dark:bg-indigo-900/40'
-                                                : 'bg-slate-200 dark:bg-slate-600'
-                                                }`}>
-                                                <Link2 className={`w-4 h-4 ${isAdUser ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-500 dark:text-slate-400'}`} />
-                                            </div>
-                                            <div>
-                                                <span className={`text-sm font-semibold ${isAdUser ? 'text-indigo-700 dark:text-indigo-300' : 'text-slate-700 dark:text-slate-300'}`}>
-                                                    บัญชี Active Directory
-                                                </span>
-                                                <p className="text-xs text-slate-400">เชื่อมต่อกับ AD ไม่ต้องตั้งรหัสผ่าน</p>
-                                            </div>
-                                        </div>
-                                        <button
-                                            onClick={() => {
-                                                const newVal = !isAdUser;
-                                                setIsAdUser(newVal);
-                                                setFormData(prev => ({ ...prev, AuthType: newVal ? 'ldap' : 'local', Email: '', EmployeeId: '', ADCompany: '', Department: '', Branch: '', FullName: newVal ? '' : prev.FullName }));
-                                                setAdLookupError('');
-                                                setAdSuggestions([]);
-                                                setShowSuggestions(false);
-                                            }}
-                                            className={`relative w-12 h-7 rounded-full transition-all duration-300 ${isAdUser ? 'bg-indigo-600 shadow-lg shadow-indigo-500/30' : 'bg-slate-300 dark:bg-slate-600'}`}
-                                        >
-                                            <div className={`absolute top-0.5 w-6 h-6 bg-white rounded-full shadow-md transition-all duration-300 ${isAdUser ? 'left-5.5' : 'left-0.5'}`} />
-                                        </button>
-                                    </div>
-                                )}
-
-                                {/* Section: Account */}
-                                <div>
-                                    <div className="flex items-center gap-2 mb-3">
-                                        <div className="w-6 h-6 bg-blue-100 dark:bg-blue-900/30 rounded-md flex items-center justify-center">
-                                            <User className="w-3 h-3 text-blue-600 dark:text-blue-400" />
-                                        </div>
-                                        <h4 className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">ข้อมูลบัญชี</h4>
-                                    </div>
-                                    <div className="space-y-3">
-                                        {!editMode && (
-                                            <div className="relative">
-                                                <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                                                    {isAdUser ? 'ค้นหา AD Username' : 'Username'} <span className="text-red-500">*</span>
-                                                </label>
-                                                <div className="flex gap-2">
-                                                    <div className="flex-1 relative">
-                                                        <input
-                                                            type="text"
-                                                            value={formData.Username}
-                                                            onChange={e => isAdUser ? handleAdSearch(e.target.value) : setFormData({ ...formData, Username: e.target.value })}
-                                                            onFocus={() => { if (isAdUser && adSuggestions.length > 0) setShowSuggestions(true); }}
-                                                            onBlur={() => setTimeout(() => setShowSuggestions(false), 200)}
-                                                            className="w-full px-3 py-2.5 border border-slate-200 dark:border-slate-600 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 bg-white dark:bg-slate-700 dark:text-white text-sm"
-                                                            placeholder={isAdUser ? 'พิมพ์อย่างน้อย 2 ตัว เช่น veer, john...' : 'เช่น jsmith'}
-                                                            onKeyDown={e => { if (isAdUser && e.key === 'Enter') { e.preventDefault(); handleAdLookup(); } }}
-                                                            autoComplete="off"
-                                                        />
-                                                        {isAdUser && isSearching && (
-                                                            <div className="absolute right-3 top-1/2 -translate-y-1/2">
-                                                                <Loader2 className="w-4 h-4 animate-spin text-indigo-500" />
-                                                            </div>
-                                                        )}
-
-                                                        {/* Autocomplete Dropdown */}
-                                                        {isAdUser && showSuggestions && adSuggestions.length > 0 && (
-                                                            <div className="absolute z-50 w-full mt-1 bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-xl shadow-2xl max-h-64 overflow-y-auto">
-                                                                <div className="px-3 py-1.5 bg-slate-50 dark:bg-slate-600 border-b border-slate-200 dark:border-slate-500 rounded-t-xl">
-                                                                    <p className="text-[10px] text-slate-400 font-medium uppercase tracking-wide">ผลการค้นหา ({adSuggestions.length} รายการ)</p>
-                                                                </div>
-                                                                {adSuggestions.map((user, idx) => (
-                                                                    <button
-                                                                        key={idx}
-                                                                        type="button"
-                                                                        onMouseDown={(e) => { e.preventDefault(); handleSelectAdUser(user); }}
-                                                                        className="w-full text-left px-4 py-3 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 transition-colors border-b border-slate-100 dark:border-slate-600 last:border-0 group"
-                                                                    >
-                                                                        <div className="flex items-center gap-3">
-                                                                            <div className="w-9 h-9 bg-indigo-100 dark:bg-indigo-900/40 rounded-lg flex items-center justify-center shrink-0 group-hover:bg-indigo-200 dark:group-hover:bg-indigo-900/60 transition-colors">
-                                                                                <User className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
-                                                                            </div>
-                                                                            <div className="flex-1 min-w-0">
-                                                                                <p className="text-sm font-semibold text-slate-800 dark:text-white truncate">{user.fullName || user.username}</p>
-                                                                                <p className="text-xs text-indigo-600 dark:text-indigo-400 font-mono">{user.username}</p>
-                                                                            </div>
-                                                                            <div className="text-right shrink-0">
-                                                                                {user.department && <p className="text-xs text-slate-500 dark:text-slate-400">{user.department}</p>}
-                                                                                {user.email && <p className="text-[11px] text-slate-400 truncate max-w-[160px]">{user.email}</p>}
-                                                                            </div>
-                                                                        </div>
-                                                                    </button>
-                                                                ))}
-                                                            </div>
-                                                        )}
-                                                    </div>
-                                                    {isAdUser && (
-                                                        <button
-                                                            type="button"
-                                                            onClick={handleAdLookup}
-                                                            disabled={isLookingUp}
-                                                            className="px-3 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-sm font-medium transition-all active:scale-95 disabled:opacity-70 flex items-center gap-1 whitespace-nowrap shadow-md shadow-indigo-500/20"
-                                                            title="ค้นหาแบบ exact match"
-                                                        >
-                                                            {isLookingUp ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
-                                                        </button>
-                                                    )}
-                                                </div>
-                                                {isAdUser && (
-                                                    <p className="text-xs text-slate-400 mt-1">พิมพ์ชื่อบางส่วนแล้วเลือกจากรายการ หรือกด Enter เพื่อค้นหาแบบตรง</p>
-                                                )}
-                                                {adLookupError && (
-                                                    <p className="text-xs text-red-500 mt-1">❌ {adLookupError}</p>
-                                                )}
-                                            </div>
-                                        )}
-
-                                        {/* AD Info Display (read-only) */}
-                                        {isAdUser && formData.FullName && (
-                                            <div className="p-4 bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/10 border border-green-200 dark:border-green-800 rounded-xl">
-                                                <div className="flex items-center gap-2 mb-3">
-                                                    <div className="w-6 h-6 bg-green-100 dark:bg-green-900/40 rounded-md flex items-center justify-center">
-                                                        <UserCheck className="w-3 h-3 text-green-600 dark:text-green-400" />
-                                                    </div>
-                                                    <p className="text-xs font-bold text-green-700 dark:text-green-400 uppercase tracking-wider">ข้อมูลจาก Active Directory</p>
-                                                </div>
-                                                <div className="grid grid-cols-2 gap-2 text-sm">
-                                                    <div className="col-span-2 bg-white/60 dark:bg-slate-800/40 rounded-lg px-3 py-2">
-                                                        <span className="text-slate-500 dark:text-slate-400 text-xs">ชื่อ-นามสกุล</span>
-                                                        <p className="font-semibold text-slate-800 dark:text-white">{formData.FullName}</p>
-                                                    </div>
-                                                    {formData.Email && (
-                                                        <div className="col-span-2 bg-white/60 dark:bg-slate-800/40 rounded-lg px-3 py-2">
-                                                            <span className="text-slate-500 dark:text-slate-400 text-xs">Email</span>
-                                                            <p className="font-medium text-slate-800 dark:text-white text-sm">{formData.Email}</p>
-                                                        </div>
-                                                    )}
-                                                    {formData.EmployeeId && (
-                                                        <div className="bg-white/60 dark:bg-slate-800/40 rounded-lg px-3 py-2">
-                                                            <span className="text-slate-500 dark:text-slate-400 text-xs">รหัสพนักงาน</span>
-                                                            <p className="font-medium text-slate-800 dark:text-white">{formData.EmployeeId}</p>
-                                                        </div>
-                                                    )}
-                                                    {formData.ADCompany && (
-                                                        <div className="bg-white/60 dark:bg-slate-800/40 rounded-lg px-3 py-2">
-                                                            <span className="text-slate-500 dark:text-slate-400 text-xs">บริษัท</span>
-                                                            <p className="font-medium text-slate-800 dark:text-white">{formData.ADCompany}</p>
-                                                        </div>
-                                                    )}
-                                                    {formData.Department && (
-                                                        <div className="bg-white/60 dark:bg-slate-800/40 rounded-lg px-3 py-2">
-                                                            <span className="text-slate-500 dark:text-slate-400 text-xs">แผนก</span>
-                                                            <p className="font-medium text-slate-800 dark:text-white">{formData.Department}</p>
-                                                        </div>
-                                                    )}
-                                                    {formData.Branch && (
-                                                        <div className="bg-white/60 dark:bg-slate-800/40 rounded-lg px-3 py-2">
-                                                            <span className="text-slate-500 dark:text-slate-400 text-xs">สาขา</span>
-                                                            <p className="font-medium text-slate-800 dark:text-white">{formData.Branch}</p>
-                                                        </div>
-                                                    )}
-                                                </div>
-                                            </div>
-                                        )}
-
-                                        {/* FullName (editable only for local users) */}
-                                        {!isAdUser && (
-                                            <div>
-                                                <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                                                    ชื่อ-นามสกุล <span className="text-red-500">*</span>
-                                                </label>
-                                                <input
-                                                    type="text"
-                                                    value={formData.FullName}
-                                                    onChange={e => setFormData({ ...formData, FullName: e.target.value })}
-                                                    className="w-full px-3 py-2.5 border border-slate-200 dark:border-slate-600 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 bg-white dark:bg-slate-700 dark:text-white text-sm"
-                                                    placeholder="เช่น John Smith"
-                                                />
-                                            </div>
-                                        )}
-
-                                        {/* Password (only for local users, new only) */}
-                                        {!editMode && !isAdUser && (
-                                            <div>
-                                                <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">รหัสผ่านเริ่มต้น</label>
-                                                <div className="relative">
-                                                    <input
-                                                        type={showPassword ? 'text' : 'password'}
-                                                        value={formData.PasswordHash}
-                                                        onChange={e => setFormData({ ...formData, PasswordHash: e.target.value })}
-                                                        className="w-full px-3 py-2.5 pr-10 border border-slate-200 dark:border-slate-600 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 bg-white dark:bg-slate-700 dark:text-white text-sm"
-                                                        placeholder="(ค่าเริ่มต้น: P@ssw0rd123)"
-                                                    />
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => setShowPassword(!showPassword)}
-                                                        className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
-                                                    >
-                                                        {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                                                    </button>
-                                                </div>
-                                                <p className="text-xs text-slate-400 mt-1">ขั้นต่ำ 8 ตัว, ต้องมี A-Z, ตัวเลข, อักขระพิเศษ</p>
-                                            </div>
-                                        )}
-                                    </div>
+                <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 px-4 py-3 text-xs text-slate-500 dark:border-slate-700 dark:text-slate-400"><p>แสดง {filteredUsers.length ? (safePage - 1) * perPage + 1 : 0}–{Math.min(safePage * perPage, filteredUsers.length)} จาก {filteredUsers.length} คน</p><div className="flex items-center gap-3"><button onClick={() => setCurrentPage(Math.max(1, safePage - 1))} disabled={safePage <= 1} className={secondaryButton} aria-label="หน้าก่อน"><ChevronLeft className="h-4 w-4" /></button><span>หน้า {safePage} / {totalPages}</span><button onClick={() => setCurrentPage(Math.min(totalPages, safePage + 1))} disabled={safePage >= totalPages} className={secondaryButton} aria-label="หน้าถัดไป"><ChevronRight className="h-4 w-4" /></button></div></div>
+            </section>
+            <AccessibleDialog
+                open={isModalOpen}
+                onClose={closeUserForm}
+                title={editMode ? `แก้ไขผู้ใช้: ${formData.FullName}` : 'เพิ่มผู้ใช้'}
+                description={editMode ? `@${formData.Username} · บัญชี ${isAdUser ? 'AD' : 'Local'}` : 'กำหนดบัญชี กลุ่มสิทธิ์ และบริษัทที่เข้าถึงได้'}
+                variant={editMode ? 'drawer' : 'dialog'}
+                wide={!editMode}
+                footer={<><button onClick={closeUserForm} disabled={isSaving} className={secondaryButton}>ยกเลิก</button><button type="submit" form="user-editor-form" disabled={isSaving || companyLoadError} className={primaryButton}>{isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}{isSaving ? 'กำลังบันทึก...' : 'บันทึกผู้ใช้'}</button></>}
+            >
+                <form id="user-editor-form" onSubmit={event => { event.preventDefault(); void handleSaveUser(); }} className="space-y-6">
+                    {!editMode && <fieldset><legend className={labelClass}>ชนิดบัญชี</legend><div className="inline-flex gap-1 rounded-lg border border-slate-200 p-1 dark:border-slate-600">{([false, true] as const).map(ad => <button key={String(ad)} type="button" aria-pressed={isAdUser === ad} onClick={() => switchAccountType(ad)} className={`rounded-md px-4 py-2 text-sm ${isAdUser === ad ? 'bg-blue-600 text-white' : 'text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-700'}`}>{ad ? 'Active Directory' : 'Local'}</button>)}</div><p className="mt-2 text-xs text-slate-500 dark:text-slate-400">{isAdUser ? 'ค้นหาบัญชีจาก AD ไม่ต้องตั้งรหัสผ่านใน ReportCenter' : 'บัญชีและรหัสผ่านสำหรับ ReportCenter'}</p></fieldset>}
+                    <section className="space-y-4">
+                        <h3 className="flex items-center gap-2 text-sm font-semibold"><User className="h-4 w-4 text-slate-500" />ข้อมูลบัญชี</h3>
+                        {!editMode && <div>
+                            <label htmlFor="user-username" className={labelClass}>{isAdUser ? 'ค้นหา AD Username' : 'Username'} <span className="text-red-500">*</span></label>
+                            <div className="flex gap-2">
+                                <div className="relative min-w-0 flex-1">
+                                    <input id="user-username" data-autofocus value={formData.Username} onChange={event => isAdUser ? handleAdSearch(event.target.value) : setFormData({ ...formData, Username: event.target.value })} onFocus={() => { if (isAdUser && adSuggestions.length) setShowSuggestions(true); }} onKeyDown={event => { if (isAdUser && event.key === 'Escape' && showSuggestions) { event.preventDefault(); event.stopPropagation(); setShowSuggestions(false); } else if (isAdUser && event.key === 'Enter') { event.preventDefault(); void handleAdLookup(); } }} autoComplete="off" className={inputClass} placeholder={isAdUser ? 'พิมพ์อย่างน้อย 2 ตัวอักษร' : 'ชื่อสำหรับเข้าสู่ระบบ'} />
+                                    {isSearching && <Loader2 className="absolute right-3 top-2.5 h-4 w-4 animate-spin text-blue-500" />}
                                 </div>
-
-                                {/* Divider */}
-                                <div className="border-t border-slate-100 dark:border-slate-700" />
-
-                                {/* Section: Permissions */}
-                                <div>
-                                    <div className="flex items-center gap-2 mb-3">
-                                        <div className="w-6 h-6 bg-amber-100 dark:bg-amber-900/30 rounded-md flex items-center justify-center">
-                                            <Shield className="w-3 h-3 text-amber-600 dark:text-amber-400" />
-                                        </div>
-                                        <h4 className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">สิทธิ์การใช้งาน</h4>
-                                    </div>
-                                    <div className="space-y-3">
-                                        <div>
-                                            <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                                                Role <span className="text-red-500">*</span>
-                                            </label>
-                                            <select
-                                                value={formData.RoleId}
-                                                onChange={e => setFormData({ ...formData, RoleId: e.target.value })}
-                                                className="w-full px-3 py-2.5 border border-slate-200 dark:border-slate-600 rounded-xl bg-white dark:bg-slate-700 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 text-sm"
-                                            >
-                                                <option value="">-- เลือก Role --</option>
-                                                {roles.map(r => (
-                                                    <option key={r.RoleId} value={r.RoleId}>{r.RoleName}</option>
-                                                ))}
-                                            </select>
-                                        </div>
-
-                                        <div>
-                                            <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-2">
-                                                บริษัทที่เข้าถึงได้ <span className="text-red-500">*</span>
-                                            </label>
-                                            <div className="grid gap-2">
-                                                {companies.map(company => {
-                                                    const isChecked = formData.allowedCompanies.includes(company.id);
-                                                    const colors = companyColorMap[company.color];
-                                                    return (
-                                                        <label
-                                                            key={company.id}
-                                                            className={`flex items-center gap-3 cursor-pointer border rounded-xl p-3 transition-all ${isChecked
-                                                                ? `${colors.bg} ${colors.border} ${colors.text} shadow-sm`
-                                                                : 'border-slate-200 dark:border-slate-600 hover:border-slate-300 dark:hover:border-slate-500 bg-white dark:bg-slate-700'
-                                                                }`}
-                                                        >
-                                                            <div className={`w-5 h-5 rounded border-2 flex items-center justify-center flex-shrink-0 transition-all ${isChecked ? 'bg-blue-600 border-blue-600' : 'border-slate-300 dark:border-slate-500'
-                                                                }`}>
-                                                                {isChecked && <Check className="w-3 h-3 text-white" />}
-                                                            </div>
-                                                            <Building className="w-4 h-4 flex-shrink-0" />
-                                                            <div className="flex-1 min-w-0">
-                                                                <p className="text-sm font-medium dark:text-white">{company.id}. {company.name}</p>
-                                                                <p className="text-xs opacity-70">{company.short}</p>
-                                                            </div>
-                                                            <input
-                                                                type="checkbox"
-                                                                checked={isChecked}
-                                                                onChange={() => toggleCompany(company.id)}
-                                                                className="sr-only"
-                                                            />
-                                                        </label>
-                                                    );
-                                                })}
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                {/* Divider */}
-                                <div className="border-t border-slate-100 dark:border-slate-700" />
-
-                                {/* Section: Status */}
-                                <div>
-                                    <div className="flex items-center gap-2 mb-3">
-                                        <div className={`w-6 h-6 rounded-md flex items-center justify-center ${formData.IsActive ? 'bg-emerald-100 dark:bg-emerald-900/30' : 'bg-slate-200 dark:bg-slate-600'}`}>
-                                            {formData.IsActive ? <UserCheck className="w-3 h-3 text-emerald-600 dark:text-emerald-400" /> : <UserX className="w-3 h-3 text-slate-500 dark:text-slate-400" />}
-                                        </div>
-                                        <h4 className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">สถานะ</h4>
-                                    </div>
-                                    <label className={`flex items-center gap-3 cursor-pointer border rounded-xl p-3.5 transition-all ${formData.IsActive
-                                        ? 'bg-emerald-50 dark:bg-emerald-900/20 border-emerald-200 dark:border-emerald-800'
-                                        : 'bg-slate-50 dark:bg-slate-700 border-slate-200 dark:border-slate-600'
-                                        }`}>
-                                        <div className={`w-11 h-6 rounded-full relative transition-all ${formData.IsActive ? 'bg-emerald-500' : 'bg-slate-300 dark:bg-slate-600'}`}>
-                                            <div className={`w-5 h-5 rounded-full bg-white shadow-sm absolute top-0.5 transition-all ${formData.IsActive ? 'left-[22px]' : 'left-0.5'}`}></div>
-                                        </div>
-                                        <div>
-                                            <span className={`text-sm font-semibold ${formData.IsActive ? 'text-emerald-700 dark:text-emerald-300' : 'text-slate-600 dark:text-slate-400'}`}>
-                                                {formData.IsActive ? 'เปิดใช้งาน (Active)' : 'ระงับบัญชี (Inactive)'}
-                                            </span>
-                                            <p className="text-xs text-slate-400">
-                                                {formData.IsActive ? 'ผู้ใช้สามารถเข้าสู่ระบบได้' : 'ผู้ใช้จะไม่สามารถเข้าสู่ระบบได้'}
-                                            </p>
-                                        </div>
-                                        <input
-                                            type="checkbox"
-                                            checked={formData.IsActive}
-                                            onChange={e => setFormData({ ...formData, IsActive: e.target.checked })}
-                                            className="sr-only"
-                                        />
-                                    </label>
-                                </div>
+                                {isAdUser && <button type="button" onClick={handleAdLookup} disabled={isLookingUp} className={secondaryButton} aria-label="ค้นหา AD Username แบบตรง">{isLookingUp ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}</button>}
                             </div>
+                            {isAdUser && showSuggestions && adSuggestions.length > 0 && <div className="mt-2 max-h-48 overflow-y-auto rounded-lg border border-slate-200 dark:border-slate-600" aria-label="ผลค้นหาผู้ใช้ AD">{adSuggestions.map(user => <button key={user.username} type="button" onClick={() => handleSelectAdUser(user)} className="block w-full border-b border-slate-100 px-3 py-2 text-left text-sm last:border-0 hover:bg-blue-50 focus-visible:bg-blue-50 dark:border-slate-700 dark:hover:bg-slate-700 dark:focus-visible:bg-slate-700"><span className="font-medium">{user.fullName || user.username}</span><span className="ml-2 text-xs text-slate-500 dark:text-slate-400">@{user.username}</span>{user.department && <span className="mt-0.5 block text-xs text-slate-500 dark:text-slate-400">{user.department}</span>}</button>)}</div>}
+                            {isAdUser && <p className="mt-1.5 text-xs text-slate-500 dark:text-slate-400">เลือกจากผลค้นหา หรือกด Enter เพื่อค้นหา username แบบตรง</p>}
+                            {adLookupError && <p role="alert" className="mt-1 text-sm text-red-600 dark:text-red-400">{adLookupError}</p>}
+                        </div>}
+                        {isAdUser ? <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 dark:border-slate-600 dark:bg-slate-900/30">
+                            <p className="mb-3 text-xs font-medium text-slate-500 dark:text-slate-400">ข้อมูลจาก Active Directory</p>
+                            <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 text-sm">
+                                <dt className="text-slate-500 dark:text-slate-400">ชื่อ-นามสกุล</dt><dd className="break-words">{formData.FullName || 'ยังไม่ได้เลือกผู้ใช้'}</dd>
+                                <dt className="text-slate-500 dark:text-slate-400">อีเมล</dt><dd className="break-all">{formData.Email || '—'}</dd>
+                                <dt className="text-slate-500 dark:text-slate-400">รหัสพนักงาน</dt><dd>{formData.EmployeeId || '—'}</dd>
+                                <dt className="text-slate-500 dark:text-slate-400">ต้นสังกัด AD</dt><dd className="break-words">{formData.ADCompany || '—'}</dd>
+                                <dt className="text-slate-500 dark:text-slate-400">แผนก / สาขา</dt><dd>{[formData.Department, formData.Branch].filter(Boolean).join(' / ') || '—'}</dd>
+                            </dl>
+                            <p className="mt-3 text-xs text-slate-500 dark:text-slate-400">ต้นสังกัด AD เป็นข้อมูลบัญชี บริษัทที่อนุญาตให้เข้าถึงต้องเลือกด้านล่าง</p>
+                            {editMode && <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">เปลี่ยนข้อมูลบัญชีและรหัสผ่านที่ Active Directory</p>}
+                        </div> : <div><label htmlFor="user-full-name" className={labelClass}>ชื่อ-นามสกุล <span className="text-red-500">*</span></label><input id="user-full-name" data-autofocus={editMode || undefined} value={formData.FullName} onChange={event => setFormData({ ...formData, FullName: event.target.value })} className={inputClass} /></div>}
+                        {!editMode && !isAdUser && <div>
+                            <label htmlFor="user-password" className={labelClass}>รหัสผ่านเริ่มต้น</label>
+                            <div className="relative"><input id="user-password" type={showPassword ? 'text' : 'password'} autoComplete="new-password" value={formData.PasswordHash} onChange={event => setFormData({ ...formData, PasswordHash: event.target.value })} className={`${inputClass} pr-11`} /><button type="button" onClick={() => setShowPassword(!showPassword)} aria-label={showPassword ? 'ซ่อนรหัสผ่าน' : 'แสดงรหัสผ่าน'} className="absolute right-2 top-1 rounded p-2 text-slate-500">{showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}</button></div>
+                            <p className="mt-1.5 text-xs text-slate-500 dark:text-slate-400">หากระบุรหัสผ่าน ใช้ขั้นต่ำ 8 ตัว พร้อม A–Z ตัวเลข และอักขระพิเศษ หากเว้นว่าง ระบบใช้ค่าเริ่มต้นเดิม</p>
+                        </div>}
+                    </section>
+                    <section className="space-y-4 border-t border-slate-200 pt-5 dark:border-slate-700">
+                        <div>
+                            <label htmlFor="user-role" className={labelClass}>กลุ่มสิทธิ์ <span className="text-red-500">*</span></label>
+                            <UserRoleSelector id="user-role" value={formData.RoleId} options={roleOptions} disabled={editingSelf} onChange={value => setFormData({ ...formData, RoleId: value })} />
+                            <p id="user-role-hint" className="mt-1.5 text-xs text-slate-500 dark:text-slate-400">{editingSelf ? 'เปลี่ยนกลุ่มสิทธิ์ของบัญชีที่กำลังใช้งานไม่ได้' : 'ผู้ใช้ 1 คนอยู่ได้ 1 กลุ่ม รายงานที่เห็นมาจากกลุ่มสิทธิ์นี้'}</p>
+                            {formData.RoleId && <div className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm dark:border-slate-600 dark:bg-slate-900/30">
+                                <span className="text-slate-600 dark:text-slate-300">{accessSummary.activeReportCount === null ? 'ยังโหลดจำนวนรายงานไม่ได้' : `${accessSummary.activeReportCount} รายงานที่ใช้งาน`}{accessSummary.isAdmin ? ' · ทุกรายงาน' : ''}</span>
+                                <button type="button" onClick={() => setIsRolePreviewOpen(true)} disabled={isSaving || allReports === null} className="inline-flex items-center gap-1.5 text-sm font-medium text-blue-600 hover:underline disabled:text-slate-400 dark:text-blue-400"><FileText className="h-4 w-4" />ดูรายงานของกลุ่ม</button>
+                            </div>}
+                        </div>
+                        <fieldset><legend className={`${labelClass} mb-2`}>บริษัทที่เข้าถึงได้ <span className="text-red-500">*</span></legend><div className={`grid gap-2 ${editMode ? 'grid-cols-1' : 'grid-cols-1 sm:grid-cols-3'}`}>{companies.map(company => {
+                            const checked = formData.allowedCompanies.includes(company.id);
+                            const colors = companyColorMap[company.color];
+                            return <label key={company.id} htmlFor={`user-company-${company.id}`} className={`flex min-w-0 cursor-pointer items-start gap-2.5 rounded-lg border p-3 ${checked ? `${colors.bg} ${colors.border}` : 'border-slate-200 dark:border-slate-600'}`}><input id={`user-company-${company.id}`} type="checkbox" checked={checked} onChange={() => toggleCompany(company.id)} className="mt-0.5 h-4 w-4 shrink-0 accent-blue-600 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-500" />{editMode && <Building aria-hidden="true" className="mt-0.5 h-4 w-4 shrink-0 text-slate-400" />}<span className="min-w-0 text-sm"><span className="block font-semibold">{editMode ? company.name : company.code}</span><span className="block break-words text-xs leading-5 text-slate-500 dark:text-slate-400">{editMode ? company.code : company.name}</span></span></label>;
+                        })}</div>{companyLoadError && <p className="mt-2 text-sm text-amber-700 dark:text-amber-300">ยังโหลดรายชื่อบริษัทไม่ได้</p>}</fieldset>
+                    </section>
+                    <section className="border-t border-slate-200 pt-5 dark:border-slate-700"><label htmlFor="user-active" className="flex items-center gap-3"><input id="user-active" type="checkbox" checked={formData.IsActive} disabled={editingSelf} onChange={event => setFormData({ ...formData, IsActive: event.target.checked })} className="h-4 w-4 accent-blue-600" /><span className="text-sm font-medium">เปิดใช้งานบัญชี</span></label><p className="mt-1.5 text-xs text-slate-500 dark:text-slate-400">{editingSelf ? 'ระงับบัญชีที่กำลังใช้งานไม่ได้' : formData.IsActive ? 'ผู้ใช้สามารถเข้าสู่ระบบได้' : 'ผู้ใช้จะไม่สามารถเข้าสู่ระบบได้'}</p></section>
+                    {accessSummaryView}
+                </form>
+            </AccessibleDialog>
 
-                            {/* Modal Footer */}
-                            <div className="px-6 py-4 bg-slate-50 dark:bg-slate-800 border-t border-slate-100 dark:border-slate-700 flex justify-end gap-3">
-                                <button
-                                    onClick={() => setIsModalOpen(false)}
-                                    className="px-5 py-2.5 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 font-medium rounded-xl transition-colors"
-                                >
-                                    ยกเลิก
-                                </button>
-                                <button
-                                    onClick={handleSaveUser}
-                                    disabled={isSaving}
-                                    className={`px-6 py-2.5 text-white font-medium rounded-xl flex items-center gap-2 transition-all active:scale-95 disabled:opacity-70 shadow-lg ${isAdUser
-                                        ? 'bg-indigo-600 hover:bg-indigo-700 shadow-indigo-500/30'
-                                        : 'bg-blue-600 hover:bg-blue-700 shadow-blue-500/30'
-                                        }`}
-                                >
-                                    {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-                                    {isSaving ? 'กำลังบันทึก...' : isAdUser ? 'บันทึกผู้ใช้ AD' : 'บันทึกข้อมูล'}
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                )
-            }
+            <AccessibleDialog open={isModalOpen && isRolePreviewOpen} onClose={() => setIsRolePreviewOpen(false)} title={`รายงานของกลุ่ม: ${accessSummary.roleName || 'ยังไม่เลือก'}`} description={`${accessSummary.activeReportCount ?? 0} รายงานที่ใช้งาน · ดูเพื่อประกอบการกำหนดสิทธิ์ผู้ใช้`} footer={<button type="button" data-autofocus onClick={() => setIsRolePreviewOpen(false)} className={secondaryButton}>กลับไปกรอกผู้ใช้</button>}>
+                {rolePreviewReports.length > 0 ? <ul className="divide-y divide-slate-100 dark:divide-slate-700">{rolePreviewReports.map(report => <li key={report.ReportId} className="flex items-start gap-3 py-3"><FileText aria-hidden="true" className="mt-0.5 h-4 w-4 shrink-0 text-slate-400" /><span className="min-w-0 break-words text-sm">{report.ReportName || `รายงาน #${report.ReportId}`}</span></li>)}</ul> : <p className="py-6 text-center text-sm text-slate-500 dark:text-slate-400">กลุ่มนี้ยังไม่มีรายงานที่ใช้งาน</p>}
+            </AccessibleDialog>
 
-            {/* Reset Password Modal */}
-            {isResetPwOpen && resetPwUser && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm animate-in fade-in">
-                    <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-xl w-full max-w-sm overflow-hidden animate-in zoom-in-95 duration-200">
-                        <div className="px-6 py-4 border-b border-slate-100 dark:border-slate-700 flex items-center justify-between bg-gradient-to-r from-amber-500 to-amber-600">
-                            <h3 className="font-bold text-lg text-white flex items-center gap-2">
-                                <KeyRound className="w-5 h-5" />
-                                รีเซ็ตรหัสผ่าน
-                            </h3>
-                            <button onClick={() => setIsResetPwOpen(false)} className="text-white/70 hover:text-white transition-colors p-1 hover:bg-white/10 rounded-lg">
-                                <X className="w-5 h-5" />
-                            </button>
-                        </div>
-                        <div className="p-6 space-y-4">
-                            <div className="text-center">
-                                <div className={`w-12 h-12 mx-auto rounded-full bg-gradient-to-br ${getAvatarColor(resetPwUser.FullName)} flex items-center justify-center text-white font-bold text-lg shadow-md`}>
-                                    {resetPwUser.FullName?.charAt(0)?.toUpperCase() || 'U'}
-                                </div>
-                                <p className="mt-2 font-semibold text-slate-900 dark:text-white">{resetPwUser.FullName}</p>
-                                <p className="text-xs text-slate-400 font-mono">@{resetPwUser.Username}</p>
-                            </div>
-                            <div>
-                                <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                                    รหัสผ่านใหม่ <span className="text-red-500">*</span>
-                                </label>
-                                <div className="relative">
-                                    <input
-                                        type={showResetPw ? 'text' : 'password'}
-                                        value={resetPwValue}
-                                        onChange={e => setResetPwValue(e.target.value)}
-                                        className="w-full px-3 py-2.5 pr-10 border border-slate-200 dark:border-slate-600 rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 bg-white dark:bg-slate-700 dark:text-white text-sm"
-                                        placeholder="ใส่รหัสผ่านใหม่"
-                                        autoFocus
-                                        onKeyDown={e => { if (e.key === 'Enter') handleResetPassword(); }}
-                                    />
-                                    <button
-                                        type="button"
-                                        onClick={() => setShowResetPw(!showResetPw)}
-                                        className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
-                                    >
-                                        {showResetPw ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                                    </button>
-                                </div>
-                                <p className="text-xs text-slate-400 mt-1.5">ขั้นต่ำ 8 ตัว, ต้องมี A-Z, ตัวเลข, อักขระพิเศษ</p>
-                            </div>
-                        </div>
-                        <div className="px-6 py-4 bg-slate-50 dark:bg-slate-800 border-t border-slate-100 dark:border-slate-700 flex justify-end gap-3">
-                            <button
-                                onClick={() => setIsResetPwOpen(false)}
-                                className="px-5 py-2.5 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 font-medium rounded-xl transition-colors"
-                            >
-                                ยกเลิก
-                            </button>
-                            <button
-                                onClick={handleResetPassword}
-                                disabled={isResetting}
-                                className="px-6 py-2.5 bg-amber-500 hover:bg-amber-600 text-white font-medium rounded-xl flex items-center gap-2 transition-all active:scale-95 disabled:opacity-70 shadow-md shadow-amber-500/30"
-                            >
-                                {isResetting ? <Loader2 className="w-4 h-4 animate-spin" /> : <KeyRound className="w-4 h-4" />}
-                                {isResetting ? 'กำลังรีเซ็ต...' : 'รีเซ็ตรหัสผ่าน'}
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            )}
-        </div >
+            <AccessibleDialog open={isResetPwOpen && !!resetPwUser} onClose={closeResetPassword} title="รีเซ็ตรหัสผ่าน" description={resetPwUser ? `${resetPwUser.FullName} · @${resetPwUser.Username} · บัญชี Local` : undefined} footer={<><button onClick={closeResetPassword} disabled={isResetting} className={secondaryButton}>ยกเลิก</button><button type="submit" form="user-reset-password-form" disabled={isResetting} className={primaryButton}>{isResetting ? <Loader2 className="h-4 w-4 animate-spin" /> : <KeyRound className="h-4 w-4" />}{isResetting ? 'กำลังรีเซ็ต...' : 'รีเซ็ตรหัสผ่าน'}</button></>}>
+                <form id="user-reset-password-form" onSubmit={event => { event.preventDefault(); void handleResetPassword(); }}><label htmlFor="user-reset-password" className={labelClass}>รหัสผ่านใหม่ <span className="text-red-500">*</span></label><div className="relative"><input id="user-reset-password" data-autofocus type={showResetPw ? 'text' : 'password'} value={resetPwValue} onChange={event => setResetPwValue(event.target.value)} autoComplete="new-password" className={`${inputClass} pr-11`} /><button type="button" onClick={() => setShowResetPw(!showResetPw)} aria-label={showResetPw ? 'ซ่อนรหัสผ่าน' : 'แสดงรหัสผ่าน'} className="absolute right-2 top-1 rounded p-2 text-slate-500">{showResetPw ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}</button></div><p className="mt-2 text-xs text-slate-500 dark:text-slate-400">ขั้นต่ำ 8 ตัว พร้อม A–Z ตัวเลข และอักขระพิเศษ</p></form>
+            </AccessibleDialog>
+        </div>
     );
 }

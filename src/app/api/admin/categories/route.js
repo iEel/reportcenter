@@ -43,22 +43,37 @@ export async function GET(request) {
             ORDER BY c.SortOrder, c.CategoryName
         `);
 
-        // Fetch report names per category
+        // Keep the active-only contract for existing consumers. Admin detail also
+        // needs inactive and uncategorized reports to show the full delete impact.
+        const includeAllReports = session.roleName?.toLowerCase() === 'admin';
         const reportsResult = await pool.request().query(`
-            SELECT r.ReportId, r.ReportName, r.CategoryId
+            SELECT r.ReportId, r.ReportName, r.CategoryId, r.IsActive, r.ReportType, r.Description
             FROM Reports r
-            WHERE r.IsActive = 1 AND r.CategoryId IS NOT NULL
+            ${includeAllReports ? '' : 'WHERE r.IsActive = 1 AND r.CategoryId IS NOT NULL'}
             ORDER BY r.ReportName
         `);
 
         // Group reports by CategoryId
         const reportsByCategory = {};
+        const allReportsByCategory = { uncategorized: [] };
+        const categoryIds = new Set(result.recordset.map(category => category.CategoryId));
         for (const r of reportsResult.recordset) {
-            if (!reportsByCategory[r.CategoryId]) reportsByCategory[r.CategoryId] = [];
-            reportsByCategory[r.CategoryId].push({ ReportId: r.ReportId, ReportName: r.ReportName });
+            if (r.IsActive && r.CategoryId != null) {
+                if (!reportsByCategory[r.CategoryId]) reportsByCategory[r.CategoryId] = [];
+                reportsByCategory[r.CategoryId].push({ ReportId: r.ReportId, ReportName: r.ReportName });
+            }
+            if (includeAllReports) {
+                const key = categoryIds.has(r.CategoryId) ? r.CategoryId : 'uncategorized';
+                if (!allReportsByCategory[key]) allReportsByCategory[key] = [];
+                allReportsByCategory[key].push(r);
+            }
         }
 
-        return NextResponse.json({ success: true, categories: result.recordset, reportsByCategory });
+        const categories = includeAllReports ? result.recordset.map(category => {
+            const reports = allReportsByCategory[category.CategoryId] || [];
+            return { ...category, AllReportCount: reports.length, InactiveReportCount: reports.filter(report => !report.IsActive).length };
+        }) : result.recordset;
+        return NextResponse.json({ success: true, categories, reportsByCategory, ...(includeAllReports ? { allReportsByCategory } : {}) });
     } catch (error) {
         console.error('Categories GET error:', error);
         return NextResponse.json({ success: false, message: 'Internal Server Error' }, { status: 500 });

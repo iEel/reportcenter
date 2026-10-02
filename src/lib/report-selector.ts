@@ -14,6 +14,22 @@ export interface ReportGroup {
 
 const normalize = (value?: string | null) => value?.trim().toLocaleLowerCase() ?? '';
 
+/** Return text fragments for React to render; report text is never interpreted as HTML. */
+export function splitSearchMatches(text: string, query: string): { text: string; matched: boolean }[] {
+    const term = query.trim();
+    if (!term) return [{ text, matched: false }];
+    const expression = new RegExp(term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi');
+    const parts: { text: string; matched: boolean }[] = [];
+    let cursor = 0;
+    for (const match of text.matchAll(expression)) {
+        if (match.index > cursor) parts.push({ text: text.slice(cursor, match.index), matched: false });
+        parts.push({ text: match[0], matched: true });
+        cursor = match.index + match[0].length;
+    }
+    if (cursor < text.length) parts.push({ text: text.slice(cursor), matched: false });
+    return parts;
+}
+
 export function filterReports(reports: StandardReport[], query: string): StandardReport[] {
     const normalizedQuery = normalize(query);
     if (!normalizedQuery) return reports;
@@ -28,7 +44,7 @@ export function groupReports(reports: StandardReport[]): ReportGroup[] {
     const groups = new Map<string, StandardReport[]>();
 
     reports.forEach((report) => {
-        const category = report.CategoryName?.trim() || 'อื่น ๆ';
+        const category = report.CategoryName?.trim() || 'ยังไม่จัดหมวด';
         groups.set(category, [...(groups.get(category) ?? []), report]);
     });
 
@@ -36,8 +52,8 @@ export function groupReports(reports: StandardReport[]): ReportGroup[] {
         category,
         reports: [...categoryReports].sort((a, b) => a.ReportName.localeCompare(b.ReportName, 'th')),
     })).sort((a, b) => {
-        if (a.category === 'อื่น ๆ') return 1;
-        if (b.category === 'อื่น ๆ') return -1;
+        if (a.category === 'ยังไม่จัดหมวด') return 1;
+        if (b.category === 'ยังไม่จัดหมวด') return -1;
         return a.category.localeCompare(b.category, 'th');
     });
 }

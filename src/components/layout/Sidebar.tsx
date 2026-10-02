@@ -2,9 +2,10 @@
 
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { Home, FileText, Database, Settings, LayoutTemplate, Users, LogOut, Lock, Menu, X, Calendar, Clock, Tag } from 'lucide-react';
+import { Home, FileText, Database, Settings, LayoutTemplate, Users, LogOut, Lock, Menu, X, Calendar, Clock, Tag, Shield } from 'lucide-react';
 import { useAuth } from '@/components/providers/AuthProvider';
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
+import { confirmPageLeave } from '@/lib/page-leave-guard';
 
 const menus = [
     { title: 'หน้าหลัก', path: '/', icon: Home, role: 'all' },
@@ -13,11 +14,11 @@ const menus = [
     { title: 'ประวัติการสร้างรายงาน', path: '/reports/job-history', icon: Clock, role: 'all' },
 
     // Admin Only
-    { title: 'จัดการรายงาน', path: '/admin/reports', icon: Database, role: 'admin' },
-    { title: 'หมวดหมู่รายงาน', path: '/admin/categories', icon: Tag, role: 'admin' },
+    { title: 'ทะเบียนรายงาน', path: '/admin/reports', icon: Database, role: 'admin' },
+    { title: 'หมวดรายงาน', path: '/admin/categories', icon: Tag, role: 'admin' },
     { title: 'ตั้งเวลารายงาน', path: '/admin/schedules', icon: Calendar, role: 'admin' },
-    { title: 'จัดการผู้ใช้', path: '/admin/users', icon: Users, role: 'admin' },
-    { title: 'จัดการสิทธิ์ (Roles)', path: '/admin/roles', icon: Settings, role: 'admin' },
+    { title: 'ผู้ใช้', path: '/admin/users', icon: Users, role: 'admin' },
+    { title: 'กลุ่มสิทธิ์', path: '/admin/roles', icon: Shield, role: 'admin' },
     { title: 'ดูประวัติการใช้งาน', path: '/admin/audit-logs', icon: FileText, role: 'admin' },
     { title: 'ตั้งค่าระบบ', path: '/admin/settings', icon: Settings, role: 'admin' },
 ];
@@ -27,15 +28,18 @@ export default function Sidebar() {
     const router = useRouter();
     const { user } = useAuth();
     const [mobileOpen, setMobileOpen] = useState(false);
+    const [menuPath, setMenuPath] = useState(pathname);
 
     const isAdmin = user?.roleName?.toLowerCase() === 'admin';
 
-    // Close mobile menu on route change
-    useEffect(() => {
+    // Reset before rendering the destination so a hidden menu never keeps focusable links.
+    if (menuPath !== pathname) {
+        setMenuPath(pathname);
         setMobileOpen(false);
-    }, [pathname]);
+    }
 
     const handleLogout = async () => {
+        if (!(await confirmPageLeave())) return;
         try {
             await fetch('/api/auth/logout', { method: 'POST' });
             router.push('/login');
@@ -49,7 +53,7 @@ export default function Sidebar() {
         const isActive = pathname === menu.path || (menu.path !== '/' && pathname.startsWith(menu.path + '/'));
         const Icon = menu.icon;
         return (
-            <Link key={menu.path} href={menu.path}
+            <Link key={menu.path} href={menu.path} aria-current={isActive ? 'page' : undefined}
                 className={`flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all duration-200 group ${isActive
                     ? 'bg-blue-600/10 text-blue-400'
                     : 'hover:bg-slate-800 hover:text-white'
@@ -109,12 +113,14 @@ export default function Sidebar() {
                     return true;
                 }).map(m => renderMenuLink(m))}
 
-                {isAdmin && (
-                    <div className="mt-8 mb-4">
-                        <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-4 px-2">ผู้ดูแลระบบ</p>
-                        {menus.filter(m => m.role === 'admin').map(m => renderMenuLink(m, true))}
-                    </div>
-                )}
+                {isAdmin && [
+                    { title: 'จัดการรายงาน', paths: ['/admin/reports', '/admin/categories', '/admin/schedules'] },
+                    { title: 'ผู้ใช้และสิทธิ์', paths: ['/admin/users', '/admin/roles'] },
+                    { title: 'ระบบ', paths: ['/admin/audit-logs', '/admin/settings'] },
+                ].map(group => <div key={group.title} className="mt-7 mb-3">
+                    <p className="mb-3 px-2 text-xs font-semibold tracking-wide text-slate-400">{group.title}</p>
+                    {menus.filter(menu => group.paths.includes(menu.path)).map(menu => renderMenuLink(menu, true))}
+                </div>)}
             </div>
 
             <div className="p-4 border-t border-slate-800 space-y-2">
@@ -149,6 +155,7 @@ export default function Sidebar() {
             {/* Mobile hamburger button */}
             <button
                 onClick={() => setMobileOpen(true)}
+                aria-label="เปิดเมนู" aria-expanded={mobileOpen}
                 className="lg:hidden fixed top-4 left-4 z-50 p-2 bg-slate-900 text-white rounded-lg shadow-lg"
             >
                 <Menu className="w-5 h-5" />
@@ -163,7 +170,7 @@ export default function Sidebar() {
             )}
 
             {/* Mobile sidebar */}
-            <div className={`lg:hidden fixed inset-y-0 left-0 z-50 w-64 bg-slate-900 text-slate-300 flex flex-col shadow-2xl transition-transform duration-300 ${mobileOpen ? 'translate-x-0' : '-translate-x-full'
+            <div aria-hidden={!mobileOpen} inert={!mobileOpen} className={`lg:hidden fixed inset-y-0 left-0 z-50 w-64 bg-slate-900 text-slate-300 flex flex-col shadow-2xl transition-transform duration-300 ${mobileOpen ? 'translate-x-0' : '-translate-x-full'
                 }`}>
                 {sidebarContent}
             </div>

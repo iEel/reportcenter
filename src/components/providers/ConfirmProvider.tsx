@@ -1,7 +1,8 @@
 "use client";
 
 import { createContext, useContext, useState, useCallback, ReactNode } from "react";
-import { AlertTriangle, X } from "lucide-react";
+import { AlertTriangle } from "lucide-react";
+import AccessibleDialog from "@/components/ui/AccessibleDialog";
 
 interface ConfirmOptions {
     title: string;
@@ -57,35 +58,16 @@ export default function ConfirmProvider({ children }: { children: ReactNode }) {
     return (
         <ConfirmContext.Provider value={{ confirm: showConfirm }}>
             {children}
-            {state.open && (
-                <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm animate-in fade-in duration-200">
-                    <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-xl w-full max-w-sm overflow-hidden animate-in zoom-in-95 duration-200">
-                        <div className="p-6 text-center">
-                            <div className={`w-12 h-12 mx-auto mb-4 rounded-full flex items-center justify-center ${state.options.variant === 'danger' ? 'bg-red-100' : state.options.variant === 'warning' ? 'bg-amber-100' : 'bg-blue-100'
-                                }`}>
-                                <AlertTriangle className={`w-6 h-6 ${state.options.variant === 'danger' ? 'text-red-500' : state.options.variant === 'warning' ? 'text-amber-500' : 'text-blue-500'
-                                    }`} />
-                            </div>
-                            <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-1">{state.options.title}</h3>
-                            <p className="text-sm text-slate-500 dark:text-slate-400">{state.options.message}</p>
-                        </div>
-                        <div className="px-6 pb-6 flex gap-3">
-                            <button
-                                onClick={handleCancel}
-                                className="flex-1 px-4 py-2.5 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 font-medium rounded-xl transition-colors"
-                            >
-                                {state.options.cancelLabel || "ยกเลิก"}
-                            </button>
-                            <button
-                                onClick={handleConfirm}
-                                className={`flex-1 px-4 py-2.5 text-white font-medium rounded-xl transition-all active:scale-95 shadow-md ${variantColors[state.options.variant || 'default']}`}
-                            >
-                                {state.options.confirmLabel || "ยืนยัน"}
-                            </button>
-                        </div>
-                    </div>
+            <AccessibleDialog open={state.open} onClose={handleCancel} title={state.options.title}
+                footer={<>
+                    <button type="button" data-autofocus onClick={handleCancel} className="rounded-lg border border-slate-300 px-4 py-2 font-medium hover:bg-slate-100 dark:border-slate-600 dark:hover:bg-slate-700">{state.options.cancelLabel || "ยกเลิก"}</button>
+                    <button type="button" onClick={handleConfirm} className={`rounded-lg px-4 py-2 font-medium text-white ${variantColors[state.options.variant || 'default']}`}>{state.options.confirmLabel || "ยืนยัน"}</button>
+                </>}>
+                <div className="flex items-start gap-3">
+                    <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-500" aria-hidden="true" />
+                    <p className="max-h-72 overflow-y-auto whitespace-pre-line break-words text-sm leading-6 text-slate-600 dark:text-slate-300">{state.options.message}</p>
                 </div>
-            )}
+            </AccessibleDialog>
         </ConfirmContext.Provider>
     );
 }

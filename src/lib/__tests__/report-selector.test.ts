@@ -3,8 +3,27 @@ import {
     filterReports,
     getNextActiveIndex,
     groupReports,
+    splitSearchMatches,
     type StandardReport,
 } from '../report-selector';
+
+describe('literal search highlighting', () => {
+    it('highlights each match without changing the original casing', () => {
+        expect(splitSearchMatches('AP report / ap detail', 'ap')).toEqual([
+            { text: 'AP', matched: true }, { text: ' report / ', matched: false },
+            { text: 'ap', matched: true }, { text: ' detail', matched: false },
+        ]);
+    });
+    it('treats regex characters and HTML as literal text', () => {
+        expect(splitSearchMatches('<b>A.*</b>', '.*')).toEqual([
+            { text: '<b>A', matched: false }, { text: '.*', matched: true }, { text: '</b>', matched: false },
+        ]);
+    });
+    it('keeps Thai text and blank searches intact', () => {
+        expect(splitSearchMatches('หมวดบัญชี', 'บัญชี')).toEqual([{ text: 'หมวด', matched: false }, { text: 'บัญชี', matched: true }]);
+        expect(splitSearchMatches('AP report', '  ')).toEqual([{ text: 'AP report', matched: false }]);
+    });
+});
 
 const reports: StandardReport[] = [
     {
@@ -70,7 +89,7 @@ describe('groupReports', () => {
 
     it('puts reports without a category in the fallback group', () => {
         expect(groupReports([reports[2]])).toEqual([
-            { category: 'อื่น ๆ', reports: [reports[2]] },
+            { category: 'ยังไม่จัดหมวด', reports: [reports[2]] },
         ]);
     });
 
@@ -78,7 +97,7 @@ describe('groupReports', () => {
         expect(groupReports([
             reports[2],
             { ReportId: 5, ReportName: 'Named report', CategoryName: 'Account' },
-        ]).map((group) => group.category)).toEqual(['Account', 'อื่น ๆ']);
+        ]).map((group) => group.category)).toEqual(['Account', 'ยังไม่จัดหมวด']);
     });
 });
 

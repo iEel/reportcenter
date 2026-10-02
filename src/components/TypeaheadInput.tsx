@@ -9,6 +9,7 @@ interface Suggestion {
 }
 
 interface TypeaheadInputProps {
+    id?: string;
     value: string;
     onChange: (value: string) => void;
     onSelect?: (value: string) => void;
@@ -20,6 +21,7 @@ interface TypeaheadInputProps {
 }
 
 export default function TypeaheadInput({
+    id,
     value,
     onChange,
     onSelect,
@@ -129,6 +131,7 @@ export default function TypeaheadInput({
                 <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
                 <input
                     ref={inputRef}
+                    id={id}
                     type="text"
                     value={query}
                     onChange={handleInputChange}

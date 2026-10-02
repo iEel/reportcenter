@@ -1,0 +1,50 @@
+[
+  {
+    "file": "index.html",
+    "sha256": "cc9cf4b23e260cabf07ecce0e84d35535d4b421007009e8364e36a5ec36ab7c4"
+  },
+  {
+    "file": "mock.css",
+    "sha256": "8171d3f44a7a9f48a2a9b1433c56288e15b81a2268250b65cbf3f326bd00855b"
+  },
+  {
+    "file": "data.js",
+    "sha256": "0c87ccf77e65286461ec8a135105517ab1c0a2f233c348f4f4362840e528404b"
+  },
+  {
+    "file": "core.js",
+    "sha256": "d245e840087f8f5254da2877aaeb9cc8a5e9d5a206e6cb9eb7f3bf4a9cc6f7ac"
+  },
+  {
+    "file": "page-reports.js",
+    "sha256": "1821abff8c3c82fb315efe63f9cd2e8b626321cedd28581bb4b648040737313c"
+  },
+  {
+    "file": "page-categories.js",
+    "sha256": "c51027068dcdcf3874e072271fc8480cf0fd6b97ac4807d3797a7b1fdc5494ef"
+  },
+  {
+    "file": "page-users.js",
+    "sha256": "d43c5925257567e2b78e9615c562b8d85043f94570d5ba090246553d507f8f5b"
+  },
+  {
+    "file": "page-roles.js",
+    "sha256": "4b49fa5ec61e0b3aa34dac29a9215d9d95850428d8bbaa4a72af6fc9c373748d"
+  },
+  {
+    "file": "README.md",
+    "sha256": "eef449a3764bafe5e51db70bc101443bf872edb7728386b96496fba90819aaa7"
+  },
+  {
+    "file": "tests/category-draft.node.cjs",
+    "sha256": "075dac1c7cadabbd025e2f7d2ec2bb3e2e410485f2c866e739d116d3fc2bb4a2"
+  },
+  {
+    "file": "tests/overlay-draft.node.cjs",
+    "sha256": "101e7b3e80c3605b08ddde4e2d45641e7b6315c608a879a0fc9ec723da1c5cc5"
+  },
+  {
+    "file": "tests/role-draft.node.cjs",
+    "sha256": "993f7689179608d6a6b7556ae01dafcc0825185b34a3355cc75af45db5483207"
+  }
+]

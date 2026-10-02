@@ -1,20 +1,28 @@
 "use client"
 
-import { Search, Filter, Download, FileText, ChevronLeft, ChevronRight, RefreshCw, Loader2, AlertCircle, Star, BarChart3, Calendar, Play, ArrowRight, Send } from "lucide-react";
+import { Search, Download, ChevronLeft, ChevronRight, RefreshCw, Loader2, AlertCircle, Star, Check, FileSpreadsheet, X } from "lucide-react";
 import { useState, useEffect, useRef } from "react";
 import * as xlsx from 'xlsx';
 import { useAuth } from "@/components/providers/AuthProvider";
 import { useToast } from "@/components/providers/ToastProvider";
 import TypeaheadInput from "@/components/TypeaheadInput";
 import ReportSelector from "@/components/ReportSelector";
+import CompanySelector from "@/components/CompanySelector";
+import Link from "next/link";
 import { formatDate } from '@/lib/dateUtils';
+import type { StandardReport } from '@/lib/report-selector';
+
+interface Report extends StandardReport { ReportType: number }
+interface ReportParameter { ParameterId: number; ParameterName: string; DisplayLabel?: string; InputType: string; LookupQuery?: string | null }
+interface ReportCompany { companyId: number; name: string; label: string }
+const NO_COMPANIES: number[] = [];
 
 export default function StandardReportPage() {
     const { user } = useAuth();
     const { toast } = useToast();
-    const [reports, setReports] = useState<any[]>([]);
+    const [reports, setReports] = useState<Report[]>([]);
     const [selectedReportId, setSelectedReportId] = useState<string>('');
-    const [parameters, setParameters] = useState<any[]>([]);
+    const [parameters, setParameters] = useState<ReportParameter[]>([]);
     const [isLoadingReports, setIsLoadingReports] = useState(true);
     const [isLoadingParams, setIsLoadingParams] = useState(false);
 
@@ -28,7 +36,7 @@ export default function StandardReportPage() {
     const [exportStatus, setExportStatus] = useState('');
     const [exportElapsed, setExportElapsed] = useState(0);
     const exportTimerRef = useRef<NodeJS.Timeout | null>(null);
-    const [reportData, setReportData] = useState<any[] | null>(null);
+    const [reportData, setReportData] = useState<Record<string, unknown>[] | null>(null);
     const [reportColumns, setReportColumns] = useState<string[]>([]);
     const [executionError, setExecutionError] = useState<string | null>(null);
 
@@ -41,14 +49,11 @@ export default function StandardReportPage() {
     const [favoriteIds, setFavoriteIds] = useState<number[]>([]);
 
     // Background Job state
-    const [activeJob, setActiveJob] = useState<{ jobId: number; status: string; rowCount?: number; fileName?: string; error?: string } | null>(null);
+    const [activeJob, setActiveJob] = useState<{ jobId: number; status: string; rowCount?: number; fileName?: string; error?: string; reportName?: string } | null>(null);
 
-    const [companies, setCompanies] = useState<any[]>([]);
+    const [companies, setCompanies] = useState<ReportCompany[]>([]);
 
-    const companyNames: Record<number, string> = {};
-    companies.forEach(c => { companyNames[c.companyId] = `${c.name} (${c.label})`; });
-
-    const allowedCompanies = user?.allowedCompanies || [];
+    const allowedCompanies = user?.allowedCompanies || NO_COMPANIES;
 
     // Set default selected company when user loads
     useEffect(() => {
@@ -71,10 +76,10 @@ export default function StandardReportPage() {
                 const favData = await favRes.json();
                 const compData = await compRes.json();
                 if (reportsData.success) {
-                    setReports(reportsData.reports.filter((r: any) => r.ReportType === 1));
+                    setReports(reportsData.reports.filter((r: Report) => r.ReportType === 1));
                 }
                 if (favData.success) {
-                    setFavoriteIds(favData.favorites.map((f: any) => f.ReportId));
+                    setFavoriteIds(favData.favorites.map((f: { ReportId: number }) => f.ReportId));
                 }
                 if (compData.success) {
                     setCompanies(compData.companies);
@@ -110,37 +115,27 @@ export default function StandardReportPage() {
         }
     };
 
-    // Fetch parameters when report changes
+    // A new report owns a new set of conditions and results. Late responses are ignored.
     useEffect(() => {
-        if (!selectedReportId) {
-            setParameters([]);
-            setParamValues({});
-            setReportData(null);
-            setExecutionError(null);
-            return;
-        }
-
+        const controller = new AbortController();
+        setParameters([]); setParamValues({}); setReportData(null); setExecutionError(null);
+        setReportColumns([]); setTotalRows(0); setCurrentPage(1);
+        if (!selectedReportId) { setIsLoadingParams(false); return; }
         const fetchParams = async () => {
             setIsLoadingParams(true);
             try {
-                const res = await fetch(`/api/reports/parameters?reportId=${selectedReportId}`);
+                const res = await fetch(`/api/reports/parameters?reportId=${selectedReportId}`, { signal: controller.signal });
                 const data = await res.json();
-                if (data.success) {
-                    setParameters(data.parameters);
-                    // Initialize paramValues
-                    const initialVals: Record<string, string> = {};
-                    data.parameters.forEach((p: any) => {
-                        initialVals[p.ParameterName] = '';
-                    });
-                    setParamValues(initialVals);
-                }
+                if (controller.signal.aborted) return;
+                if (!res.ok || !data.success) throw new Error(data.message || 'ไม่สามารถโหลดเงื่อนไขรายงานได้');
+                setParameters(data.parameters);
+                setParamValues(Object.fromEntries(data.parameters.map((parameter: { ParameterName: string }) => [parameter.ParameterName, ''])));
             } catch (error) {
-                console.error("Failed to fetch parameters:", error);
-            } finally {
-                setIsLoadingParams(false);
-            }
+                if (!controller.signal.aborted) setExecutionError(error instanceof Error ? error.message : 'ไม่สามารถโหลดเงื่อนไขรายงานได้');
+            } finally { if (!controller.signal.aborted) setIsLoadingParams(false); }
         };
-        fetchParams();
+        void fetchParams();
+        return () => controller.abort();
     }, [selectedReportId]);
 
     const handleParamChange = (paramName: string, value: string) => {
@@ -158,9 +153,9 @@ export default function StandardReportPage() {
         if (report?.IsHeavy && !requestedPage) {
             const confirmed = window.confirm(
                 '⚠️ รายงานนี้ถูกตั้งเป็น "รายงานขนาดใหญ่"\n\n' +
-                'การดึงข้อมูลจะแสดงตัวอย่างเพียง 50 แถวแรก\n' +
-                'หากต้องการข้อมูลทั้งหมด กรุณาใช้ปุ่ม "Export Excel" (จะส่งออกเป็น CSV)\n\n' +
-                'ต้องการดูตัวอย่างต่อหรือไม่?'
+                'การดึงข้อมูลจะแสดง 50 แถวแรก\n' +
+                'หากต้องการข้อมูลทั้งหมด ใช้ปุ่ม "สร้างไฟล์เบื้องหลัง (CSV)"\n\n' +
+                'ต้องการดึงข้อมูลต่อหรือไม่?'
             );
             if (!confirmed) return;
         }
@@ -206,8 +201,8 @@ export default function StandardReportPage() {
             } else {
                 setExecutionError(data.message || 'เกิดข้อผิดพลาดในการดึงข้อมูล');
             }
-        } catch (error: any) {
-            setExecutionError('ไม่สามารถเชื่อมต่อกับเซิร์ฟเวอร์ได้: ' + error.message);
+        } catch (error) {
+            setExecutionError('ไม่สามารถเชื่อมต่อกับเซิร์ฟเวอร์ได้: ' + (error instanceof Error ? error.message : 'เกิดข้อผิดพลาด'));
         } finally {
             setIsExecuting(false);
         }
@@ -249,14 +244,14 @@ export default function StandardReportPage() {
             });
             const data = await res.json();
             if (data.success) {
-                setActiveJob({ jobId: data.jobId, status: 'running' });
+                setActiveJob({ jobId: data.jobId, status: 'running', reportName: reports.find(r => String(r.ReportId) === selectedReportId)?.ReportName });
                 toast('🚀 กำลังสร้างรายงานในพื้นหลัง...', 'info');
                 const poll = setInterval(async () => {
                     try {
                         const jr = await fetch(`/api/reports/jobs/${data.jobId}`);
                         const jd = await jr.json();
                         if (jd.success) {
-                            setActiveJob(jd.job);
+                            setActiveJob({ ...jd.job, reportName: reports.find(r => String(r.ReportId) === selectedReportId)?.ReportName });
                             if (jd.job.status === 'done') {
                                 clearInterval(poll);
                                 toast(`✅ รายงานพร้อมดาวน์โหลด (${jd.job.rowCount?.toLocaleString()} แถว)`, 'success');
@@ -312,14 +307,14 @@ export default function StandardReportPage() {
                 });
                 const data = await res.json();
                 if (data.success) {
-                    setActiveJob({ jobId: data.jobId, status: 'running' });
+                    setActiveJob({ jobId: data.jobId, status: 'running', reportName: reports.find(r => String(r.ReportId) === selectedReportId)?.ReportName });
                     toast('กำลังสร้างรายงานในพื้นหลัง...', 'info');
                     const poll = setInterval(async () => {
                         try {
                             const jr = await fetch(`/api/reports/jobs/${data.jobId}`);
                             const jd = await jr.json();
                             if (jd.success) {
-                                setActiveJob(jd.job);
+                                setActiveJob({ ...jd.job, reportName: reports.find(r => String(r.ReportId) === selectedReportId)?.ReportName });
                                 if (jd.job.status === 'done') {
                                     clearInterval(poll);
                                     toast(`รายงานพร้อมดาวน์โหลด (${jd.job.rowCount} แถว)`, 'success');
@@ -383,352 +378,208 @@ export default function StandardReportPage() {
     };
 
 
-    return (
-        <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500 min-h-full flex flex-col">
+    const selectedReport = reports.find(report => String(report.ReportId) === selectedReportId);
+    const favorites = reports.filter(report => favoriteIds.includes(report.ReportId));
+    const stepIndex = selectedReportId ? 1 : 0;
+    const pageCount = Math.max(1, Math.ceil(totalRows / pageSize));
+    const secondaryButton = "inline-flex h-9 items-center justify-center gap-2 rounded-lg border border-slate-300 bg-white px-3 text-[13px] font-medium text-slate-700 hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-blue-600 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700";
+    const inputClass = "block h-11 w-full min-w-0 self-start rounded-lg border border-slate-300 bg-white px-3 text-sm text-slate-900 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100";
+    const conditionFieldClass = "row-span-3 grid min-w-0 grid-rows-subgrid";
+    const conditionLabelClass = "block self-end text-[13px] font-medium leading-5 text-slate-700 dark:text-slate-200";
 
-            {/* Background Job Banner */}
-            {activeJob && (
-                <div className={`flex items-center justify-between px-5 py-3 rounded-xl border shadow-sm animate-in slide-in-from-top-2 duration-300 ${activeJob.status === 'running' ? 'bg-blue-50 border-blue-200' :
-                    activeJob.status === 'done' ? 'bg-emerald-50 border-emerald-200' :
-                        'bg-red-50 border-red-200'
-                    }`}>
-                    <div className="flex items-center gap-3">
-                        {activeJob.status === 'running' && <Loader2 className="w-5 h-5 text-blue-600 animate-spin" />}
-                        {activeJob.status === 'done' && <Download className="w-5 h-5 text-emerald-600" />}
-                        {activeJob.status === 'failed' && <AlertCircle className="w-5 h-5 text-red-600" />}
-                        <span className="text-sm font-medium">
-                            {activeJob.status === 'running' && 'กำลังสร้างรายงานในพื้นหลัง... กรุณารอสักครู่'}
-                            {activeJob.status === 'done' && `รายงานพร้อมแล้ว! (${activeJob.rowCount} แถว)`}
-                            {activeJob.status === 'failed' && `สร้างรายงานไม่สำเร็จ: ${activeJob.error}`}
+    return (
+        <div className="min-w-0 space-y-[18px]">
+            <header>
+                <h1 className="text-[22px] font-semibold tracking-tight text-slate-900 dark:text-white">รายงานมาตรฐาน</h1>
+                <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">เลือกรายงาน กรอกเงื่อนไขของรายงานนั้น แล้วกดดึงข้อมูล</p>
+            </header>
+
+            <section className="min-w-0 space-y-[18px] rounded-xl border border-slate-200 bg-white px-5 py-[18px] shadow-sm dark:border-slate-700 dark:bg-slate-800" aria-label="เลือกรายงานและเงื่อนไข">
+                <ReportSelector reports={reports} selectedReportId={selectedReportId} favoriteIds={favoriteIds} isLoading={isLoadingReports}
+                    disabled={isExecuting || isExporting} onSelect={setSelectedReportId} onToggleFavorite={toggleFavorite} />
+
+                {favorites.length > 0 && (
+                    <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5" aria-label="รายการโปรด">
+                        <span className="inline-flex min-w-[110px] items-center gap-1.5 text-[12.5px] font-semibold text-slate-500 dark:text-slate-400">
+                            <Star className="h-3.5 w-3.5" aria-hidden="true" />รายการโปรด
                         </span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                        {activeJob.status === 'done' && (
-                            <button onClick={handleJobDownload} className="inline-flex items-center gap-1.5 px-4 py-1.5 bg-emerald-600 text-white text-sm font-semibold rounded-lg hover:bg-emerald-700 transition-colors shadow-sm">
-                                <Download className="w-4 h-4" /> ดาวน์โหลด
+                        {favorites.map(report => (
+                            <button key={report.ReportId} type="button" onClick={() => setSelectedReportId(String(report.ReportId))}
+                                disabled={isExecuting || isExporting} aria-pressed={selectedReportId === String(report.ReportId)}
+                                className={"inline-flex min-h-7 max-w-full items-center rounded-full border px-2.5 py-1 text-left text-xs font-medium transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 disabled:opacity-50 " + (selectedReportId === String(report.ReportId)
+                                    ? "border-blue-300 bg-blue-50 text-blue-700 dark:border-blue-700 dark:bg-blue-950 dark:text-blue-200"
+                                    : "border-slate-200 bg-slate-50 text-slate-600 hover:border-slate-300 hover:bg-slate-100 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700")}>
+                                <span className="break-words">{report.ReportName}</span>
                             </button>
-                        )}
-                        {activeJob.status !== 'running' && (
-                            <button onClick={() => setActiveJob(null)} className="text-slate-400 hover:text-slate-600 text-sm">✕</button>
-                        )}
+                        ))}
                     </div>
+                )}
+
+                {selectedReportId && (
+                    <section className="space-y-3.5 border-t border-slate-200 pt-4 dark:border-slate-700" aria-labelledby="report-conditions-title">
+                        <h2 id="report-conditions-title" className="text-sm font-semibold text-slate-800 dark:text-slate-100">เงื่อนไขของรายงาน</h2>
+                        {isLoadingParams ? (
+                            <div className="flex items-center gap-2 py-4 text-sm text-slate-500 dark:text-slate-400" role="status">
+                                <Loader2 className="h-4 w-4 motion-safe:animate-spin" aria-hidden="true" />กำลังโหลดเงื่อนไขรายงาน…
+                            </div>
+                        ) : (
+                            <>
+                                <div className="grid grid-cols-[repeat(auto-fill,minmax(min(100%,210px),1fr))] gap-x-4 gap-y-1.5">
+                                    <div className={conditionFieldClass}>
+                                        <label htmlFor="report-company" className={conditionLabelClass}>บริษัท <span className="text-red-600">*</span></label>
+                                        <CompanySelector id="report-company" companies={companies.filter(company => allowedCompanies.includes(company.companyId))}
+                                            value={selectedCompany} onChange={setSelectedCompany} disabled={isExecuting || isExporting} />
+                                        <p className="text-xs text-slate-500 dark:text-slate-400">แสดงเฉพาะบริษัทที่คุณได้รับสิทธิ์</p>
+                                    </div>
+                                    {parameters.map(param => (
+                                        <div key={param.ParameterId} className={conditionFieldClass}>
+                                            <label htmlFor={"report-param-" + param.ParameterId} className={conditionLabelClass}>{param.DisplayLabel || param.ParameterName}</label>
+                                            {param.InputType === 'date' || param.InputType === 'number' ? (
+                                                <input id={"report-param-" + param.ParameterId} type={param.InputType} value={paramValues[param.ParameterName] || ''}
+                                                    onChange={event => handleParamChange(param.ParameterName, event.target.value)} className={inputClass} />
+                                            ) : param.LookupQuery ? (
+                                                <TypeaheadInput id={"report-param-" + param.ParameterId} reportId={selectedReportId} paramName={param.ParameterName}
+                                                    companyId={selectedCompany} value={paramValues[param.ParameterName] || ''} onChange={value => handleParamChange(param.ParameterName, value)}
+                                                    placeholder={"ค้นหา " + (param.DisplayLabel || param.ParameterName) + "..."}
+                                                    className="block h-11 min-w-0 text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100" />
+                                            ) : (
+                                                <input id={"report-param-" + param.ParameterId} type="text" value={paramValues[param.ParameterName] || ''}
+                                                    onChange={event => handleParamChange(param.ParameterName, event.target.value)} className={inputClass} />
+                                            )}
+                                        </div>
+                                    ))}
+                                    {!parameters.length && !executionError && <div className={conditionFieldClass}><span className={conditionLabelClass}>เงื่อนไขเพิ่มเติม</span><p className="self-center text-xs text-slate-500 dark:text-slate-400">รายงานนี้ไม่มีเงื่อนไขอื่น</p></div>}
+                                </div>
+                                <div className="flex flex-wrap items-center gap-2 pt-0.5">
+                                    <button type="button" onClick={() => handleExecuteReport()} disabled={isExecuting}
+                                        className="inline-flex h-9 items-center justify-center gap-2 rounded-lg border border-blue-600 bg-blue-600 px-3.5 text-[13.5px] font-medium text-white hover:bg-blue-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 disabled:cursor-not-allowed disabled:opacity-60">
+                                        {isExecuting ? <Loader2 className="h-4 w-4 motion-safe:animate-spin" aria-hidden="true" /> : <Search className="h-4 w-4" aria-hidden="true" />}
+                                        {isExecuting ? 'กำลังดึงข้อมูล…' : 'ดึงข้อมูล'}
+                                    </button>
+                                    {selectedReport?.IsHeavy && (
+                                        <>
+                                            <button type="button" onClick={handleBackgroundExport} disabled={activeJob?.status === 'running'} className={secondaryButton}>
+                                                {activeJob?.status === 'running' ? <Loader2 className="h-4 w-4 motion-safe:animate-spin" aria-hidden="true" /> : <FileSpreadsheet className="h-4 w-4" aria-hidden="true" />}
+                                                {activeJob?.status === 'running' ? 'กำลังสร้างไฟล์…' : 'สร้างไฟล์เบื้องหลัง (CSV)'}
+                                            </button>
+                                            <span className="text-xs text-slate-500 dark:text-slate-400">รายงานนี้ข้อมูลมาก สร้างไฟล์แล้วดาวน์โหลดจากประวัติได้</span>
+                                        </>
+                                    )}
+                                </div>
+                            </>
+                        )}
+                    </section>
+                )}
+            </section>
+
+            {activeJob && (
+                <div role="status" className={"flex flex-wrap items-center gap-3 rounded-xl border px-4 py-3 text-sm " + (activeJob.status === 'running'
+                    ? "border-blue-200 bg-blue-50 text-blue-900 dark:border-blue-800 dark:bg-blue-950 dark:text-blue-200"
+                    : activeJob.status === 'done' ? "border-emerald-200 bg-emerald-50 text-emerald-900 dark:border-emerald-800 dark:bg-emerald-950 dark:text-emerald-200"
+                        : "border-red-200 bg-red-50 text-red-800 dark:border-red-800 dark:bg-red-950 dark:text-red-200")}>
+                    {activeJob.status === 'running' ? <Loader2 className="h-4 w-4 shrink-0 motion-safe:animate-spin" aria-hidden="true" />
+                        : activeJob.status === 'done' ? <Check className="h-4 w-4 shrink-0" aria-hidden="true" /> : <AlertCircle className="h-4 w-4 shrink-0" aria-hidden="true" />}
+                    <div className="min-w-0 flex-1">
+                        {activeJob.status === 'running' && <>กำลังสร้างไฟล์ <strong>{activeJob.reportName || 'รายงาน'}</strong> เบื้องหลัง ใช้หน้าอื่นต่อได้ระหว่างรอ</>}
+                        {activeJob.status === 'done' && <>ไฟล์ <strong>{activeJob.reportName || activeJob.fileName || 'รายงาน'}</strong> พร้อมแล้ว{activeJob.rowCount != null ? " · " + activeJob.rowCount.toLocaleString() + " แถว" : ''}</>}
+                        {activeJob.status === 'failed' && <>สร้างไฟล์ <strong>{activeJob.reportName || 'รายงาน'}</strong> ไม่สำเร็จ: {activeJob.error}</>}
+                    </div>
+                    {activeJob.status === 'done' && <button type="button" onClick={handleJobDownload} className={secondaryButton}><Download className="h-4 w-4" aria-hidden="true" />ดาวน์โหลด</button>}
+                    <Link href="/reports/job-history" className={secondaryButton}>ดูประวัติ</Link>
+                    {activeJob.status !== 'running' && <button type="button" onClick={() => setActiveJob(null)} aria-label="ปิดสถานะการสร้างไฟล์" className="rounded-lg p-2 hover:bg-white/50 focus-visible:outline-2 focus-visible:outline-blue-600"><X className="h-4 w-4" aria-hidden="true" /></button>}
                 </div>
             )}
 
-            {/* Header / Report Selector */}
-            <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
-                {/* Pinned Favorites */}
-                {reports.filter(r => favoriteIds.includes(r.ReportId)).length > 0 && (
-                    <div className="mb-5">
-                        <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2 flex items-center gap-1.5">
-                            <Star className="w-3.5 h-3.5 text-amber-500 fill-amber-500" /> รายการโปรด
-                        </h3>
-                        <div className="flex flex-wrap gap-2">
-                            {reports.filter(r => favoriteIds.includes(r.ReportId)).map(r => (
-                                <button
-                                    key={r.ReportId}
-                                    onClick={() => setSelectedReportId(r.ReportId.toString())}
-                                    className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium border transition-all ${selectedReportId === r.ReportId.toString()
-                                        ? 'bg-blue-50 border-blue-200 text-blue-700 shadow-sm'
-                                        : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50 hover:border-slate-300'
-                                        }`}
-                                >
-                                    <Star className="w-3.5 h-3.5 text-amber-500 fill-amber-500" />
-                                    {r.ReportName}
-                                </button>
-                            ))}
-                        </div>
-                    </div>
-                )}
-
-                <div className="flex flex-col md:flex-row md:items-end gap-6 justify-between">
-                    <div className="w-full max-w-2xl">
-                        <ReportSelector
-                            reports={reports}
-                            selectedReportId={selectedReportId}
-                            favoriteIds={favoriteIds}
-                            isLoading={isLoadingReports}
-                            disabled={isExecuting}
-                            onSelect={setSelectedReportId}
-                            onToggleFavorite={toggleFavorite}
-                        />
-                    </div>
+            {executionError && (
+                <div role="alert" className="flex items-start gap-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-800 dark:bg-red-950 dark:text-red-200">
+                    <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+                    <div><p className="font-semibold">เกิดข้อผิดพลาดในการดึงข้อมูล</p><p className="mt-1">{executionError}</p></div>
                 </div>
+            )}
 
-                {/* Dynamic Filters Area */}
-                <div className="mt-6 pt-6 border-t border-slate-100 min-h-[140px]">
-                    <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-4 flex items-center gap-2">
-                        <Filter className="w-4 h-4" /> ตัวกรองข้อมูล (Filters)
-                    </h3>
-
-                    {!selectedReportId ? (
-                        <div className="text-center text-sm text-slate-400 py-6">กรุณาเลือกรายงานเพื่อแสดงตัวกรองข้อมูล</div>
-                    ) : isLoadingParams ? (
-                        <div className="flex items-center justify-center py-6 text-slate-500 text-sm gap-2">
-                            <Loader2 className="w-4 h-4 animate-spin text-blue-500" /> กำลังโหลดตัวกรอง...
-                        </div>
-                    ) : (
-                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 items-end">
-                            {/* Company Selector - Universal */}
-                            <div>
-                                <label className="block text-xs font-medium text-slate-500 mb-1">สาขา / บริษัท <span className="text-red-500">*</span></label>
-                                <select
-                                    value={selectedCompany}
-                                    onChange={e => setSelectedCompany(e.target.value)}
-                                    className="w-full bg-white border border-slate-200 text-sm py-2 px-3 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors"
-                                >
-                                    {companies.map(c => (
-                                        <option key={c.companyId} value={c.companyId}>{c.companyId}. {c.name} ({c.label})</option>
-                                    ))}
-                                </select>
-                            </div>
-
-                            {/* Dynamic Database Parameters */}
-                            {parameters.map((param) => (
-                                <div key={param.ParameterId}>
-                                    <label className="block text-xs font-medium text-slate-500 mb-1">
-                                        {param.DisplayLabel || param.ParameterName}
-                                    </label>
-                                    {param.InputType === 'date' ? (
-                                        <input
-                                            type="date"
-                                            value={paramValues[param.ParameterName] || ''}
-                                            onChange={e => handleParamChange(param.ParameterName, e.target.value)}
-                                            className="w-full bg-white border border-slate-200 text-sm py-2 px-3 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors"
-                                        />
-                                    ) : param.InputType === 'number' ? (
-                                        <input
-                                            type="number"
-                                            value={paramValues[param.ParameterName] || ''}
-                                            onChange={e => handleParamChange(param.ParameterName, e.target.value)}
-                                            className="w-full bg-white border border-slate-200 text-sm py-2 px-3 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors"
-                                        />
-                                    ) : param.LookupQuery ? (
-                                        <TypeaheadInput
-                                            reportId={selectedReportId}
-                                            paramName={param.ParameterName}
-                                            companyId={selectedCompany}
-                                            value={paramValues[param.ParameterName] || ''}
-                                            onChange={(val: string) => handleParamChange(param.ParameterName, val)}
-                                            placeholder={`ค้นหา ${param.DisplayLabel || param.ParameterName}...`}
-                                        />
-                                    ) : (
-                                        <input
-                                            type="text"
-                                            value={paramValues[param.ParameterName] || ''}
-                                            onChange={e => handleParamChange(param.ParameterName, e.target.value)}
-                                            className="w-full bg-white border border-slate-200 text-sm py-2 px-3 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors"
-                                        />
-                                    )}
-                                </div>
-                            ))}
-
-                            <div className="flex items-end gap-2 mt-2 lg:mt-0">
-                                <button
-                                    onClick={() => handleExecuteReport()}
-                                    disabled={isExecuting}
-                                    className="bg-slate-900 hover:bg-slate-800 text-white py-2 px-5 rounded-lg flex items-center justify-center gap-2 font-medium transition-colors shadow-sm active:scale-95 disabled:opacity-70 disabled:active:scale-100 whitespace-nowrap"
-                                >
-                                    {isExecuting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
-                                    {isExecuting ? 'กำลังประมวลผล...' : 'ดึงข้อมูล'}
-                                </button>
-                                {/* Direct Background Export button for IsHeavy reports */}
-                                {reports.find(r => r.ReportId.toString() === selectedReportId)?.IsHeavy && (
-                                    <button
-                                        onClick={handleBackgroundExport}
-                                        disabled={activeJob?.status === 'running'}
-                                        className="bg-emerald-600 hover:bg-emerald-700 text-white py-2 px-4 rounded-lg flex items-center justify-center gap-2 font-medium transition-colors shadow-sm active:scale-95 disabled:opacity-70 disabled:active:scale-100 whitespace-nowrap"
-                                        title="ส่งออก Excel ผ่าน Background Job โดยไม่ต้องดึงข้อมูลก่อน"
-                                    >
-                                        {activeJob?.status === 'running' ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
-                                        {activeJob?.status === 'running' ? 'กำลังสร้าง...' : 'Export (Background)'}
-                                    </button>
-                                )}
-                            </div>
-                        </div>
-                    )}
-                </div>
-            </div>
-
-            {/* Error Message */}
-            {
-                executionError && (
-                    <div className="bg-red-50 text-red-600 p-4 rounded-xl flex items-start gap-3 border border-red-100">
-                        <AlertCircle className="w-5 h-5 flex-shrink-0 mt-0.5" />
-                        <div>
-                            <h4 className="font-semibold text-sm">เกิดข้อผิดพลาดในการดึงข้อมูล</h4>
-                            <p className="text-sm opacity-90">{executionError}</p>
-                        </div>
-                    </div>
-                )
-            }
-
-            {/* Data Grid Area */}
-            <div className="flex-1 bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700 flex flex-col overflow-hidden relative">
-
-                {/* Export Progress Overlay */}
-                {isExporting && (
-                    <div className="fixed inset-0 z-50 bg-black/30 backdrop-blur-sm flex items-center justify-center">
-                        <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-700 p-8 max-w-sm w-full mx-4 text-center space-y-5">
-                            <div className="w-14 h-14 bg-emerald-100 dark:bg-emerald-900/30 rounded-2xl flex items-center justify-center mx-auto">
-                                <Download className="w-7 h-7 text-emerald-600 dark:text-emerald-400 animate-bounce" />
-                            </div>
-                            <div>
-                                <h3 className="text-lg font-bold text-slate-900 dark:text-white">กำลังส่งออก Excel</h3>
-                                <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">{exportStatus}</p>
-                            </div>
-                            {/* Progress Bar */}
-                            <div className="w-full bg-slate-200 dark:bg-slate-700 rounded-full h-2 overflow-hidden">
-                                <div className="h-full bg-gradient-to-r from-emerald-500 to-teal-400 rounded-full animate-pulse" style={{ width: '75%' }} />
-                            </div>
-                            {/* Elapsed Time */}
-                            <div className="flex items-center justify-center gap-2 text-sm">
-                                <RefreshCw className="w-4 h-4 animate-spin text-emerald-500" />
-                                <span className="text-slate-600 dark:text-slate-300 font-mono">
-                                    {Math.floor(exportElapsed / 60).toString().padStart(2, '0')}:{(exportElapsed % 60).toString().padStart(2, '0')}
-                                </span>
-                            </div>
-                            <p className="text-xs text-slate-400 dark:text-slate-500">กรุณาอย่าปิดหน้านี้ระหว่างส่งออก</p>
-                        </div>
-                    </div>
-                )}
-                {/* Actions Toolbar */}
-                <div className="p-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
-                    <p className="text-sm font-medium text-slate-600">
-                        {reportData ? (
-                            <>พบข้อมูล <span className="text-blue-600 font-bold">{totalRows}</span> รายการ (หน้า {currentPage}/{Math.ceil(totalRows / pageSize) || 1})</>
-                        ) : (
-                            'รอการดึงข้อมูล...'
-                        )}
+            <section aria-label="ผลลัพธ์" aria-busy={isExecuting} className="min-w-0 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-800">
+                <div className="flex flex-wrap items-center justify-between gap-2.5 border-b border-slate-200 bg-slate-50 px-4 py-3 dark:border-slate-700 dark:bg-slate-900/50">
+                    <p className="text-[13.5px] text-slate-600 dark:text-slate-300" role="status">
+                        {isExecuting ? 'กำลังดึงข้อมูล…' : reportData
+                            ? <>พบ <strong className="font-semibold tabular-nums">{totalRows.toLocaleString()}</strong> รายการ · หน้า {currentPage} จาก {pageCount}</>
+                            : selectedReportId ? 'ยังไม่ได้ดึงข้อมูล' : 'ยังไม่ได้เลือกรายงาน'}
                     </p>
-                    <div className="flex items-center gap-2">
-                        <button
-                            onClick={() => window.print()}
-                            disabled={!reportData || reportData.length === 0}
-                            className="flex items-center gap-2 text-sm font-medium text-blue-600 bg-blue-50 hover:bg-blue-100 px-3 py-1.5 rounded-lg border border-blue-200 transition-colors disabled:opacity-50"
-                        >
-                            <FileText className="w-4 h-4" />
-                            Print / PDF
-                        </button>
-                        <button
-                            onClick={handleExportExcel}
-                            disabled={!reportData || reportData.length === 0 || isExporting}
-                            className="flex items-center gap-2 text-sm font-medium text-emerald-600 bg-emerald-50 hover:bg-emerald-100 px-3 py-1.5 rounded-lg border border-emerald-200 transition-colors disabled:opacity-50"
-                        >
-                            {isExporting ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
-                            {isExporting ? 'กำลังส่งออก...' : 'Export Excel'}
-                        </button>
-                    </div>
+                    <button type="button" onClick={handleExportExcel} disabled={!reportData || reportData.length === 0 || isExporting || isExecuting}
+                        className={secondaryButton + " !h-[30px] !rounded-[7px] !px-2.5 !text-[12.5px]"}>
+                        {isExporting ? <RefreshCw className="h-3.5 w-3.5 motion-safe:animate-spin" aria-hidden="true" /> : <Download className="h-3.5 w-3.5" aria-hidden="true" />}
+                        {isExporting ? 'กำลังส่งออก…' : selectedReport?.IsHeavy ? 'ส่งออก CSV' : 'ส่งออก Excel (.xlsb)'}
+                    </button>
                 </div>
 
-                <div className="flex-1 overflow-auto">
-                    {isExecuting ? (
-                        <div className="h-full flex flex-col items-center justify-center p-12 text-slate-500">
-                            <RefreshCw className="w-8 h-8 animate-spin text-blue-500 mb-4" />
-                            <p>กำลังรันคำสั่งฐานข้อมูล โปรดรอสักครู่...</p>
-                        </div>
-                    ) : !reportData ? (
-                        <div className="h-full flex items-center justify-center p-8">
-                            <div className="text-center max-w-lg space-y-6">
-                                {/* Icon */}
-                                <div className="w-20 h-20 bg-gradient-to-br from-blue-100 to-indigo-100 dark:from-blue-900/30 dark:to-indigo-900/30 rounded-3xl flex items-center justify-center mx-auto shadow-sm">
-                                    <BarChart3 className="w-10 h-10 text-blue-500 dark:text-blue-400" />
-                                </div>
-
-                                {/* Title */}
-                                <div>
-                                    <h3 className="text-xl font-bold text-slate-800 dark:text-white">เลือกรายงานเพื่อเริ่มต้น</h3>
-                                    <p className="text-sm text-slate-400 dark:text-slate-500 mt-1">ทำตาม 3 ขั้นตอนง่ายๆ ด้านล่าง</p>
-                                </div>
-
-                                {/* Steps */}
-                                <div className="flex items-center justify-center gap-3">
-                                    <div className="flex flex-col items-center gap-2 px-4 py-3 bg-blue-50 dark:bg-blue-900/20 rounded-xl border border-blue-100 dark:border-blue-800">
-                                        <div className="w-8 h-8 bg-blue-500 text-white rounded-lg flex items-center justify-center text-sm font-bold">1</div>
-                                        <FileText className="w-5 h-5 text-blue-500" />
-                                        <span className="text-xs font-medium text-blue-700 dark:text-blue-300">เลือกรายงาน</span>
-                                    </div>
-                                    <ArrowRight className="w-4 h-4 text-slate-300 dark:text-slate-600 flex-shrink-0" />
-                                    <div className="flex flex-col items-center gap-2 px-4 py-3 bg-purple-50 dark:bg-purple-900/20 rounded-xl border border-purple-100 dark:border-purple-800">
-                                        <div className="w-8 h-8 bg-purple-500 text-white rounded-lg flex items-center justify-center text-sm font-bold">2</div>
-                                        <Calendar className="w-5 h-5 text-purple-500" />
-                                        <span className="text-xs font-medium text-purple-700 dark:text-purple-300">กรอก Parameter</span>
-                                    </div>
-                                    <ArrowRight className="w-4 h-4 text-slate-300 dark:text-slate-600 flex-shrink-0" />
-                                    <div className="flex flex-col items-center gap-2 px-4 py-3 bg-emerald-50 dark:bg-emerald-900/20 rounded-xl border border-emerald-100 dark:border-emerald-800">
-                                        <div className="w-8 h-8 bg-emerald-500 text-white rounded-lg flex items-center justify-center text-sm font-bold">3</div>
-                                        <Play className="w-5 h-5 text-emerald-500" />
-                                        <span className="text-xs font-medium text-emerald-700 dark:text-emerald-300">กดดึงข้อมูล</span>
-                                    </div>
-                                </div>
-
-                                <p className="text-xs text-slate-400 dark:text-slate-500">💡 กด ★ เพื่อปักหมุดรายงานที่ใช้บ่อย</p>
-                            </div>
-                        </div>
-                    ) : reportData.length === 0 ? (
-                        <div className="h-full flex items-center justify-center p-12 text-slate-500">
-                            ไม่พบข้อมูลตามเงื่อนไขที่ระบุ
-                        </div>
-                    ) : (
-                        <table className="w-full text-left text-sm whitespace-nowrap">
-                            <thead className="bg-slate-50 text-slate-600 font-semibold border-b border-slate-200 sticky top-0 shadow-sm z-10">
-                                <tr>
-                                    <th className="px-6 py-3 w-16 text-center text-xs font-medium text-slate-400 uppercase">#</th>
-                                    {columns.map((col, idx) => (
-                                        <th key={idx} className="px-6 py-3">{col}</th>
-                                    ))}
-                                </tr>
+                {isExecuting ? (
+                    <div className="space-y-3 px-5 py-6" aria-hidden="true">{[92, 85, 78, 71, 64, 57].map(width => <div key={width} style={{ width: width + '%' }} className="h-3.5 rounded-md bg-slate-100 motion-safe:animate-pulse dark:bg-slate-700" />)}</div>
+                ) : !reportData ? (
+                    <div className="flex flex-col items-center gap-3 px-5 py-11 text-center text-sm text-slate-500 dark:text-slate-400">
+                        <ol aria-label="ขั้นตอนการเรียกรายงาน" className="mb-1 flex flex-wrap items-center justify-center gap-2">
+                            {['เลือกรายงาน', 'กรอกเงื่อนไข', 'ดึงข้อมูล'].map((label, index) => (
+                                <li key={label} className="inline-flex items-center gap-2">
+                                    {index > 0 && <span className="h-px w-[18px] bg-slate-200 dark:bg-slate-600" aria-hidden="true" />}
+                                    <span aria-current={index === stepIndex ? 'step' : undefined} className={"inline-flex h-8 items-center gap-2 rounded-full border pl-1.5 pr-3 text-[13px] font-medium " + (index === stepIndex
+                                        ? "border-blue-500 text-slate-800 dark:text-slate-100" : "border-slate-200 text-slate-500 dark:border-slate-600 dark:text-slate-400")}>
+                                        <span className={"grid h-[22px] w-[22px] place-items-center rounded-full text-xs font-bold " + (index < stepIndex
+                                            ? "bg-emerald-600 text-white" : index === stepIndex ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-500 dark:bg-slate-700 dark:text-slate-300")}>
+                                            {index < stepIndex ? <Check className="h-3 w-3" aria-label="เสร็จแล้ว" /> : index + 1}
+                                        </span>{label}
+                                    </span>
+                                </li>
+                            ))}
+                        </ol>
+                        <h3 className="text-base font-semibold text-slate-900 dark:text-slate-100">{selectedReportId ? 'กรอกเงื่อนไข แล้วกดดึงข้อมูล' : 'เลือกรายงานที่ต้องการ'}</h3>
+                        <p className="max-w-[52ch] leading-relaxed">{selectedReportId
+                            ? <>ผลของ <strong className="font-semibold">{selectedReport?.ReportName}</strong> จะแสดงที่นี่ และส่งออกได้หลังดึงข้อมูล</>
+                            : 'ค้นหาจากชื่อ คำอธิบาย หรือหมวด หรือกดรายการโปรดด้านบน'}</p>
+                    </div>
+                ) : reportData.length === 0 ? (
+                    <div className="px-5 py-11 text-center text-sm text-slate-500 dark:text-slate-400">ไม่พบข้อมูลตามเงื่อนไขที่ระบุ</div>
+                ) : (
+                    <div className="overflow-auto">
+                        <table className="w-full whitespace-nowrap text-left text-[13px]">
+                            <thead className="border-b border-slate-200 bg-slate-50 text-[12.5px] font-semibold text-slate-500 dark:border-slate-700 dark:bg-slate-900/50 dark:text-slate-400">
+                                <tr><th className="w-14 px-3.5 py-2.5 text-center">#</th>{columns.map((column, index) => <th key={index} className="px-3.5 py-2.5">{column}</th>)}</tr>
                             </thead>
-                            <tbody className="divide-y divide-slate-100 text-slate-700">
-                                {reportData.map((row, rowIndex) => (
-                                    <tr key={rowIndex} className="hover:bg-blue-50/50 transition-colors">
-                                        <td className="px-6 py-4 text-center font-mono text-xs text-slate-400 bg-slate-50/30">
-                                            {(currentPage - 1) * pageSize + rowIndex + 1}
-                                        </td>
-                                        {columns.map((col, colIndex) => {
-                                            const val = row[col];
-                                            const isDate = val instanceof Date || (typeof val === 'string' && val.match(/^\d{4}-\d{2}-\d{2}T/));
-                                            const displayVal = isDate
-                                                ? formatDate(val)
-                                                : val === null ? '-' : String(val);
-
-                                            return (
-                                                <td key={colIndex} className="px-6 py-4">
-                                                    {displayVal}
-                                                </td>
-                                            );
-                                        })}
-                                    </tr>
-                                ))}
+                            <tbody className="divide-y divide-slate-200 text-slate-700 dark:divide-slate-700 dark:text-slate-200">
+                                {reportData.map((row, rowIndex) => <tr key={rowIndex} className="hover:bg-slate-50 dark:hover:bg-slate-700/40">
+                                    <td className="px-3.5 py-[11px] text-center font-mono text-xs text-slate-400">{(currentPage - 1) * pageSize + rowIndex + 1}</td>
+                                    {columns.map((column, columnIndex) => {
+                                        const value = row[column];
+                                        const isDate = value instanceof Date || (typeof value === 'string' && value.match(/^\d{4}-\d{2}-\d{2}T/));
+                                        return <td key={columnIndex} className="px-3.5 py-[11px]">{isDate ? formatDate(value as Date | string) : value === null ? '-' : String(value)}</td>;
+                                    })}
+                                </tr>)}
                             </tbody>
                         </table>
-                    )}
-                </div>
-
-                {/* Pagination Controls */}
-                {reportData && totalRows > pageSize && (
-                    <div className="px-6 py-3 border-t border-slate-100 flex items-center justify-between bg-slate-50/50">
-                        <div className="flex items-center gap-2 text-sm text-slate-500">
-                            <span>แสดง</span>
-                            <select value={pageSize} onChange={e => { setPageSize(Number(e.target.value)); handleExecuteReport(1); }} className="border border-slate-200 rounded px-2 py-1 text-sm bg-white">
-                                <option value={25}>25</option>
-                                <option value={50}>50</option>
-                                <option value={100}>100</option>
-                            </select>
-                            <span>รายการ/หน้า</span>
-                        </div>
-                        <div className="flex items-center gap-1">
-                            <button onClick={() => handleExecuteReport(currentPage - 1)} disabled={currentPage <= 1 || isExecuting} className="p-1.5 rounded border border-slate-200 hover:bg-slate-100 disabled:opacity-40">
-                                <ChevronLeft className="w-4 h-4" />
-                            </button>
-                            <span className="px-3 text-sm font-medium">{currentPage} / {Math.ceil(totalRows / pageSize)}</span>
-                            <button onClick={() => handleExecuteReport(currentPage + 1)} disabled={currentPage >= Math.ceil(totalRows / pageSize) || isExecuting} className="p-1.5 rounded border border-slate-200 hover:bg-slate-100 disabled:opacity-40">
-                                <ChevronRight className="w-4 h-4" />
-                            </button>
-                        </div>
                     </div>
                 )}
-            </div>
-        </div >
+
+                {reportData && reportData.length > 0 && (
+                    <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 px-4 py-2.5 text-[12.5px] text-slate-500 dark:border-slate-700 dark:text-slate-400">
+                        <span className="tabular-nums">แสดง {((currentPage - 1) * pageSize + 1).toLocaleString()}–{Math.min(currentPage * pageSize, totalRows).toLocaleString()} จาก {totalRows.toLocaleString()} รายการ</span>
+                        {totalRows > pageSize && <div className="flex flex-wrap items-center gap-2">
+                            <label className="flex items-center gap-2">รายการ/หน้า<select value={pageSize} onChange={event => { setPageSize(Number(event.target.value)); handleExecuteReport(1); }} className="h-[30px] rounded-lg border border-slate-300 bg-white px-2 text-xs text-slate-700 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200"><option value={25}>25</option><option value={50}>50</option><option value={100}>100</option></select></label>
+                            <button type="button" aria-label="หน้าก่อน" onClick={() => handleExecuteReport(currentPage - 1)} disabled={currentPage <= 1 || isExecuting} className={secondaryButton + " !h-[30px] !px-2"}><ChevronLeft className="h-4 w-4" aria-hidden="true" /></button>
+                            <span className="tabular-nums">หน้า {currentPage} / {pageCount}</span>
+                            <button type="button" aria-label="หน้าถัดไป" onClick={() => handleExecuteReport(currentPage + 1)} disabled={currentPage >= pageCount || isExecuting} className={secondaryButton + " !h-[30px] !px-2"}><ChevronRight className="h-4 w-4" aria-hidden="true" /></button>
+                        </div>}
+                    </div>
+                )}
+            </section>
+
+            {isExporting && (
+                <div role="status" aria-live="polite" className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/30 p-4 backdrop-blur-sm">
+                    <div className="w-full max-w-sm space-y-4 rounded-xl border border-slate-200 bg-white p-6 text-center shadow-xl dark:border-slate-700 dark:bg-slate-800">
+                        <Loader2 className="mx-auto h-6 w-6 text-blue-600 motion-safe:animate-spin" aria-hidden="true" />
+                        <h2 className="font-semibold text-slate-900 dark:text-white">กำลังส่งออกไฟล์</h2>
+                        <p className="text-sm text-slate-500 dark:text-slate-400">{exportStatus}</p>
+                        <p className="font-mono text-sm tabular-nums text-slate-600 dark:text-slate-300">{Math.floor(exportElapsed / 60).toString().padStart(2, '0')}:{(exportElapsed % 60).toString().padStart(2, '0')}</p>
+                        <p className="text-xs text-slate-500 dark:text-slate-400">กรุณาอย่าปิดหน้านี้ระหว่างส่งออก</p>
+                    </div>
+                </div>
+            )}
+        </div>
     );
 }

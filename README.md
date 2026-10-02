@@ -1,4 +1,8 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# ReportCenter
+
+เว็บรายงานส่วนกลาง เอกสารสำหรับพัฒนาอยู่ใน [DEVELOPER_HANDOFF.md](DEVELOPER_HANDOFF.md) และกติกาการทำงานอยู่ใน [AGENTS.md](AGENTS.md)
+
+Knowledge wiki ใน Obsidian: `D:\Obsidian\Eltross\ReportCenter\ReportCenter.md` — บันทึกสถานะ กฎธุรกิจ และข้อสรุปสำคัญทุกครั้งที่ทำงานตามกติกาใน AGENTS.md
 
 ## Getting Started
 
@@ -14,9 +18,9 @@ pnpm dev
 bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open [http://localhost:4000](http://localhost:4000) with your browser to see the result (`package.json` sets port 4000).
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+Application pages are under `src/app/`; the dashboard starts at `src/app/(dashboard)/page.tsx`. The page auto-updates as you edit the file.
 
 This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
 

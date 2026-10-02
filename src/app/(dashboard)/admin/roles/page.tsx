@@ -1,569 +1,249 @@
-"use client"
+"use client";
 
-import { useState, useEffect } from "react";
-import { Plus, Search, Edit, Trash2, Shield, FileText, RefreshCw, X, Save, Loader2, Check, Users, ChevronRight, Tag } from "lucide-react";
-import { useToast } from "@/components/providers/ToastProvider";
-import { useConfirm } from "@/components/providers/ConfirmProvider";
+import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
+import Link from 'next/link';
+import { FileText, GitCompareArrows, Loader2, LockKeyhole, Pencil, Plus, RefreshCw, Search, Shield, Trash2, Users } from 'lucide-react';
+import AccessibleDialog from '@/components/ui/AccessibleDialog';
+import { useToast } from '@/components/providers/ToastProvider';
+import { useConfirm } from '@/components/providers/ConfirmProvider';
+import useUnsavedChanges from '@/hooks/useUnsavedChanges';
+import {
+    compareRoleReports, createRoleDraft, draftChanges, draftPayload, editReports,
+    isAdminRole, isReportActive, reportCounts, reportsForRole, setDraftReports,
+    type RoleAccessDraft, type RoleAccessReport, type RoleAccessRole,
+} from '@/lib/role-access';
 
-interface Role {
-    RoleId: number;
-    RoleName: string;
-    UserCount: number;
-    assignedReports: number[];
+interface Role extends RoleAccessRole { UserCount: number }
+interface Report extends RoleAccessReport { ReportType: number; CategoryName: string; CategoryColor: string }
+interface Member { UserId: number; FullName: string; Username: string; RoleId: number; IsActive: boolean; AuthType?: string }
+interface NameForm { mode: 'create' | 'rename'; roleId: number; name: string; originalName: string; copyFrom: string }
+type Tab = 'reports' | 'members' | 'compare';
+
+const card = 'rounded-xl border border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-800';
+const button = 'inline-flex items-center justify-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 dark:border-slate-600 dark:text-slate-200 dark:hover:bg-slate-700';
+const primary = `${button} border-blue-600 bg-blue-600 text-white hover:bg-blue-700 dark:border-blue-500 dark:bg-blue-600 dark:text-white dark:hover:bg-blue-700`;
+const input = 'w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:outline-2 focus:outline-blue-600 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100';
+const muted = 'text-sm text-slate-500 dark:text-slate-400';
+
+function Counts({ reports }: { reports: RoleAccessReport[] }) {
+    const counts = reportCounts(reports);
+    return <span>ใช้งาน {counts.active} · ปิดใช้งาน {counts.inactive}</span>;
 }
 
-interface Report {
-    ReportId: number;
-    ReportName: string;
-    ReportType: number;
-    CategoryId: number | null;
-    CategoryName: string;
-    CategoryColor: string;
+function groupReports(reports: Report[]) {
+    const groups = new Map<number | null, { id: number | null; name: string; reports: Report[] }>();
+    reports.forEach(report => {
+        if (!groups.has(report.CategoryId)) groups.set(report.CategoryId, { id: report.CategoryId, name: report.CategoryName || 'ยังไม่จัดหมวด', reports: [] });
+        groups.get(report.CategoryId)!.reports.push(report);
+    });
+    return [...groups.values()];
 }
-
-const CATEGORY_COLORS: Record<string, string> = {
-    blue: 'bg-blue-50 border-blue-100 text-blue-700',
-    emerald: 'bg-emerald-50 border-emerald-100 text-emerald-700',
-    amber: 'bg-amber-50 border-amber-100 text-amber-700',
-    rose: 'bg-rose-50 border-rose-100 text-rose-700',
-    purple: 'bg-purple-50 border-purple-100 text-purple-700',
-    cyan: 'bg-cyan-50 border-cyan-100 text-cyan-700',
-    orange: 'bg-orange-50 border-orange-100 text-orange-700',
-    slate: 'bg-slate-50 border-slate-100 text-slate-700',
-    indigo: 'bg-indigo-50 border-indigo-100 text-indigo-700',
-    teal: 'bg-teal-50 border-teal-100 text-teal-700',
-};
 
 export default function AdminRolesPage() {
     const { toast } = useToast();
     const { confirm } = useConfirm();
     const [roles, setRoles] = useState<Role[]>([]);
-    const [allReports, setAllReports] = useState<Report[]>([]);
-    const [isLoading, setIsLoading] = useState(true);
-    const [searchQuery, setSearchQuery] = useState('');
+    const [reports, setReports] = useState<Report[]>([]);
+    const [selectedId, setSelectedId] = useState<number | null>(null);
+    const [query, setQuery] = useState('');
+    const [reportQuery, setReportQuery] = useState('');
+    const [tab, setTab] = useState<Tab>('reports');
+    const [compareId, setCompareId] = useState('');
+    const [loading, setLoading] = useState(true);
+    const [loadError, setLoadError] = useState('');
+    const [saving, setSaving] = useState(false);
+    const savingRef = useRef(false);
+    const [draft, setDraft] = useState<RoleAccessDraft | null>(null);
+    const [nameForm, setNameForm] = useState<NameForm | null>(null);
+    const [formError, setFormError] = useState('');
+    const [members, setMembers] = useState<Member[]>([]);
+    const [memberState, setMemberState] = useState<'idle' | 'loading' | 'loaded' | 'error'>('idle');
+    const detailHeading = useRef<HTMLHeadingElement>(null);
+    const changes = draft ? draftChanges(draft) : { added: [], removed: [], dirty: false };
+    const nameDirty = !!nameForm && (nameForm.name !== nameForm.originalName || !!nameForm.copyFrom);
+    const { confirmDiscard } = useUnsavedChanges(changes.dirty || nameDirty);
 
-    // Modal
-    const [isModalOpen, setIsModalOpen] = useState(false);
-    const [editMode, setEditMode] = useState(false);
-    const [isSaving, setIsSaving] = useState(false);
-    const [formData, setFormData] = useState({
-        RoleId: 0,
-        RoleName: '',
-        assignedReports: [] as number[],
-    });
-
-    // Expanded role card
-    const [expandedRoleId, setExpandedRoleId] = useState<number | null>(null);
-
-    // Report search in modal
-    const [reportSearch, setReportSearch] = useState('');
-
-    const fetchData = async () => {
-        setIsLoading(true);
+    const loadRoles = useCallback(async (signal?: AbortSignal) => {
+        setLoading(true);
+        setLoadError('');
         try {
-            const res = await fetch('/api/admin/roles');
-            const data = await res.json();
-            if (data.success) {
-                setRoles(data.roles);
-                setAllReports(data.allReports);
-            }
-        } catch (err) {
-            toast('ไม่สามารถโหลดข้อมูลได้', 'error');
-        } finally {
-            setIsLoading(false);
-        }
-    };
+            const response = await fetch('/api/admin/roles', { signal });
+            const data = await response.json();
+            if (!response.ok || !data.success) throw new Error(data.message || 'ไม่สามารถโหลดกลุ่มสิทธิ์ได้');
+            setRoles(data.roles);
+            setReports(data.allReports);
+            setSelectedId(previous => data.roles.some((role: Role) => role.RoleId === previous) ? previous : (data.roles[0]?.RoleId ?? null));
+        } catch (error) {
+            if (signal?.aborted) return;
+            setLoadError(error instanceof Error ? error.message : 'ไม่สามารถโหลดกลุ่มสิทธิ์ได้');
+        } finally { if (!signal?.aborted) setLoading(false); }
+    }, []);
 
-    useEffect(() => { fetchData(); }, []);
+    useEffect(() => {
+        const controller = new AbortController();
+        void loadRoles(controller.signal);
+        return () => controller.abort();
+    }, [loadRoles]);
 
-    const handleOpenAddModal = () => {
-        setEditMode(false);
-        setFormData({ RoleId: 0, RoleName: '', assignedReports: [] });
-        setReportSearch('');
-        setIsModalOpen(true);
-    };
-
-    const handleOpenEditModal = (role: Role) => {
-        setEditMode(true);
-        setFormData({
-            RoleId: role.RoleId,
-            RoleName: role.RoleName,
-            assignedReports: [...role.assignedReports],
-        });
-        setReportSearch('');
-        setIsModalOpen(true);
-    };
-
-    const toggleReport = (reportId: number) => {
-        setFormData(prev => ({
-            ...prev,
-            assignedReports: prev.assignedReports.includes(reportId)
-                ? prev.assignedReports.filter(id => id !== reportId)
-                : [...prev.assignedReports, reportId],
-        }));
-    };
-
-    const selectAllReports = () => {
-        setFormData(prev => ({ ...prev, assignedReports: allReports.map(r => r.ReportId) }));
-    };
-
-    const deselectAllReports = () => {
-        setFormData(prev => ({ ...prev, assignedReports: [] }));
-    };
-
-    const handleSave = async () => {
-        if (!formData.RoleName.trim()) {
-            toast('กรุณาระบุชื่อ Role', 'error');
-            return;
-        }
-        setIsSaving(true);
-        try {
-            const res = await fetch('/api/admin/roles', {
-                method: editMode ? 'PUT' : 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    roleId: formData.RoleId,
-                    roleName: formData.RoleName,
-                    assignedReports: formData.assignedReports,
-                }),
-            });
-            const data = await res.json();
-            if (data.success) {
-                toast(editMode ? 'อัพเดท Role สำเร็จ' : 'เพิ่ม Role สำเร็จ', 'success');
-                setIsModalOpen(false);
-                fetchData();
-            } else {
-                toast(data.message || 'เกิดข้อผิดพลาด', 'error');
-            }
-        } catch (err) {
-            toast('ไม่สามารถเชื่อมต่อเซิร์ฟเวอร์ได้', 'error');
-        } finally {
-            setIsSaving(false);
-        }
-    };
-
-    const handleDelete = async (role: Role) => {
-        if (role.UserCount > 0) {
-            toast(`ไม่สามารถลบ Role "${role.RoleName}" ได้ — มีผู้ใช้ ${role.UserCount} คนอยู่`, 'error');
-            return;
-        }
-        const ok = await confirm({
-            title: 'ลบ Role',
-            message: `คุณแน่ใจหรือไม่ว่าต้องการลบ Role "${role.RoleName}"? การกระทำนี้ไม่สามารถย้อนกลับได้`,
-            confirmLabel: 'ลบ Role',
-            variant: 'danger',
-        });
-        if (!ok) return;
-
-        try {
-            const res = await fetch(`/api/admin/roles?roleId=${role.RoleId}`, { method: 'DELETE' });
-            const data = await res.json();
-            if (data.success) {
-                toast('ลบ Role สำเร็จ', 'success');
-                fetchData();
-            } else {
-                toast(data.message || 'เกิดข้อผิดพลาด', 'error');
-            }
-        } catch (err) {
-            toast('ไม่สามารถเชื่อมต่อเซิร์ฟเวอร์ได้', 'error');
-        }
-    };
-
-    const filteredRoles = roles.filter(r =>
-        r.RoleName.toLowerCase().includes(searchQuery.toLowerCase())
-    );
-
-    const totalUsers = roles.reduce((sum, r) => sum + r.UserCount, 0);
-    const totalMappings = roles.reduce((sum, r) => sum + r.assignedReports.length, 0);
-
-    const roleColors = [
-        { bg: 'from-blue-500 to-blue-600', light: 'bg-blue-50 dark:bg-blue-900/30', text: 'text-blue-600 dark:text-blue-400' },
-        { bg: 'from-purple-500 to-purple-600', light: 'bg-purple-50 dark:bg-purple-900/30', text: 'text-purple-600 dark:text-purple-400' },
-        { bg: 'from-emerald-500 to-emerald-600', light: 'bg-emerald-50 dark:bg-emerald-900/30', text: 'text-emerald-600 dark:text-emerald-400' },
-        { bg: 'from-amber-500 to-orange-500', light: 'bg-amber-50 dark:bg-amber-900/30', text: 'text-amber-600 dark:text-amber-400' },
-        { bg: 'from-rose-500 to-pink-500', light: 'bg-rose-50 dark:bg-rose-900/30', text: 'text-rose-600 dark:text-rose-400' },
-        { bg: 'from-cyan-500 to-teal-500', light: 'bg-cyan-50 dark:bg-cyan-900/30', text: 'text-cyan-600 dark:text-cyan-400' },
+    const selected = roles.find(role => role.RoleId === selectedId);
+    const assigned = selected ? reportsForRole(selected, reports) : [];
+    const selectedSet = new Set(draft?.selectedReports ?? []);
+    const shown = draft ? editReports(reports, draft, reportQuery) : [];
+    const visibleSelected = shown.filter(report => selectedSet.has(report.ReportId)).length;
+    const roleMembers = members.filter(member => member.RoleId === selectedId);
+    const otherRoles = roles.filter(role => role.RoleId !== selectedId && !isAdminRole(role));
+    const compareRole = otherRoles.find(role => String(role.RoleId) === compareId) ?? otherRoles[0];
+    const comparison = selected && compareRole ? compareRoleReports(selected, compareRole, reports) : null;
+    const tabs: { id: Tab; label: string; icon: typeof FileText }[] = [
+        { id: 'reports', label: 'รายงานที่อนุญาต', icon: FileText },
+        { id: 'members', label: `สมาชิก ${selected?.UserCount ?? 0}`, icon: Users },
+        ...(!selected || isAdminRole(selected) ? [] : [{ id: 'compare' as const, label: 'เทียบกับกลุ่มอื่น', icon: GitCompareArrows }]),
     ];
 
-    const getRoleColor = (idx: number) => roleColors[idx % roleColors.length];
+    const guardContext = () => {
+        if (savingRef.current || loading) return false;
+        if (!draft) return true;
+        toast('บันทึกหรือยกเลิกการแก้ไขรายงานก่อนเปลี่ยนกลุ่มหรือทำรายการอื่น', 'info');
+        return false;
+    };
+    const loadMembers = async () => {
+        setMemberState('loading');
+        try {
+            const response = await fetch('/api/admin/users');
+            const data = await response.json();
+            if (!response.ok || !data.success) throw new Error('โหลดสมาชิกไม่สำเร็จ');
+            setMembers(data.users);
+            setMemberState('loaded');
+        } catch { setMemberState('error'); }
+    };
+    const selectRole = (role: Role) => {
+        if (role.RoleId === selectedId || !guardContext()) return;
+        setSelectedId(role.RoleId);
+        setCompareId('');
+        if (isAdminRole(role) && tab === 'compare') setTab('reports');
+        requestAnimationFrame(() => {
+            detailHeading.current?.focus({ preventScroll: true });
+            if (window.matchMedia('(max-width: 1023px)').matches) detailHeading.current?.scrollIntoView({ block: 'start' });
+        });
+    };
+    const changeTab = (next: Tab) => {
+        if (next === tab || !guardContext()) return;
+        setTab(next);
+        if (next === 'members' && memberState === 'idle') void loadMembers();
+    };
+    const startEdit = () => {
+        if (!selected || isAdminRole(selected) || savingRef.current || loading) return;
+        setDraft(createRoleDraft(selected));
+        setReportQuery('');
+    };
+    const cancelEdit = async () => {
+        if (savingRef.current || !(await confirmDiscard())) return;
+        setDraft(null);
+        setReportQuery('');
+    };
+    const updateSelection = (ids: number[], checked: boolean) => {
+        if (!savingRef.current) setDraft(current => current ? setDraftReports(current, ids, checked) : null);
+    };
+    const saveDraft = async () => {
+        if (!draft || savingRef.current || !changes.dirty) return;
+        const payload = draftPayload(draft);
+        savingRef.current = true;
+        setSaving(true);
+        try {
+            const response = await fetch('/api/admin/roles', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+            const data = await response.json();
+            if (!response.ok || !data.success) throw new Error(data.message || 'บันทึกสิทธิ์ไม่สำเร็จ');
+            setRoles(current => current.map(role => role.RoleId === payload.roleId ? { ...role, assignedReports: payload.assignedReports } : role));
+            setDraft(null);
+            setReportQuery('');
+            toast(`บันทึกรายงานของกลุ่ม ${payload.roleName} แล้ว`, 'success');
+        } catch (error) { toast(error instanceof Error ? error.message : 'ไม่สามารถเชื่อมต่อเซิร์ฟเวอร์ได้', 'error'); }
+        finally { savingRef.current = false; setSaving(false); }
+    };
+    const openNameForm = (role?: Role) => {
+        if (!guardContext() || (role && isAdminRole(role))) return;
+        setFormError('');
+        setNameForm({ mode: role ? 'rename' : 'create', roleId: role?.RoleId ?? 0, name: role?.RoleName ?? '', originalName: role?.RoleName ?? '', copyFrom: '' });
+    };
+    const closeNameForm = async () => {
+        if (!savingRef.current && await confirmDiscard()) setNameForm(null);
+    };
+    const saveName = async (event: FormEvent) => {
+        event.preventDefault();
+        if (!nameForm || savingRef.current) return;
+        const name = nameForm.name.trim();
+        if (!name || name.length > 50) { setFormError('กรอกชื่อกลุ่มไม่เกิน 50 ตัวอักษร'); return; }
+        if (name.toLowerCase() === 'admin') { setFormError('ชื่อ Admin สงวนไว้สำหรับผู้ดูแลระบบ'); return; }
+        if (roles.some(role => role.RoleId !== nameForm.roleId && role.RoleName.toLowerCase() === name.toLowerCase())) { setFormError('มีกลุ่มสิทธิ์ชื่อนี้แล้ว'); return; }
+        const original = roles.find(role => role.RoleId === nameForm.roleId);
+        const copy = roles.find(role => String(role.RoleId) === nameForm.copyFrom);
+        const assignedReports = nameForm.mode === 'rename' ? original?.assignedReports ?? [] : copy?.assignedReports ?? [];
+        savingRef.current = true;
+        setSaving(true);
+        try {
+            const response = await fetch('/api/admin/roles', { method: nameForm.mode === 'create' ? 'POST' : 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ roleId: nameForm.roleId, roleName: name, assignedReports }) });
+            const data = await response.json();
+            if (!response.ok || !data.success) throw new Error(data.message || 'บันทึกกลุ่มไม่สำเร็จ');
+            if (nameForm.mode === 'create') {
+                setRoles(current => [...current, { RoleId: data.roleId, RoleName: name, UserCount: 0, assignedReports: [...assignedReports] }]);
+                setSelectedId(data.roleId);
+                setTab('reports');
+            } else setRoles(current => current.map(role => role.RoleId === nameForm.roleId ? { ...role, RoleName: name } : role));
+            setNameForm(null);
+            toast(nameForm.mode === 'create' ? 'เพิ่มกลุ่มสิทธิ์แล้ว' : 'เปลี่ยนชื่อกลุ่มแล้ว', 'success');
+        } catch (error) { setFormError(error instanceof Error ? error.message : 'ไม่สามารถเชื่อมต่อเซิร์ฟเวอร์ได้'); }
+        finally { savingRef.current = false; setSaving(false); }
+    };
+    const deleteRole = async () => {
+        if (!selected || isAdminRole(selected) || !guardContext()) return;
+        if (selected.UserCount > 0) { toast(`กลุ่มนี้มีสมาชิก ${selected.UserCount} คน ย้ายสมาชิกไปกลุ่มอื่นก่อนลบ`, 'info'); return; }
+        const role = selected;
+        if (!(await confirm({ title: `ลบกลุ่ม “${role.RoleName}”?`, message: `กลุ่มนี้ไม่มีสมาชิก สิทธิ์รายงาน ${role.assignedReports.length} รายการของกลุ่มจะถูกลบ รายงานยังคงอยู่`, confirmLabel: 'ลบกลุ่ม', variant: 'danger' }))) return;
+        savingRef.current = true;
+        setSaving(true);
+        try {
+            const response = await fetch(`/api/admin/roles?roleId=${role.RoleId}`, { method: 'DELETE' });
+            const data = await response.json();
+            if (!response.ok || !data.success) throw new Error(data.message || 'ลบกลุ่มไม่สำเร็จ');
+            setRoles(current => current.filter(item => item.RoleId !== role.RoleId));
+            setSelectedId(roles.find(item => item.RoleId !== role.RoleId)?.RoleId ?? null);
+            setTab('reports');
+            toast('ลบกลุ่มสิทธิ์แล้ว', 'success');
+        } catch (error) { toast(error instanceof Error ? error.message : 'ไม่สามารถเชื่อมต่อเซิร์ฟเวอร์ได้', 'error'); }
+        finally { savingRef.current = false; setSaving(false); }
+    };
 
-    return (
-        <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
-
-            {/* Header */}
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700">
-                <div>
-                    <h1 className="text-2xl font-bold text-slate-900 dark:text-white">จัดการสิทธิ์ (Roles)</h1>
-                    <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">สร้าง Role แล้วกำหนดว่า Role ไหนเข้าถึงรายงานไหนได้</p>
-                </div>
-                <div className="flex items-center gap-3">
-                    <button onClick={fetchData} className="p-2.5 bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-600 transition-colors">
-                        <RefreshCw className={`w-5 h-5 ${isLoading ? 'animate-spin' : ''}`} />
-                    </button>
-                    <button
-                        onClick={handleOpenAddModal}
-                        className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-lg active:scale-95 transition-all shadow-md shadow-blue-500/30 font-medium"
-                    >
-                        <Plus className="w-5 h-5" />
-                        เพิ่ม Role ใหม่
-                    </button>
-                </div>
-            </div>
-
-            {/* Stats Cards */}
-            <div className="grid grid-cols-3 gap-4">
-                <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-100 dark:border-slate-700 p-4 flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-lg bg-indigo-50 dark:bg-indigo-900/30 flex items-center justify-center">
-                        <Shield className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
-                    </div>
-                    <div>
-                        <p className="text-2xl font-bold text-slate-900 dark:text-white">{roles.length}</p>
-                        <p className="text-xs text-slate-500 dark:text-slate-400">Roles ทั้งหมด</p>
-                    </div>
-                </div>
-                <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-100 dark:border-slate-700 p-4 flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-lg bg-blue-50 dark:bg-blue-900/30 flex items-center justify-center">
-                        <Users className="w-5 h-5 text-blue-600 dark:text-blue-400" />
-                    </div>
-                    <div>
-                        <p className="text-2xl font-bold text-blue-600 dark:text-blue-400">{totalUsers}</p>
-                        <p className="text-xs text-slate-500 dark:text-slate-400">ผู้ใช้ทั้งหมด</p>
-                    </div>
-                </div>
-                <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-100 dark:border-slate-700 p-4 flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-lg bg-purple-50 dark:bg-purple-900/30 flex items-center justify-center">
-                        <FileText className="w-5 h-5 text-purple-600 dark:text-purple-400" />
-                    </div>
-                    <div>
-                        <p className="text-2xl font-bold text-purple-600 dark:text-purple-400">{totalMappings}</p>
-                        <p className="text-xs text-slate-500 dark:text-slate-400">การ assign รายงาน</p>
-                    </div>
-                </div>
-            </div>
-
-            {/* Role Cards */}
-            <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-sm rounded-2xl overflow-hidden">
-                {/* Search Toolbar */}
-                <div className="p-4 border-b border-slate-100 dark:border-slate-700 flex items-center justify-between bg-slate-50/50 dark:bg-slate-800">
-                    <div className="relative w-full max-w-sm">
-                        <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-                        <input
-                            type="text"
-                            placeholder="ค้นหา Role..."
-                            value={searchQuery}
-                            onChange={e => setSearchQuery(e.target.value)}
-                            className="w-full pl-9 pr-4 py-2 border border-slate-200 dark:border-slate-600 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors bg-white dark:bg-slate-700 dark:text-white font-medium"
-                        />
-                    </div>
-                    {searchQuery && (
-                        <span className="text-xs text-slate-500 dark:text-slate-400 ml-3 whitespace-nowrap">
-                            พบ {filteredRoles.length} จาก {roles.length}
-                        </span>
-                    )}
-                </div>
-
-                {/* List */}
-                <div className="divide-y divide-slate-100 dark:divide-slate-700">
-                    {isLoading ? (
-                        <div className="px-6 py-16 text-center">
-                            <div className="flex flex-col items-center text-slate-500 dark:text-slate-400">
-                                <RefreshCw className="w-6 h-6 animate-spin text-blue-500 mb-3" />
-                                <p>กำลังโหลดข้อมูล...</p>
-                            </div>
-                        </div>
-                    ) : filteredRoles.length === 0 ? (
-                        <div className="px-6 py-16 text-center text-slate-400 dark:text-slate-500">
-                            {searchQuery ? 'ไม่พบ Role ที่ค้นหา' : 'ยังไม่มี Role ในระบบ — กดปุ่ม "เพิ่ม Role ใหม่" เพื่อเริ่มต้น'}
-                        </div>
-                    ) : filteredRoles.map((role, idx) => {
-                        const color = getRoleColor(idx);
-                        const isExpanded = expandedRoleId === role.RoleId;
-                        return (
-                            <div key={role.RoleId} className="group">
-                                <div
-                                    className="p-5 hover:bg-slate-50/80 dark:hover:bg-slate-700/30 transition-colors cursor-pointer"
-                                    onClick={() => setExpandedRoleId(isExpanded ? null : role.RoleId)}
-                                >
-                                    <div className="flex items-center justify-between">
-                                        <div className="flex items-center gap-4">
-                                            {/* Role Icon */}
-                                            <div className={`w-11 h-11 rounded-xl bg-gradient-to-br ${color.bg} flex items-center justify-center text-white shadow-sm`}>
-                                                <Shield className="w-5 h-5" />
-                                            </div>
-                                            <div>
-                                                <h3 className="font-bold text-slate-900 dark:text-white text-base">{role.RoleName}</h3>
-                                                <div className="flex items-center gap-4 mt-1">
-                                                    <span className="inline-flex items-center gap-1 text-xs text-slate-500 dark:text-slate-400">
-                                                        <Users className="w-3 h-3" />
-                                                        {role.UserCount} ผู้ใช้
-                                                    </span>
-                                                    <span className="inline-flex items-center gap-1 text-xs text-slate-500 dark:text-slate-400">
-                                                        <FileText className="w-3 h-3" />
-                                                        {role.assignedReports.length} รายงาน
-                                                    </span>
-                                                </div>
-                                            </div>
-                                        </div>
-
-                                        <div className="flex items-center gap-2">
-                                            <button
-                                                onClick={(e) => { e.stopPropagation(); handleOpenEditModal(role); }}
-                                                className="p-2 bg-blue-50 dark:bg-blue-900/30 hover:bg-blue-100 dark:hover:bg-blue-900/50 text-blue-600 dark:text-blue-400 rounded-lg transition-colors"
-                                                title="แก้ไข"
-                                            >
-                                                <Edit className="w-4 h-4" />
-                                            </button>
-                                            <button
-                                                onClick={(e) => { e.stopPropagation(); handleDelete(role); }}
-                                                className={`p-2 rounded-lg transition-colors ${role.UserCount > 0
-                                                    ? 'bg-slate-100 dark:bg-slate-700 text-slate-400 dark:text-slate-500 cursor-not-allowed'
-                                                    : 'bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400 hover:bg-red-50 dark:hover:bg-red-900/30 hover:text-red-600 dark:hover:text-red-400'
-                                                    }`}
-                                                title={role.UserCount > 0 ? `มีผู้ใช้ ${role.UserCount} คน — ลบไม่ได้` : 'ลบ Role'}
-                                            >
-                                                <Trash2 className="w-4 h-4" />
-                                            </button>
-                                            <ChevronRight className={`w-4 h-4 text-slate-400 transition-transform ${isExpanded ? 'rotate-90' : ''}`} />
-                                        </div>
-                                    </div>
-                                </div>
-
-                                {/* Expanded: assigned reports */}
-                                {isExpanded && (
-                                    <div className="px-5 pb-5 animate-in slide-in-from-top-2 fade-in duration-200">
-                                        <div className="ml-15 pl-4 border-l-2 border-slate-200 dark:border-slate-600">
-                                            <p className="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-2">
-                                                รายงานที่เข้าถึงได้ ({role.assignedReports.length})
-                                            </p>
-                                            {role.assignedReports.length === 0 ? (
-                                                <p className="text-sm text-slate-400 dark:text-slate-500 italic">ยังไม่ได้กำหนดรายงานใดๆ</p>
-                                            ) : (
-                                                <div className="flex flex-wrap gap-1.5">
-                                                    {role.assignedReports.map(reportId => {
-                                                        const report = allReports.find(r => r.ReportId === reportId);
-                                                        if (!report) return null;
-                                                        return (
-                                                            <span key={reportId} className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium border transition-colors ${report.ReportType === 1
-                                                                ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-800'
-                                                                : 'bg-purple-50 dark:bg-purple-900/20 text-purple-700 dark:text-purple-300 border-purple-200 dark:border-purple-800'
-                                                                }`}>
-                                                                <FileText className="w-3 h-3" />
-                                                                {report.ReportName}
-                                                            </span>
-                                                        );
-                                                    })}
-                                                </div>
-                                            )}
-                                        </div>
-                                    </div>
-                                )}
-                            </div>
-                        );
-                    })}
-                </div>
-            </div>
-
-            {/* Modal */}
-            {isModalOpen && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm animate-in fade-in">
-                    <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-xl w-full max-w-lg overflow-hidden animate-in zoom-in-95 duration-200 max-h-[90vh] flex flex-col">
-
-                        {/* Modal Header */}
-                        <div className="px-6 py-4 border-b border-slate-100 dark:border-slate-700 flex items-center justify-between bg-gradient-to-r from-indigo-600 to-blue-600">
-                            <h2 className="text-lg font-bold text-white flex items-center gap-2">
-                                <Shield className="w-5 h-5" />
-                                {editMode ? 'แก้ไข Role' : 'เพิ่ม Role ใหม่'}
-                            </h2>
-                            <button onClick={() => setIsModalOpen(false)} className="text-white/70 hover:text-white transition-colors p-1 hover:bg-white/10 rounded-lg">
-                                <X className="w-5 h-5" />
-                            </button>
-                        </div>
-
-                        {/* Modal Body */}
-                        <div className="p-6 space-y-5 overflow-y-auto flex-1">
-                            {/* Role Name */}
-                            <div>
-                                <h4 className="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-3">ข้อมูล Role</h4>
-                                <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                                    ชื่อ Role <span className="text-red-500">*</span>
-                                </label>
-                                <input
-                                    type="text"
-                                    value={formData.RoleName}
-                                    onChange={e => setFormData(prev => ({ ...prev, RoleName: e.target.value }))}
-                                    className="w-full border border-slate-200 dark:border-slate-600 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 bg-white dark:bg-slate-700 dark:text-white"
-                                    placeholder="เช่น Sales, Accountant, Manager..."
-                                />
-                            </div>
-
-                            {/* Report Access */}
-                            <div>
-                                <div className="flex items-center justify-between mb-2">
-                                    <h4 className="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider">
-                                        สิทธิ์เข้าถึงรายงาน
-                                    </h4>
-                                    <span className="text-xs font-semibold text-blue-600 dark:text-blue-400">
-                                        {formData.assignedReports.length}/{allReports.length}
-                                    </span>
-                                </div>
-
-                                <div className="flex items-center gap-2 mb-3">
-                                    <button onClick={selectAllReports} className="text-xs text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 font-medium px-2.5 py-1 rounded-lg bg-blue-50 dark:bg-blue-900/30 hover:bg-blue-100 dark:hover:bg-blue-900/50 transition-colors">
-                                        เลือกทั้งหมด
-                                    </button>
-                                    <button onClick={deselectAllReports} className="text-xs text-slate-500 hover:text-slate-600 dark:text-slate-400 dark:hover:text-slate-300 font-medium px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 transition-colors">
-                                        ยกเลิกทั้งหมด
-                                    </button>
-                                </div>
-
-                                {/* Search Reports */}
-                                <div className="relative mb-3">
-                                    <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-                                    <input
-                                        type="text"
-                                        placeholder="ค้นหารายงาน..."
-                                        value={reportSearch}
-                                        onChange={e => setReportSearch(e.target.value)}
-                                        className="w-full pl-9 pr-4 py-2 border border-slate-200 dark:border-slate-600 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 bg-white dark:bg-slate-700 dark:text-white"
-                                    />
-                                    {reportSearch && (
-                                        <button onClick={() => setReportSearch('')} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
-                                            <X className="w-3.5 h-3.5" />
-                                        </button>
-                                    )}
-                                </div>
-
-                                <div className="border border-slate-200 dark:border-slate-600 rounded-xl overflow-hidden max-h-72 overflow-y-auto">
-                                    {(() => {
-                                        // Filter by search
-                                        const filtered = allReports.filter(r =>
-                                            !reportSearch || r.ReportName.toLowerCase().includes(reportSearch.toLowerCase())
-                                        );
-
-                                        if (filtered.length === 0) {
-                                            return (
-                                                <p className="px-4 py-8 text-center text-sm text-slate-400 dark:text-slate-500">
-                                                    {reportSearch ? 'ไม่พบรายงานที่ค้นหา' : 'ไม่มีรายงานในระบบ'}
-                                                </p>
-                                            );
-                                        }
-
-                                        // Group by category
-                                        const categoryMap = new Map<string, Report[]>();
-                                        filtered.forEach(r => {
-                                            const key = r.CategoryName || '__uncategorized__';
-                                            if (!categoryMap.has(key)) categoryMap.set(key, []);
-                                            categoryMap.get(key)!.push(r);
-                                        });
-
-                                        // Sort: categorized first, uncategorized last
-                                        const sortedKeys = [...categoryMap.keys()].sort((a, b) => {
-                                            if (a === '__uncategorized__') return 1;
-                                            if (b === '__uncategorized__') return -1;
-                                            return a.localeCompare(b, 'th');
-                                        });
-
-                                        const renderReport = (report: Report) => {
-                                            const isChecked = formData.assignedReports.includes(report.ReportId);
-                                            return (
-                                                <label
-                                                    key={report.ReportId}
-                                                    className={`flex items-center gap-3 px-4 py-2.5 cursor-pointer border-b border-slate-100 dark:border-slate-700 last:border-0 transition-all ${isChecked ? 'bg-blue-50/60 dark:bg-blue-900/20' : 'hover:bg-slate-50 dark:hover:bg-slate-700/50'}`}
-                                                >
-                                                    <div className={`w-5 h-5 rounded border-2 flex items-center justify-center flex-shrink-0 transition-all ${isChecked ? 'bg-blue-600 border-blue-600' : 'border-slate-300 dark:border-slate-500'}`}>
-                                                        {isChecked && <Check className="w-3 h-3 text-white" />}
-                                                    </div>
-                                                    <FileText className={`w-4 h-4 flex-shrink-0 ${report.ReportType === 1 ? (isChecked ? 'text-blue-600' : 'text-blue-400') : (isChecked ? 'text-purple-600' : 'text-purple-400')}`} />
-                                                    <div className="flex-1 min-w-0 flex items-center gap-2">
-                                                        <p className={`text-sm font-medium truncate ${isChecked ? 'text-slate-900 dark:text-white' : 'text-slate-600 dark:text-slate-300'}`}>{report.ReportName}</p>
-                                                        <span className={`shrink-0 text-[9px] font-bold uppercase px-1.5 py-0.5 rounded ${report.ReportType === 1 ? 'bg-blue-100 text-blue-600' : 'bg-purple-100 text-purple-600'}`}>
-                                                            {report.ReportType === 1 ? 'STD' : 'TPL'}
-                                                        </span>
-                                                    </div>
-                                                    <input
-                                                        type="checkbox"
-                                                        checked={isChecked}
-                                                        onChange={() => toggleReport(report.ReportId)}
-                                                        className="sr-only"
-                                                    />
-                                                </label>
-                                            );
-                                        };
-
-                                        const toggleCategory = (reports: Report[]) => {
-                                            const ids = reports.map(r => r.ReportId);
-                                            const allSelected = ids.every(id => formData.assignedReports.includes(id));
-                                            setFormData(prev => ({
-                                                ...prev,
-                                                assignedReports: allSelected
-                                                    ? prev.assignedReports.filter(id => !ids.includes(id))
-                                                    : [...new Set([...prev.assignedReports, ...ids])],
-                                            }));
-                                        };
-
-                                        return (
-                                            <>
-                                                {sortedKeys.map(key => {
-                                                    const reports = categoryMap.get(key)!;
-                                                    const catSelected = reports.filter(r => formData.assignedReports.includes(r.ReportId)).length;
-                                                    const allSelected = catSelected === reports.length;
-                                                    const catName = key === '__uncategorized__' ? 'ไม่ระบุหมวดหมู่' : key;
-                                                    const catColor = reports[0]?.CategoryColor || 'slate';
-                                                    const headerClass = CATEGORY_COLORS[catColor] || CATEGORY_COLORS.slate;
-
-                                                    return (
-                                                        <div key={key}>
-                                                            <div className={`sticky top-0 z-10 px-4 py-2 border-b flex items-center justify-between ${headerClass}`}>
-                                                                <span className="text-xs font-bold uppercase tracking-wider flex items-center gap-1.5">
-                                                                    <Tag className="w-3 h-3" />
-                                                                    {catName} ({catSelected}/{reports.length})
-                                                                </span>
-                                                                <button
-                                                                    type="button"
-                                                                    onClick={() => toggleCategory(reports)}
-                                                                    className={`text-[10px] font-semibold px-2 py-0.5 rounded-md transition-colors ${allSelected
-                                                                        ? 'bg-white/60 hover:bg-white/80 text-slate-600'
-                                                                        : 'bg-blue-600 text-white hover:bg-blue-700'
-                                                                        }`}
-                                                                >
-                                                                    {allSelected ? 'ยกเลิกทั้งหมวด' : 'เลือกทั้งหมวด'}
-                                                                </button>
-                                                            </div>
-                                                            {reports.sort((a, b) => {
-                                                                const ac = formData.assignedReports.includes(a.ReportId) ? 0 : 1;
-                                                                const bc = formData.assignedReports.includes(b.ReportId) ? 0 : 1;
-                                                                return ac - bc || a.ReportName.localeCompare(b.ReportName, 'th');
-                                                            }).map(renderReport)}
-                                                        </div>
-                                                    );
-                                                })}
-                                            </>
-                                        );
-                                    })()}
-                                </div>
-                            </div>
-                        </div>
-
-                        {/* Modal Footer */}
-                        <div className="px-6 py-4 border-t border-slate-100 dark:border-slate-700 flex justify-end gap-3 bg-slate-50 dark:bg-slate-800">
-                            <button
-                                onClick={() => setIsModalOpen(false)}
-                                className="px-5 py-2.5 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-xl font-medium transition-colors"
-                            >
-                                ยกเลิก
-                            </button>
-                            <button
-                                onClick={handleSave}
-                                disabled={isSaving}
-                                className="flex items-center gap-2 px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-medium transition-all active:scale-95 disabled:opacity-70 shadow-md shadow-blue-500/30"
-                            >
-                                {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-                                {isSaving ? 'กำลังบันทึก...' : 'บันทึก'}
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            )}
-        </div>
-    );
+    return <div className="space-y-5">
+        <header className="flex flex-wrap items-start justify-between gap-4">
+            <div><h1 className="text-2xl font-bold text-slate-900 dark:text-white">กลุ่มสิทธิ์</h1><p className={`${muted} mt-1`}>กลุ่มกำหนดรายงานที่ผู้ใช้เข้าถึง ผู้ใช้ 1 คนอยู่ได้ 1 กลุ่ม ส่วนบริษัทกำหนดที่หน้าผู้ใช้</p></div>
+            <div className="flex gap-2"><button className={button} aria-label="โหลดกลุ่มสิทธิ์ใหม่" disabled={loading || saving} onClick={() => { if (guardContext()) { void loadRoles(); if (tab === 'members') void loadMembers(); } }}><RefreshCw size={17} className={loading ? 'animate-spin' : ''} /></button><button className={primary} disabled={loading || saving} onClick={() => openNameForm()}><Plus size={17} />เพิ่มกลุ่ม</button></div>
+        </header>
+        {loadError ? <div role="alert" className="rounded-lg border border-red-200 bg-red-50 p-4 text-red-700">{loadError} <button className="underline" onClick={() => { if (guardContext()) void loadRoles(); }}>ลองใหม่</button></div> : null}
+        {loading && !roles.length ? <div className="flex justify-center p-12" role="status"><Loader2 className="animate-spin" /><span className="sr-only">กำลังโหลดกลุ่มสิทธิ์</span></div> : <div className="grid items-start gap-5 lg:grid-cols-[280px_minmax(0,1fr)]">
+            <section className={card} aria-label="รายการกลุ่มสิทธิ์">
+                <div className="relative border-b border-slate-200 p-3 dark:border-slate-700"><Search size={16} className="pointer-events-none absolute left-6 top-6 text-slate-400" /><input className={`${input} pl-9`} value={query} onChange={event => setQuery(event.target.value)} placeholder="ค้นหากลุ่ม" aria-label="ค้นหากลุ่มสิทธิ์" /></div>
+                <div className="max-h-80 overflow-auto p-2 lg:max-h-[65vh]">{roles.filter(role => role.RoleName.toLowerCase().includes(query.trim().toLowerCase())).map(role => <button key={role.RoleId} aria-current={selectedId === role.RoleId ? 'true' : undefined} disabled={saving} onClick={() => selectRole(role)} className={`mb-1 flex w-full items-start gap-2 rounded-lg p-3 text-left focus-visible:outline-2 focus-visible:outline-blue-600 ${selectedId === role.RoleId ? 'bg-blue-50 text-blue-800 dark:bg-blue-950 dark:text-blue-200' : 'hover:bg-slate-50 dark:hover:bg-slate-700'}`}>
+                    <span className="min-w-0 flex-1"><span className="block break-words font-medium">{role.RoleName}</span><span className={`${muted} mt-1 block text-xs`}>{role.UserCount} คน · {isAdminRole(role) ? `ทุกรายงานที่ใช้งาน (${reports.filter(isReportActive).length})` : <>รายงาน: <Counts reports={reportsForRole(role, reports)} /></>}</span></span>{isAdminRole(role) ? <LockKeyhole size={15} aria-label="ผู้ดูแลระบบ" /> : null}
+                </button>)}{!roles.some(role => role.RoleName.toLowerCase().includes(query.trim().toLowerCase())) ? <p className={`${muted} p-4 text-center`}>ไม่พบกลุ่มสิทธิ์</p> : null}</div>
+                <div className={`${muted} border-t border-slate-200 px-4 py-3 text-xs dark:border-slate-700`}>{roles.length} กลุ่ม · {roles.reduce((sum, role) => sum + role.UserCount, 0)} ผู้ใช้</div>
+            </section>
+            {selected ? <section className={`${card} min-w-0`} aria-label="รายละเอียดกลุ่มสิทธิ์">
+                <div className="flex flex-wrap items-start justify-between gap-3 p-5"><div><h2 ref={detailHeading} tabIndex={-1} className="flex items-center gap-2 text-lg font-semibold text-slate-900 outline-none dark:text-white">{isAdminRole(selected) ? <LockKeyhole size={18} /> : null}กลุ่มสิทธิ์: {selected.RoleName}</h2><p className={`${muted} mt-1`}>{selected.UserCount} คน · รายงาน: <Counts reports={assigned} /></p></div>{!isAdminRole(selected) ? <div className="flex flex-wrap gap-2"><button className={button} disabled={saving} onClick={() => openNameForm(selected)}><Pencil size={15} />เปลี่ยนชื่อ</button><button className={`${button} text-red-600 dark:text-red-400`} disabled={saving} onClick={() => void deleteRole()}><Trash2 size={15} />ลบกลุ่ม</button>{tab === 'reports' && !draft ? <button className={primary} disabled={saving} onClick={startEdit}><Pencil size={15} />แก้ไขรายงานที่อนุญาต</button> : null}</div> : null}</div>
+                <div className="flex flex-wrap gap-1 border-y border-slate-200 px-3 dark:border-slate-700" aria-label="มุมมองกลุ่มสิทธิ์">{tabs.map(({ id, label, icon: Icon }) => <button key={id} aria-pressed={tab === id} onClick={() => changeTab(id)} disabled={saving} className={`flex flex-wrap items-center gap-2 border-b-2 px-3 py-3 text-sm focus-visible:outline-2 focus-visible:outline-blue-600 ${tab === id ? 'border-blue-600 text-blue-700 dark:text-blue-300' : 'border-transparent text-slate-500 dark:text-slate-400'}`}><Icon size={16} />{label}{id === 'reports' ? <span className="text-xs"><Counts reports={assigned} /></span> : null}</button>)}</div>
+                {tab === 'reports' ? isAdminRole(selected) ? <div className="m-5 flex gap-3 rounded-lg bg-blue-50 p-4 text-sm text-blue-800 dark:bg-blue-950 dark:text-blue-200"><Shield className="shrink-0" size={20} /><p>ผู้ดูแลระบบเห็นทุกรายงานที่ใช้งานอยู่ ({assigned.length} รายงาน) โดยอัตโนมัติ รวมรายงานใหม่ ชื่อและสิทธิ์ของกลุ่มนี้แก้ไขจากหน้านี้ไม่ได้</p></div> : draft ? <>
+                    <div className="flex flex-wrap items-center gap-2 p-4"><input id="role-report-search" autoFocus className={`${input} sm:max-w-xs`} placeholder="ค้นหารายงาน" aria-label="ค้นหารายงานที่จะเลือก" value={reportQuery} disabled={saving} onChange={event => setReportQuery(event.target.value)} /><button className={button} disabled={saving || visibleSelected === shown.length} onClick={() => updateSelection(shown.map(report => report.ReportId), true)}>เลือกที่แสดงอยู่ ({shown.length})</button><button className={button} disabled={saving || !visibleSelected} onClick={() => updateSelection(shown.map(report => report.ReportId), false)}>ไม่เลือกที่แสดงอยู่</button></div>
+                    <p role="status" className={`${muted} px-4 pb-3`}>เลือกทั้งหมด {selectedSet.size} · อยู่ในผลค้นหา {visibleSelected}</p>
+                    {groupReports(shown).map(group => <div key={group.id ?? 'none'}><div className="flex flex-wrap items-center justify-between gap-2 bg-slate-50 px-4 py-2 dark:bg-slate-900/50"><div className="flex flex-wrap items-center gap-2"><span className="text-sm font-medium">หมวด: {group.name}</span><span className={muted}><Counts reports={group.reports} /></span></div><button className={`${button} py-1 text-xs`} disabled={saving} onClick={() => updateSelection(group.reports.map(report => report.ReportId), !group.reports.every(report => selectedSet.has(report.ReportId)))}>{group.reports.every(report => selectedSet.has(report.ReportId)) ? 'ไม่เลือก' : 'เลือก'} {group.reports.length} รายงาน{reportQuery.trim() ? 'ในผลค้นหานี้' : 'ในหมวดนี้'}</button></div>
+                        {group.reports.map(report => <label key={report.ReportId} className="flex cursor-pointer flex-wrap items-center gap-3 border-b border-slate-100 px-4 py-3 text-sm hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-700/50"><input id={`role-${draft.roleId}-report-${report.ReportId}`} type="checkbox" checked={selectedSet.has(report.ReportId)} disabled={saving} onChange={event => updateSelection([report.ReportId], event.target.checked)} className="h-4 w-4 shrink-0 accent-blue-600" /><span className="min-w-0 flex-1 break-words">{report.ReportName}</span>{!isReportActive(report) ? <span className="text-xs text-slate-500">ปิดใช้งาน · เก็บสิทธิ์เดิม</span> : null}{changes.added.includes(report.ReportId) ? <span className="text-xs text-emerald-700 dark:text-emerald-300">+ จะเพิ่ม</span> : changes.removed.includes(report.ReportId) ? <span className="text-xs text-red-600 dark:text-red-300">− จะถอน</span> : null}</label>)}</div>)}
+                    {!shown.length ? <p className={`${muted} p-8 text-center`}>ไม่พบรายงานตามคำค้น</p> : null}
+                    <div className="sticky bottom-0 flex flex-wrap items-center justify-between gap-3 rounded-b-xl border-t border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-800"><span className={muted}>{changes.dirty ? `เพิ่ม ${changes.added.length} · ถอน ${changes.removed.length} · กระทบสมาชิก ${selected.UserCount} คน` : 'ยังไม่มีการเปลี่ยนแปลง'}</span><div className="flex gap-2"><button className={button} disabled={saving} onClick={() => void cancelEdit()}>ยกเลิก</button><button className={primary} disabled={saving || !changes.dirty} onClick={() => void saveDraft()}>{saving ? <Loader2 size={16} className="animate-spin" /> : null}บันทึก</button></div></div>
+                </> : <>{groupReports(assigned).map(group => <div key={group.id ?? 'none'}><div className="flex flex-wrap items-center justify-between gap-2 bg-slate-50 px-4 py-2 text-sm dark:bg-slate-900/50"><span className="font-medium">หมวด: {group.name}</span><span className={muted}><Counts reports={group.reports} /></span></div>{group.reports.map(report => <div key={report.ReportId} className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 px-4 py-3 text-sm dark:border-slate-700"><span className="min-w-0 break-words">{report.ReportName}</span><span className="text-xs text-slate-500">{isReportActive(report) ? report.ReportType === 1 ? 'มาตรฐาน' : 'Template' : 'ปิดใช้งาน · สิทธิ์ยังเก็บไว้'}</span></div>)}</div>)}{!assigned.length ? <p className={`${muted} p-8 text-center`}>กลุ่มนี้ยังไม่มีรายงาน เลือกรายงานเพื่อให้สมาชิกเข้าถึงได้</p> : null}</> : null}
+                {tab === 'members' ? <div className="p-5"><div className="mb-4 flex flex-wrap items-center justify-between gap-2"><p className={muted}>เปลี่ยนกลุ่มและบริษัทที่เข้าถึงได้จากหน้าผู้ใช้</p><Link className={button} href="/admin/users">เปิดหน้าผู้ใช้</Link></div>{memberState === 'loading' ? <p role="status" className={muted}>กำลังโหลดสมาชิก…</p> : memberState === 'error' ? <div role="alert" className={muted}>โหลดสมาชิกไม่สำเร็จ <button className="underline" onClick={() => void loadMembers()}>ลองใหม่</button></div> : roleMembers.length ? <div className="overflow-x-auto"><table className="w-full text-left text-sm"><thead><tr className="border-b border-slate-200 dark:border-slate-700"><th className="py-2 font-medium">ผู้ใช้</th><th>บัญชี</th><th>สถานะ</th></tr></thead><tbody>{roleMembers.map(member => <tr key={member.UserId} className="border-b border-slate-100 dark:border-slate-700"><td className="py-3"><span className="block font-medium">{member.FullName}</span><span className={muted}>@{member.Username}</span></td><td>{member.AuthType?.toLowerCase() === 'ldap' ? 'AD' : 'Local'}</td><td>{member.IsActive ? 'ใช้งาน' : 'ระงับ'}</td></tr>)}</tbody></table></div> : <p className={`${muted} py-8 text-center`}>กลุ่มนี้ยังไม่มีสมาชิก</p>}</div> : null}
+                {tab === 'compare' && !isAdminRole(selected) ? <div className="space-y-4 p-5">{compareRole && comparison ? <><label className="block text-sm font-medium">เทียบกับกลุ่ม<select className={`${input} mt-2 max-w-sm`} value={compareRole.RoleId} onChange={event => setCompareId(event.target.value)}>{otherRoles.map(role => <option key={role.RoleId} value={role.RoleId}>{role.RoleName}</option>)}</select></label><p className={muted}>รายงานที่ใช้งานตรงกัน {comparison.both.length} จาก {comparison.union} รายงานรวม</p><p className="rounded-lg bg-blue-50 p-3 text-sm text-blue-800 dark:bg-blue-950 dark:text-blue-200">เทียบเฉพาะรายงานที่ใช้งาน ไม่รวมรายงานปิดใช้งานและบริษัทของสมาชิก รายงานตรงกันจึงไม่ได้หมายความว่าสิทธิ์ทุกด้านเหมือนกัน</p><div className="grid gap-3 xl:grid-cols-3">{[{ title: `เฉพาะ ${selected.RoleName}`, ids: comparison.onlyA }, { title: 'มีทั้งสองกลุ่ม', ids: comparison.both }, { title: `เฉพาะ ${compareRole.RoleName}`, ids: comparison.onlyB }].map(column => <section key={column.title} className={card}><h3 className="border-b border-slate-200 p-3 text-sm font-medium dark:border-slate-700">{column.title} · {column.ids.length}</h3><ul className="divide-y divide-slate-100 text-sm dark:divide-slate-700">{column.ids.map(id => <li className="break-words p-3" key={id}>{reports.find(report => report.ReportId === id)?.ReportName}</li>)}</ul>{!column.ids.length ? <p className={`${muted} p-3`}>ไม่มี</p> : null}</section>)}</div></> : <p className={muted}>ยังไม่มีกลุ่มอื่นให้เทียบ</p>}</div> : null}
+            </section> : <div className={`${card} p-10 text-center ${muted}`}>ยังไม่มีกลุ่มสิทธิ์</div>}
+        </div>}
+        <AccessibleDialog open={!!nameForm} onClose={() => void closeNameForm()} title={nameForm?.mode === 'rename' ? 'เปลี่ยนชื่อกลุ่มสิทธิ์' : 'เพิ่มกลุ่มสิทธิ์'} description="ตั้งชื่อตามกลุ่มคนที่ใช้รายงานชุดเดียวกัน">
+            {nameForm ? <form onSubmit={saveName} className="space-y-5"><div><label htmlFor="role-name" className="mb-2 block text-sm font-medium">ชื่อกลุ่ม <span className="text-red-600">*</span></label><input id="role-name" autoFocus className={input} maxLength={50} value={nameForm.name} disabled={saving} aria-invalid={!!formError} aria-describedby={formError ? 'role-form-error' : undefined} onChange={event => { setNameForm({ ...nameForm, name: event.target.value }); setFormError(''); }} /></div>{nameForm.mode === 'create' ? <div><label htmlFor="role-copy" className="mb-2 block text-sm font-medium">เริ่มจากรายงานของกลุ่ม</label><select id="role-copy" className={input} disabled={saving} value={nameForm.copyFrom} onChange={event => setNameForm({ ...nameForm, copyFrom: event.target.value })}><option value="">ไม่คัดลอก — เริ่มจากกลุ่มว่าง</option>{roles.filter(role => !isAdminRole(role)).map(role => <option key={role.RoleId} value={role.RoleId}>{role.RoleName} · {role.assignedReports.length} รายการที่กำหนดสิทธิ์</option>)}</select></div> : null}{formError ? <p id="role-form-error" role="alert" className="text-sm text-red-600">{formError}</p> : null}<div className="flex justify-end gap-2"><button type="button" className={button} disabled={saving} onClick={() => void closeNameForm()}>ยกเลิก</button><button className={primary} disabled={saving}>{saving ? <Loader2 size={16} className="animate-spin" /> : null}{nameForm.mode === 'create' ? 'เพิ่มกลุ่ม' : 'บันทึก'}</button></div></form> : null}
+        </AccessibleDialog>
+    </div>;
 }

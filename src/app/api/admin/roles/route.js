@@ -23,19 +23,17 @@ export async function GET(request) {
 
         // Get all report-role mappings
         const mappingsResult = await pool.request().query(`
-            SELECT rrm.RoleId, rrm.ReportId, rpt.ReportName
+            SELECT rrm.RoleId, rrm.ReportId, rpt.ReportName, rpt.IsActive
             FROM ReportRoleMapping rrm
             JOIN Reports rpt ON rrm.ReportId = rpt.ReportId
-            WHERE rpt.IsActive = 1
         `);
 
-        // Get all active reports for selection (with category info)
+        // Include inactive reports so existing assignments survive an edit.
         const reportsResult = await pool.request().query(`
-            SELECT r.ReportId, r.ReportName, r.ReportType,
+            SELECT r.ReportId, r.ReportName, r.ReportType, r.IsActive,
                    r.CategoryId, ISNULL(c.CategoryName, '') AS CategoryName, ISNULL(c.ColorTag, '') AS CategoryColor
             FROM Reports r
             LEFT JOIN ReportCategories c ON r.CategoryId = c.CategoryId
-            WHERE r.IsActive = 1
             ORDER BY c.SortOrder, c.CategoryName, r.ReportName
         `);
 

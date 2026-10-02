@@ -1,5 +1,15 @@
 # ReportCenter — Developer Handoff
 
+> Follow-up ล่าสุด 2026-10-02: [แก้แนวและขนาดช่องเงื่อนไข Standard พร้อมผลตรวจรวมก่อน commit/push](docs/audits/2026-10-02-standard-field-alignment/README.md) — controls สูง44pxและใช้ subgrid; วัด DOM/ภาพ AP, GL, Statement และมือถือแล้ว รัน tests ใหม่หลังแก้ CSS ผ่าน160/1 todo (15 files), build50pages และ ESLint source28ไฟล์ผ่าน ยังคงเป็นผลในเครื่อง ไม่ใช่ deployment/UAT
+
+> Local implementation 2026-10-02: ผู้ใช้อนุมัตินำ v3 มาใช้ใน Next.js app 5 หน้า ดู [รายละเอียดและสถานะตรวจ](docs/design/2026-10-02-ui-implementation.md) ก่อนอ้างหน้าจอเดิม — GET กลุ่มสิทธิ์คืน inactive mapping พร้อม `IsActive` เพื่อรักษาสิทธิ์เดิม; GET หมวดเพิ่มรายละเอียดทุกสถานะเฉพาะ Admin โดยคงชุด active เดิม UI guard ของ Admin/บัญชีตนเองไม่ใช่ enforcement ใหม่ฝั่ง API และงานนี้ยังไม่ใช่หลักฐาน live CRUD, deployment หรือ UAT
+
+> [ผลทวนเทียบ mock v3 ล่าสุด](docs/audits/2026-10-02-ui-parity-recheck/README.md): มี implementation จริงทั้ง 5 หน้า แต่คำสรุปเดิมว่าครบกว้างเกินหลักฐาน เก็บ layout Standard, ตัวเลือกกลุ่ม/บริษัทผู้ใช้, RID/filter chips และปุ่มส่วนหัวเพิ่ม พร้อมภาพ app ใหม่ 15 ภาพและรายการที่ยังต่างจาก mock แยกชัด Tests ล่าสุด 160 passed/1 todo, build และ ESLint source 28 ไฟล์ผ่าน; ไม่อ้างว่าตรงแบบทุก interaction หรือ deploy แล้ว ภาพทะเบียนมือถือรอบก่อนเป็น loading ให้ใช้ภาพหลังโหลดในผลทวนล่าสุดแทน
+
+> ตรวจ UI/UX และ source เพิ่ม 2026-10-01 ครบ 15 หน้า: ดู [รายงาน audit](docs/audits/2026-10-01-ui-ux/README.md) สำหรับข้อแตกต่างเรื่อง Sync AD, admin checks บาง method, password API และผลคำสั่ง Schedules; เป็นผลอ่านโค้ด/เปิดหน้า ไม่ใช่ CRUD, UAT หรือ deployment ผ่าน ดู [workflow ที่ผู้ใช้ยืนยัน](docs/12_DECISION_LOG.md) ก่อนเสนอเปลี่ยนหน้ารายงาน
+
+> ตรวจอ้างอิงกับโค้ดล่าสุด 2026-09-29: ดู [ผลเทียบเอกสารกับโค้ด](docs/reference-check-2026-09-29.md) ก่อนนำไปใช้อ้างอิง โดยเฉพาะการกรองบริษัท, env-check, session revocation และตัวเลข tests ที่มีข้อความเก่าปะปนอยู่ ขอบเขตที่ยังไม่ได้ตรวจ runtime/deploy ระบุแยกในรายงานนั้น
+
 > **Version:** 10.2
 > **Last Updated:** 2026-08-14
 > **Tech Stack:** Next.js 16.1.6 + React 19 + Tailwind CSS 4 + MSSQL (mssql driver) + Microsoft Graph API (OAuth2) / Nodemailer (SMTP fallback) + @azure/msal-node
