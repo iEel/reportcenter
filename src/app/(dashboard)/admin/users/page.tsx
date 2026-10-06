@@ -1,13 +1,14 @@
 "use client"
 
 import { useState, useEffect, useRef, useCallback, useId, type KeyboardEvent } from "react";
-import { Plus, Search, Edit, Shield, User, Building, RefreshCw, Save, Loader2, Eye, EyeOff, Trash2, KeyRound, ChevronLeft, ChevronRight, ChevronDown, Check, FileText, CloudCog } from "lucide-react";
+import { Plus, Search, Edit, Shield, User, Building, RefreshCw, Save, Loader2, Eye, EyeOff, Trash2, KeyRound, ChevronLeft, ChevronRight, ChevronDown, Check, FileText, CloudCog, Power } from "lucide-react";
 import { useToast } from "@/components/providers/ToastProvider";
 import { useConfirm } from "@/components/providers/ConfirmProvider";
 import { useAuth } from "@/components/providers/AuthProvider";
 import AccessibleDialog from "@/components/ui/AccessibleDialog";
 import useUnsavedChanges from "@/hooks/useUnsavedChanges";
-import { getUserAccessSummary, hasUserDraftChanges, isAdAccount, isCurrentUser, type UserAccessRole, type UserAccessReport, type UserAccessCompany } from "@/lib/user-access";
+import { applyAdProfile, changeAdUsername, getUserAccessSummary, hasUserDraftChanges, isAdAccount, isCurrentUser, type UserAccessRole, type UserAccessReport, type UserAccessCompany } from "@/lib/user-access";
+import { forcePageLeave } from "@/lib/page-leave-guard";
 
 interface ManagedUser {
     UserId: number; Username: string; FullName: string; RoleId: number | null;
@@ -310,19 +311,13 @@ export default function AdminUsersPage() {
         }
         setIsLookingUp(true);
         setAdLookupError('');
+        const lookedUp = formData.Username.trim();
         try {
-            const res = await fetch(`/api/admin/users/lookup-ad?username=${encodeURIComponent(formData.Username.trim())}`);
+            const res = await fetch(`/api/admin/users/lookup-ad?username=${encodeURIComponent(lookedUp)}`);
             const data = await res.json();
             if (data.success) {
-                setFormData(prev => ({
-                    ...prev,
-                    FullName: data.fullName || prev.FullName,
-                    Email: data.email || '',
-                    EmployeeId: data.employeeId || '',
-                    ADCompany: data.company || '',
-                    Department: data.department || '',
-                    Branch: data.branch || '',
-                }));
+                // Ignored if the username was edited while the lookup was running
+                setFormData(prev => applyAdProfile(prev, lookedUp, data));
             } else {
                 setAdLookupError(data.error || 'ไม่พบ user ใน AD');
             }
@@ -335,7 +330,8 @@ export default function AdminUsersPage() {
 
     // Debounced AD search for autocomplete
     const handleAdSearch = (value: string) => {
-        setFormData(prev => ({ ...prev, Username: value }));
+        // AD details belong to the previous username; drop them so they cannot be saved onto another account
+        setFormData(prev => changeAdUsername(prev, value));
         setAdLookupError('');
 
         // Clear previous timer
@@ -372,7 +368,7 @@ export default function AdminUsersPage() {
         setFormData(prev => ({
             ...prev,
             Username: user.username,
-            FullName: user.fullName || '',
+            FullName: user.fullName || user.username,
             Email: user.email || '',
             EmployeeId: user.employeeId || '',
             ADCompany: user.company || '',
@@ -387,7 +383,7 @@ export default function AdminUsersPage() {
     const handleSaveUser = async () => {
         if (isSaving || companyLoadError) return;
         if (!formData.FullName.trim()) {
-            toast('กรุณากรอกชื่อ-นามสกุล', 'error');
+            toast(isAdUser && !editMode ? 'กรุณาเลือกผู้ใช้จากผลค้นหา AD ก่อนบันทึก' : 'กรุณากรอกชื่อ-นามสกุล', 'error');
             return;
         }
         if (!editMode && !formData.Username.trim()) {
@@ -402,6 +398,13 @@ export default function AdminUsersPage() {
             toast('กรุณาเลือกบริษัทอย่างน้อย 1 บริษัท', 'error');
             return;
         }
+        // Saving any user revokes that user's session (TokenVersion), including your own
+        if (editingSelf && !(await confirm({
+            title: 'บันทึกบัญชีของคุณเอง',
+            message: 'หลังบันทึก ระบบจะออกจากระบบเพื่อใช้ข้อมูลใหม่ และคุณต้องเข้าสู่ระบบอีกครั้ง',
+            confirmLabel: 'บันทึกและเข้าสู่ระบบใหม่',
+            variant: 'warning',
+        }))) return;
 
         setIsSaving(true);
         try {
@@ -412,6 +415,13 @@ export default function AdminUsersPage() {
             });
             const data = await res.json();
             if (data.success) {
+                if (editingSelf) {
+                    // This session is no longer valid; go to login instead of showing load errors
+                    forcePageLeave();
+                    try { await fetch('/api/auth/logout', { method: 'POST' }); } catch { /* cookie cleared below by login */ }
+                    window.location.href = '/login';
+                    return;
+                }
                 toast(editMode ? 'อัปเดตข้อมูลผู้ใช้สำเร็จ' : 'เพิ่มผู้ใช้ใหม่สำเร็จ', 'success');
                 setIsRolePreviewOpen(false);
                 setIsModalOpen(false);
@@ -493,7 +503,8 @@ export default function AdminUsersPage() {
     };
 
     const handleOpenResetPw = (user: ManagedUser) => {
-        if (isAdAccount(user.AuthType)) return;
+        // Own password: use the change-password page (a reset here would revoke this session mid-task)
+        if (isAdAccount(user.AuthType) || isCurrentUser(user.UserId, signedInUser?.userId)) return;
         setResetPwUser(user);
         setResetPwValue('');
         setShowResetPw(false);
@@ -626,8 +637,8 @@ export default function AdminUsersPage() {
                                     <td className="px-4 py-3"><span className={`rounded-md border px-2 py-1 text-xs ${ad ? 'border-indigo-200 bg-indigo-50 text-indigo-700 dark:border-indigo-800 dark:bg-indigo-900/20 dark:text-indigo-300' : 'border-slate-200 text-slate-600 dark:border-slate-600 dark:text-slate-300'}`}>{ad ? 'AD' : 'Local'}</span></td>
                                     <td className="px-4 py-3"><span className="whitespace-nowrap rounded-md bg-slate-100 px-2 py-1 text-xs dark:bg-slate-700">{user.RoleName || 'ยังไม่กำหนดกลุ่ม'}</span></td>
                                     <td className="px-4 py-3"><div className="flex flex-wrap gap-1">{user.allowedCompanies?.length ? user.allowedCompanies.map(id => { const company = companies.find(item => item.id === id); return <span key={id} title={company?.name} className="rounded border border-slate-200 px-1.5 py-0.5 text-xs dark:border-slate-600">{company?.code || `#${id}`}</span>; }) : <span className="text-xs text-amber-700 dark:text-amber-300">ไม่มีบริษัท</span>}</div></td>
-                                    <td className="px-4 py-3"><button onClick={() => handleToggleActive(user)} disabled={self} title={self ? 'เปลี่ยนสถานะบัญชีของตัวเองไม่ได้' : user.IsActive ? 'ระงับผู้ใช้' : 'เปิดใช้งาน'} aria-label={`${user.IsActive ? 'ระงับ' : 'เปิดใช้งาน'} ${user.FullName}`} className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-full px-2 py-1 text-xs disabled:cursor-default ${user.IsActive ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-300' : 'bg-slate-100 text-slate-500 dark:bg-slate-700 dark:text-slate-400'}`}><span className={`h-1.5 w-1.5 rounded-full ${user.IsActive ? 'bg-emerald-500' : 'bg-slate-400'}`} />{user.IsActive ? 'ใช้งาน' : 'ระงับ'}</button></td>
-                                    <td className="px-4 py-3"><div className="flex items-center justify-end gap-1"><button onClick={() => handleOpenEditModal(user)} className="inline-flex items-center gap-1 rounded-lg p-2 text-sm hover:bg-slate-100 dark:hover:bg-slate-700" aria-label={`แก้ไข ${user.FullName}`}><Edit className="h-4 w-4" /><span className="hidden xl:inline">แก้ไข</span></button>{!ad && <button onClick={() => handleOpenResetPw(user)} className="rounded-lg p-2 text-amber-600 hover:bg-amber-50 dark:text-amber-300 dark:hover:bg-amber-900/20" aria-label={`รีเซ็ตรหัสผ่านของ ${user.FullName}`} title="รีเซ็ตรหัสผ่าน"><KeyRound className="h-4 w-4" /></button>}{!self && <button onClick={() => handleDeleteUser(user)} className="rounded-lg p-2 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20" aria-label={`ลบ ${user.FullName}`} title="ลบผู้ใช้"><Trash2 className="h-4 w-4" /></button>}</div></td>
+                                    <td className="px-4 py-3"><span className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-full px-2 py-1 text-xs ${user.IsActive ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-300' : 'bg-slate-100 text-slate-500 dark:bg-slate-700 dark:text-slate-400'}`}><span className={`h-1.5 w-1.5 rounded-full ${user.IsActive ? 'bg-emerald-500' : 'bg-slate-400'}`} />{user.IsActive ? 'ใช้งาน' : 'ระงับ'}</span></td>
+                                    <td className="px-4 py-3"><div className="flex items-center justify-end gap-1"><button onClick={() => handleOpenEditModal(user)} className="inline-flex items-center gap-1 rounded-lg p-2 text-sm hover:bg-slate-100 dark:hover:bg-slate-700" aria-label={`แก้ไข ${user.FullName}`}><Edit className="h-4 w-4" /><span className="hidden xl:inline">แก้ไข</span></button>{!self && <button onClick={() => handleToggleActive(user)} className="inline-flex items-center gap-1 rounded-lg p-2 text-sm hover:bg-slate-100 dark:hover:bg-slate-700" aria-label={`${user.IsActive ? 'ระงับ' : 'เปิดใช้งาน'} ${user.FullName}`} title={user.IsActive ? 'ระงับผู้ใช้' : 'เปิดใช้งานผู้ใช้'}><Power className="h-4 w-4" /><span className="hidden xl:inline">{user.IsActive ? 'ระงับ' : 'เปิดใช้งาน'}</span></button>}{!ad && !self && <button onClick={() => handleOpenResetPw(user)} className="rounded-lg p-2 text-amber-600 hover:bg-amber-50 dark:text-amber-300 dark:hover:bg-amber-900/20" aria-label={`รีเซ็ตรหัสผ่านของ ${user.FullName}`} title="รีเซ็ตรหัสผ่าน"><KeyRound className="h-4 w-4" /></button>}{!self && <button onClick={() => handleDeleteUser(user)} className="rounded-lg p-2 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20" aria-label={`ลบ ${user.FullName}`} title="ลบผู้ใช้"><Trash2 className="h-4 w-4" /></button>}</div></td>
                                 </tr>;
                             })}
                         </tbody>

@@ -1,28 +1,17 @@
 import { NextResponse } from 'next/server';
 import sql from 'mssql';
 import { connectToCentralDB } from '@/lib/db';
-import { verifyToken } from '@/lib/auth';
-import { cookies } from 'next/headers';
+import { getSession } from '@/lib/auth';
 
 export async function GET(request) {
     try {
-        // Get user's RoleId from JWT
-        const cookieStore = await cookies();
-        const token = cookieStore.get('rc_token')?.value;
-        let userRoleId = null;
-        let isAdmin = false;
-
-        if (token) {
-            try {
-                const payload = await verifyToken(token);
-                userRoleId = payload.roleId;
-                isAdmin = payload.roleName?.toLowerCase() === 'admin';
-            } catch (e) {
-                return NextResponse.json({ success: false, message: 'Unauthorized' }, { status: 401 });
-            }
-        } else {
+        // getSession also rejects suspended users and tokens revoked by TokenVersion
+        const session = await getSession(request);
+        if (!session) {
             return NextResponse.json({ success: false, message: 'Unauthorized' }, { status: 401 });
         }
+        const userRoleId = session.roleId;
+        const isAdmin = session.roleName?.toLowerCase() === 'admin';
 
         const pool = await connectToCentralDB();
 

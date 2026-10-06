@@ -8,7 +8,7 @@ import { useToast } from '@/components/providers/ToastProvider';
 import { useConfirm } from '@/components/providers/ConfirmProvider';
 import useUnsavedChanges from '@/hooks/useUnsavedChanges';
 import {
-    compareRoleReports, createRoleDraft, draftChanges, draftPayload, editReports,
+    applyRoleChanges, compareRoleReports, createRoleDraft, draftChanges, draftPayload, editReports,
     isAdminRole, isReportActive, reportCounts, reportsForRole, setDraftReports,
     type RoleAccessDraft, type RoleAccessReport, type RoleAccessRole,
 } from '@/lib/role-access';
@@ -153,10 +153,10 @@ export default function AdminRolesPage() {
             const response = await fetch('/api/admin/roles', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
             const data = await response.json();
             if (!response.ok || !data.success) throw new Error(data.message || 'บันทึกสิทธิ์ไม่สำเร็จ');
-            setRoles(current => current.map(role => role.RoleId === payload.roleId ? { ...role, assignedReports: payload.assignedReports } : role));
+            setRoles(current => current.map(role => role.RoleId === payload.roleId ? { ...role, assignedReports: applyRoleChanges(role.assignedReports, payload) } : role));
             setDraft(null);
             setReportQuery('');
-            toast(`บันทึกรายงานของกลุ่ม ${payload.roleName} แล้ว`, 'success');
+            toast(`บันทึกรายงานของกลุ่ม ${draft.roleName} แล้ว`, 'success');
         } catch (error) { toast(error instanceof Error ? error.message : 'ไม่สามารถเชื่อมต่อเซิร์ฟเวอร์ได้', 'error'); }
         finally { savingRef.current = false; setSaving(false); }
     };
@@ -175,13 +175,14 @@ export default function AdminRolesPage() {
         if (!name || name.length > 50) { setFormError('กรอกชื่อกลุ่มไม่เกิน 50 ตัวอักษร'); return; }
         if (name.toLowerCase() === 'admin') { setFormError('ชื่อ Admin สงวนไว้สำหรับผู้ดูแลระบบ'); return; }
         if (roles.some(role => role.RoleId !== nameForm.roleId && role.RoleName.toLowerCase() === name.toLowerCase())) { setFormError('มีกลุ่มสิทธิ์ชื่อนี้แล้ว'); return; }
-        const original = roles.find(role => role.RoleId === nameForm.roleId);
         const copy = roles.find(role => String(role.RoleId) === nameForm.copyFrom);
-        const assignedReports = nameForm.mode === 'rename' ? original?.assignedReports ?? [] : copy?.assignedReports ?? [];
+        const assignedReports = copy?.assignedReports ?? [];
+        // A rename sends only the name, so report assignments changed elsewhere are not overwritten.
+        const body = nameForm.mode === 'create' ? { roleName: name, assignedReports } : { roleId: nameForm.roleId, roleName: name };
         savingRef.current = true;
         setSaving(true);
         try {
-            const response = await fetch('/api/admin/roles', { method: nameForm.mode === 'create' ? 'POST' : 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ roleId: nameForm.roleId, roleName: name, assignedReports }) });
+            const response = await fetch('/api/admin/roles', { method: nameForm.mode === 'create' ? 'POST' : 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
             const data = await response.json();
             if (!response.ok || !data.success) throw new Error(data.message || 'บันทึกกลุ่มไม่สำเร็จ');
             if (nameForm.mode === 'create') {

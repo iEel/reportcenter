@@ -2,7 +2,7 @@
 
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { Check, FileText, Loader2, Search, Star, X } from 'lucide-react';
-import { filterReports, getNextActiveIndex, groupReports, splitSearchMatches, type StandardReport } from '@/lib/report-selector';
+import { activeIndexForQuery, filterReports, getNextActiveIndex, groupReports, splitSearchMatches, type StandardReport } from '@/lib/report-selector';
 
 interface ReportSelectorProps {
     reports: StandardReport[];
@@ -111,7 +111,8 @@ export default function ReportSelector({ reports, selectedReportId, favoriteIds,
                     placeholder={isLoading ? 'กำลังโหลดรายงาน…' : 'ค้นหาหรือเลือกรายงาน…'} disabled={isDisabled}
                     aria-expanded={open} aria-controls={open ? listboxId : undefined} aria-autocomplete="list"
                     aria-keyshortcuts="/" aria-activedescendant={open && activeIndex >= 0 && visible[activeIndex] ? `${listboxId}-option-${visible[activeIndex].ReportId}` : undefined}
-                    onFocus={openSelector} onClick={openSelector} onChange={event => { setQuery(event.target.value); setActiveIndex(-1); setIsOpen(true); }} onKeyDown={handleKeyDown}
+                    onFocus={openSelector} onClick={openSelector} onKeyDown={handleKeyDown}
+                    onChange={event => { const next = event.target.value; setQuery(next); setActiveIndex(activeIndexForQuery(next, filterReports(reports, next).length)); setIsOpen(true); }}
                     className="h-12 w-full rounded-lg border border-slate-300 bg-white py-2 pl-10 pr-12 text-sm text-slate-900 outline-none placeholder:text-slate-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100" />
                 {!selectedReport && !open && <kbd aria-hidden="true" className="pointer-events-none absolute right-3 top-3 rounded border border-slate-200 px-1.5 py-0.5 text-xs text-slate-400 dark:border-slate-600">/</kbd>}
                 {selectedReport && !open && <button type="button" onClick={clearSelection} disabled={isDisabled} aria-label="ล้างรายงานที่เลือก"

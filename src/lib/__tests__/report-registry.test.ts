@@ -1,5 +1,23 @@
 import { describe, expect, it } from 'vitest';
-import { matchesReportSearch, toggleVisibleReportSelection } from '../report-registry';
+import { categoryFilterLabel, matchesReportSearch, toggleVisibleReportSelection } from '../report-registry';
+
+describe('category filter label', () => {
+    const categories = [{ CategoryId: 3, CategoryName: 'บัญชี' }];
+    it('names a known category and the uncategorized filter', () => {
+        expect(categoryFilterLabel('3', categories, true)).toBe('บัญชี');
+        expect(categoryFilterLabel('uncategorized', categories, true)).toBe('ยังไม่จัดหมวด');
+        expect(categoryFilterLabel('none', categories, true)).toBe('ยังไม่จัดหมวด');
+    });
+    it('does not call an unknown category "uncategorized"', () => {
+        expect(categoryFilterLabel('999', categories, true)).toBe('ไม่พบหมวด #999');
+    });
+    it('shows the raw id while categories are not available', () => {
+        expect(categoryFilterLabel('3', [], false)).toBe('หมวด #3');
+    });
+    it('has no label when not filtering by category', () => {
+        expect(categoryFilterLabel('all', categories, true)).toBeNull();
+    });
+});
 
 describe('report registry search', () => {
     const report = { ReportId: 20, ReportName: 'Business File', Description: 'บัญชีรายวัน' };

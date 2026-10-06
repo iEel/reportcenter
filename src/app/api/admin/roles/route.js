@@ -109,44 +109,85 @@ export async function POST(request) {
     }
 }
 
-// PUT: Update role name and report mappings
+// PUT: Rename a role and/or change its report mappings.
+// - roleName: rename only when present
+// - addReports / removeReports: apply just these changes (keeps mappings made elsewhere)
+// - assignedReports: legacy full replacement
 export async function PUT(request) {
+    let transaction;
     try {
         const session = await getSession(request);
         if (!session || session.roleName?.toLowerCase() !== 'admin') {
             return NextResponse.json({ success: false, message: 'Forbidden' }, { status: 403 });
         }
 
-        const { roleId, roleName, assignedReports } = await request.json();
+        const { roleId, roleName, assignedReports, addReports = [], removeReports = [] } = await request.json();
+        const rename = roleName !== undefined;
+        const replace = Array.isArray(assignedReports);
 
-        if (!roleId || !roleName?.trim()) {
+        if (!roleId || (rename && !roleName?.trim())) {
             return NextResponse.json({ success: false, message: 'ข้อมูลไม่ครบ' }, { status: 400 });
+        }
+        if (rename && roleName.trim().length > 50) {
+            return NextResponse.json({ success: false, message: 'ชื่อ Role ต้องไม่เกิน 50 ตัวอักษร' }, { status: 400 });
+        }
+        if (!rename && !replace && !addReports.length && !removeReports.length) {
+            return NextResponse.json({ success: false, message: 'ไม่มีข้อมูลที่ต้องบันทึก' }, { status: 400 });
         }
 
         const pool = await connectToCentralDB();
+        const id = parseInt(roleId);
+        transaction = pool.transaction();
+        await transaction.begin();
 
-        // Update role name
-        await pool.request()
-            .input('RoleId', sql.Int, parseInt(roleId))
-            .input('RoleName', sql.NVarChar(50), roleName.trim())
-            .query('UPDATE Roles SET RoleName = @RoleName WHERE RoleId = @RoleId');
+        if (rename) {
+            await transaction.request()
+                .input('RoleId', sql.Int, id)
+                .input('RoleName', sql.NVarChar(50), roleName.trim())
+                .query('UPDATE Roles SET RoleName = @RoleName WHERE RoleId = @RoleId');
+        }
 
-        // Delete old mappings and re-insert
-        await pool.request()
-            .input('RoleId', sql.Int, parseInt(roleId))
-            .query('DELETE FROM ReportRoleMapping WHERE RoleId = @RoleId');
-
-        if (assignedReports && assignedReports.length > 0) {
+        if (replace) {
+            await transaction.request()
+                .input('RoleId', sql.Int, id)
+                .query('DELETE FROM ReportRoleMapping WHERE RoleId = @RoleId');
             for (const reportId of assignedReports) {
-                await pool.request()
-                    .input('RoleId', sql.Int, parseInt(roleId))
+                await transaction.request()
+                    .input('RoleId', sql.Int, id)
                     .input('ReportId', sql.Int, parseInt(reportId))
                     .query('INSERT INTO ReportRoleMapping (RoleId, ReportId) VALUES (@RoleId, @ReportId)');
             }
         }
 
+        for (const reportId of removeReports) {
+            await transaction.request()
+                .input('RoleId', sql.Int, id)
+                .input('ReportId', sql.Int, parseInt(reportId))
+                .query('DELETE FROM ReportRoleMapping WHERE RoleId = @RoleId AND ReportId = @ReportId');
+        }
+        for (const reportId of addReports) {
+            try {
+                await transaction.request()
+                    .input('RoleId', sql.Int, id)
+                    .input('ReportId', sql.Int, parseInt(reportId))
+                    .query(`IF NOT EXISTS (SELECT 1 FROM ReportRoleMapping WHERE RoleId = @RoleId AND ReportId = @ReportId)
+                            INSERT INTO ReportRoleMapping (RoleId, ReportId) VALUES (@RoleId, @ReportId)`);
+            } catch (error) {
+                // 2627 = another admin added the same mapping between the check and the insert — already done
+                if (error.number !== 2627) throw error;
+            }
+        }
+
+        await transaction.commit();
         return NextResponse.json({ success: true });
     } catch (error) {
+        if (transaction) {
+            try { await transaction.rollback(); } catch { /* already rolled back */ }
+        }
+        // 547 = FK conflict, e.g. a report deleted after this page loaded
+        if (error.number === 547) {
+            return NextResponse.json({ success: false, message: 'บางรายงานถูกลบหรือเปลี่ยนไปแล้ว กรุณาโหลดหน้าใหม่แล้วลองอีกครั้ง' }, { status: 409 });
+        }
         console.error('Roles PUT error:', error);
         return NextResponse.json({ success: false, message: 'Internal Server Error' }, { status: 500 });
     }

@@ -54,3 +54,30 @@ export function isCurrentUser(userId: string | number, sessionUserId: number | n
 export function isAdAccount(authType: string | null | undefined) {
     return authType?.toLowerCase() === 'ldap';
 }
+
+interface AdProfileDraft {
+    Username: string; FullName: string; Email: string; EmployeeId: string;
+    ADCompany: string; Department: string; Branch: string;
+}
+
+export interface AdProfile {
+    fullName?: string; email?: string; employeeId?: string; company?: string; department?: string; branch?: string;
+}
+
+/** AD details belong to the username they were looked up for; typing another username drops them. */
+export function changeAdUsername<T extends AdProfileDraft>(draft: T, username: string): T {
+    if (draft.Username === username) return draft;
+    if (draft.Username.trim() === username.trim()) return { ...draft, Username: username };
+    return { ...draft, Username: username, FullName: '', Email: '', EmployeeId: '', ADCompany: '', Department: '', Branch: '' };
+}
+
+/** Apply a lookup result only if the form still shows the username that was looked up. */
+export function applyAdProfile<T extends AdProfileDraft>(draft: T, lookedUp: string, profile: AdProfile): T {
+    if (draft.Username.trim() !== lookedUp) return draft;
+    return {
+        ...draft,
+        // Some AD accounts have no display name; the username keeps the account savable
+        FullName: profile.fullName || lookedUp, Email: profile.email || '', EmployeeId: profile.employeeId || '',
+        ADCompany: profile.company || '', Department: profile.department || '', Branch: profile.branch || '',
+    };
+}

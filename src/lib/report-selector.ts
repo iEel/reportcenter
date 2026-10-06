@@ -58,6 +58,11 @@ export function groupReports(reports: StandardReport[]): ReportGroup[] {
     });
 }
 
+/** After typing, highlight the first match so Enter opens it (the list footer promises "Enter เปิดรายงาน"). */
+export function activeIndexForQuery(query: string, resultCount: number) {
+    return query.trim() && resultCount > 0 ? 0 : -1;
+}
+
 export function getNextActiveIndex(
     currentIndex: number,
     resultCount: number,

@@ -7,7 +7,7 @@ import { Plus, Search, Edit, Trash2, RefreshCw, Power, ArrowLeft, X } from 'luci
 import { useToast } from '@/components/providers/ToastProvider';
 import { useConfirm } from '@/components/providers/ConfirmProvider';
 import AccessibleDialog from '@/components/ui/AccessibleDialog';
-import { matchesReportSearch, toggleVisibleReportSelection } from '@/lib/report-registry';
+import { categoryFilterLabel, matchesReportSearch, toggleVisibleReportSelection } from '@/lib/report-registry';
 
 interface Report { ReportId: number; ReportName: string; Description?: string; ReportType: number; IsActive: boolean; IsHeavy?: boolean; CategoryId: number | null; CategoryName?: string; }
 interface Role { RoleId: number; RoleName: string; assignedReports: number[]; }
@@ -28,6 +28,7 @@ function ReportRegistry() {
     const [reports, setReports] = useState<Report[]>([]);
     const [roles, setRoles] = useState<Role[] | null>(null);
     const [categories, setCategories] = useState<Category[]>([]);
+    const [categoriesLoaded, setCategoriesLoaded] = useState(false);
     const [isLoading, setIsLoading] = useState(true);
     const [loadError, setLoadError] = useState('');
     const [search, setSearch] = useState('');
@@ -54,6 +55,7 @@ function ReportRegistry() {
             const ids = new Set<number>(list.reports.map((r: Report) => r.ReportId));
             setSelectedIds(previous => previous.filter(id => ids.has(id)));
             if (cats.success) setCategories(cats.categories);
+            setCategoriesLoaded(!!cats.success);
             setRoles(groups.success ? groups.roles : null);
             if (!groups.success || !cats.success) toast('โหลดหมวดหรือกลุ่มสิทธิ์ไม่สำเร็จ กรุณาลองโหลดใหม่', 'error');
         } catch (error) { setLoadError(error instanceof Error ? error.message : 'ไม่สามารถโหลดข้อมูลได้'); }
@@ -72,9 +74,13 @@ function ReportRegistry() {
     useEffect(() => { if (selectAllRef.current) selectAllRef.current.indeterminate = visibleSelected > 0 && visibleSelected < visibleIds.length; }, [visibleSelected, visibleIds.length]);
     const setCategory = (value: string) => router.replace(value === 'all' ? '/admin/reports' : `/admin/reports?categoryId=${encodeURIComponent(value)}`, { scroll: false });
     const clearFilters = () => { setSearch(''); setType('all'); setStatus('all'); setCategory('all'); };
+    const categoryLabel = categoryFilterLabel(filterCategory, categories, categoriesLoaded);
+    // An id from the URL that is not in the list still needs an option, or the dropdown would read "ทุกหมวด"
+    const unlistedCategory = filterCategory !== 'all' && filterCategory !== 'uncategorized' && filterCategory !== 'none'
+        && !categories.some(category => String(category.CategoryId) === filterCategory);
     const filterChips = [
         ...(search.trim() ? [{ key: 'search', label: `ค้นหา: ${search.trim()}`, clear: () => setSearch(''), focusTarget: searchRef }] : []),
-        ...(filterCategory !== 'all' ? [{ key: 'category', label: `หมวด: ${categories.find(category => String(category.CategoryId) === filterCategory)?.CategoryName || 'ยังไม่จัดหมวด'}`, clear: () => setCategory('all'), focusTarget: categoryRef }] : []),
+        ...(categoryLabel ? [{ key: 'category', label: `หมวด: ${categoryLabel}`, clear: () => setCategory('all'), focusTarget: categoryRef }] : []),
         ...(type !== 'all' ? [{ key: 'type', label: `ประเภท: ${type === '1' ? 'มาตรฐาน' : 'Template'}`, clear: () => setType('all'), focusTarget: typeRef }] : []),
         ...(status !== 'all' ? [{ key: 'status', label: `สถานะ: ${status === 'active' ? 'ใช้งาน' : 'ปิดใช้งาน'}`, clear: () => setStatus('all'), focusTarget: statusRef }] : []),
     ];
@@ -112,7 +118,7 @@ function ReportRegistry() {
         <section className="overflow-hidden rounded-xl border border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-800" aria-label="รายการรายงาน">
             <div className="flex flex-wrap items-end gap-3 border-b border-slate-200 p-4 dark:border-slate-700">
                 <label className="min-w-48 flex-1 text-sm"><span className="mb-1 block font-medium">ค้นหารายงาน</span><span className="relative block"><Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" /><input ref={searchRef} className={`${input} w-full pl-9`} value={search} onChange={e => setSearch(e.target.value)} placeholder="ชื่อ รหัส หรือคำอธิบาย" /></span></label>
-                <label className="text-sm"><span className="mb-1 block font-medium">หมวดรายงาน</span><select ref={categoryRef} className={input} value={filterCategory} onChange={e => setCategory(e.target.value)}><option value="all">ทุกหมวด</option><option value="uncategorized">ยังไม่จัดหมวด</option>{categories.map(category => <option key={category.CategoryId} value={category.CategoryId}>{category.CategoryName}</option>)}</select></label>
+                <label className="text-sm"><span className="mb-1 block font-medium">หมวดรายงาน</span><select ref={categoryRef} className={input} value={filterCategory === 'none' ? 'uncategorized' : filterCategory} onChange={e => setCategory(e.target.value)}><option value="all">ทุกหมวด</option><option value="uncategorized">ยังไม่จัดหมวด</option>{unlistedCategory && <option value={filterCategory}>{categoryLabel}</option>}{categories.map(category => <option key={category.CategoryId} value={category.CategoryId}>{category.CategoryName}</option>)}</select></label>
                 <label className="text-sm"><span className="mb-1 block font-medium">ประเภท</span><select ref={typeRef} className={input} value={type} onChange={e => setType(e.target.value)}><option value="all">ทุกประเภท</option><option value="1">มาตรฐาน</option><option value="2">Template</option></select></label>
                 <label className="text-sm"><span className="mb-1 block font-medium">สถานะ</span><select ref={statusRef} className={input} value={status} onChange={e => setStatus(e.target.value)}><option value="all">ทุกสถานะ</option><option value="active">ใช้งาน</option><option value="inactive">ปิดใช้งาน</option></select></label>
                 {(search || filterCategory !== 'all' || type !== 'all' || status !== 'all') && <button onClick={clearFilters} className={button}>ล้างตัวกรอง</button>}

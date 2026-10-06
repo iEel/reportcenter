@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+    activeIndexForQuery,
     filterReports,
     getNextActiveIndex,
     groupReports,
@@ -116,5 +117,16 @@ describe('getNextActiveIndex', () => {
 
     it('returns no active result when the result list is empty', () => {
         expect(getNextActiveIndex(0, 0, 1)).toBe(-1);
+    });
+});
+
+describe('activeIndexForQuery', () => {
+    it('highlights the first result after typing so Enter opens it', () => {
+        expect(activeIndexForQuery('aged', 3)).toBe(0);
+    });
+
+    it('highlights nothing for a blank search or when nothing matches', () => {
+        expect(activeIndexForQuery('   ', 3)).toBe(-1);
+        expect(activeIndexForQuery('zzz', 0)).toBe(-1);
     });
 });
