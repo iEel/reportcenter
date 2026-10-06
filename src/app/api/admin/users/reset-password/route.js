@@ -31,13 +31,16 @@ export async function POST(request) {
         // Check user exists
         const userResult = await pool.request()
             .input('UserId', sql.Int, uid)
-            .query('SELECT Username, FullName FROM Users WHERE UserId = @UserId');
+            .query('SELECT Username, FullName, AuthType FROM Users WHERE UserId = @UserId');
 
         if (userResult.recordset.length === 0) {
             return NextResponse.json({ success: false, message: 'ไม่พบผู้ใช้นี้' }, { status: 404 });
         }
 
         const targetUser = userResult.recordset[0];
+        if (targetUser.AuthType?.toLowerCase() === 'ldap') {
+            return NextResponse.json({ success: false, message: 'บัญชี AD ต้องเปลี่ยนรหัสผ่านที่ Active Directory' }, { status: 400 });
+        }
 
         // Hash and update password + increment TokenVersion to force re-login
         const hashedNew = await bcrypt.hash(newPassword, 10);

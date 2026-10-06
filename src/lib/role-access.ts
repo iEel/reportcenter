@@ -61,8 +61,15 @@ export function draftChanges(draft: RoleAccessDraft) {
     return { added, removed, dirty: added.length + removed.length > 0 };
 }
 
+/** Send only what this draft changed, so assignments made elsewhere since the page loaded are kept. */
 export function draftPayload(draft: RoleAccessDraft) {
-    return { roleId: draft.roleId, roleName: draft.roleName, assignedReports: [...draft.selectedReports] };
+    const { added, removed } = draftChanges(draft);
+    return { roleId: draft.roleId, addReports: added, removeReports: removed };
+}
+
+export function applyRoleChanges(assigned: number[], changes: { addReports: number[]; removeReports: number[] }) {
+    const removed = new Set(changes.removeReports);
+    return [...new Set([...assigned.filter(id => !removed.has(id)), ...changes.addReports])];
 }
 
 export function compareRoleReports(a: RoleAccessRole, b: RoleAccessRole, reports: RoleAccessReport[]) {

@@ -5,6 +5,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { timeAgo } from '@/lib/dateUtils';
 import { useTheme } from '@/components/providers/ThemeProvider';
+import { confirmPageLeave } from '@/lib/page-leave-guard';
 
 interface Notification {
     NotificationId: number;
@@ -75,9 +76,10 @@ export default function Header() {
             });
             fetchNotifications();
         }
-        // Navigate if has link
+        // Navigate if has link — after the same unsaved-draft check as in-app links
         if (n.LinkUrl) {
             setShowPanel(false);
+            if (!(await confirmPageLeave())) return;
             router.push(n.LinkUrl);
         }
     };

@@ -2,6 +2,7 @@
 
 import { createContext, useContext, useEffect, useState, useCallback, useRef } from 'react';
 import { useAuth } from './AuthProvider';
+import { confirmPageLeave, forcePageLeave } from '@/lib/page-leave-guard';
 
 interface IdleTimeoutContextType {
     /** Remaining seconds before logout (null = not warning yet) */
@@ -67,13 +68,19 @@ export function IdleTimeoutProvider({ children }: { children: React.ReactNode })
         resetTimer();
     }, [resetTimer]);
 
-    // Handle logout
+    // Handle logout — a timeout logout is forced past any unsaved-draft prompt
     const handleLogout = useCallback(async () => {
+        forcePageLeave();
         try {
             await fetch('/api/auth/logout', { method: 'POST' });
         } catch { /* ignore */ }
         window.location.href = '/login?reason=idle';
     }, []);
+
+    // The user chose to log out from the warning: ask about drafts like the sidebar logout does
+    const logoutNow = useCallback(async () => {
+        if (await confirmPageLeave()) await handleLogout();
+    }, [handleLogout]);
 
     // Listen for user activity events
     useEffect(() => {
@@ -192,7 +199,7 @@ export function IdleTimeoutProvider({ children }: { children: React.ReactNode })
 
                         <div className="flex gap-3">
                             <button
-                                onClick={() => handleLogout()}
+                                onClick={() => void logoutNow()}
                                 className="flex-1 px-4 py-2.5 bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-xl hover:bg-slate-200 dark:hover:bg-slate-600 transition-colors font-medium"
                             >
                                 ออกจากระบบ

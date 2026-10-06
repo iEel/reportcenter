@@ -1,16 +1,12 @@
 import { NextResponse } from 'next/server';
 import sql from 'mssql';
 import { connectToCentralDB, connectToCompanyDB } from '@/lib/db';
-import { verifyToken } from '@/lib/auth';
-import { cookies } from 'next/headers';
+import { getSession } from '@/lib/auth';
 
 export async function GET(request) {
     try {
-        const cookieStore = await cookies();
-        const token = cookieStore.get('rc_token')?.value;
-        if (!token) return NextResponse.json({ success: false, message: 'Unauthorized' }, { status: 401 });
-
-        const user = await verifyToken(token);
+        // getSession also rejects suspended users and tokens revoked by TokenVersion
+        const user = await getSession(request);
         if (!user) return NextResponse.json({ success: false, message: 'Unauthorized' }, { status: 401 });
 
         const { searchParams } = new URL(request.url);

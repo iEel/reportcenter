@@ -15,7 +15,6 @@ export default function NewReportPage() {
     const [reportName, setReportName] = useState('');
     const [description, setDescription] = useState('');
     const [reportType, setReportType] = useState('1');
-    const [isPublic, setIsPublic] = useState('public');
     const [tSqlQuery, setTSqlQuery] = useState('');
     const [emailTemplateContent, setEmailTemplateContent] = useState('');
     const [isHeavy, setIsHeavy] = useState(false);
@@ -24,6 +23,7 @@ export default function NewReportPage() {
     // Roles State
     const [roles, setRoles] = useState<any[]>([]);
     const [selectedRoles, setSelectedRoles] = useState<number[]>([]);
+    const groupRoles = roles.filter(role => role.RoleName?.toLowerCase() !== 'admin');
 
     // Categories State
     const [categories, setCategories] = useState<any[]>([]);
@@ -110,7 +110,7 @@ export default function NewReportPage() {
                         ReportType: parseInt(reportType),
                         TSqlQuery: tSqlQuery,
                         EmailTemplateContent: parseInt(reportType) === 2 ? emailTemplateContent : null,
-                        IsPublic: isPublic === 'public',
+                        IsPublic: false, // access comes from groups only (decision 2026-10-06)
                         IsActive: true,
                         IsHeavy: isHeavy,
                         CategoryId: categoryId || null,
@@ -244,17 +244,6 @@ export default function NewReportPage() {
                                                 <option value="2">รายงานข้อความ (Template Email)</option>
                                             </select>
                                         </div>
-                                        <div>
-                                            <label className="block text-sm font-medium text-slate-700 mb-1">สิทธิ์การเข้าถึง</label>
-                                            <select
-                                                value={isPublic}
-                                                onChange={e => setIsPublic(e.target.value)}
-                                                className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 text-sm"
-                                            >
-                                                <option value="public">ทุกคน (Public)</option>
-                                                <option value="role">ระบุตามตำแหน่ง (Role Based)</option>
-                                            </select>
-                                        </div>
                                     </div>
 
                                     {/* Category Selector */}
@@ -275,14 +264,16 @@ export default function NewReportPage() {
                                         </div>
                                     </div>
 
-                                    {isPublic === 'role' && (
+                                    {/* Access comes from groups only; Admin sees every report already */}
+                                    {(
                                         <div className="mt-4 space-y-2">
-                                            <label className="block text-sm font-medium text-slate-700">ระบุตำแหน่งที่เข้าถึงได้ (Roles)</label>
+                                            <label className="block text-sm font-medium text-slate-700">กลุ่มสิทธิ์ที่เข้าถึงได้</label>
+                                            <p className="text-xs text-slate-500">ผู้ดูแลระบบเห็นทุกรายงานอยู่แล้ว ถ้าไม่เลือกกลุ่ม รายงานนี้จะเห็นเฉพาะผู้ดูแลระบบ</p>
                                             <div className="flex flex-wrap gap-3">
-                                                {roles.length === 0 ? (
-                                                    <span className="text-sm text-slate-500 italic">ไม่พบตำแหน่งงานในระบบ...</span>
+                                                {groupRoles.length === 0 ? (
+                                                    <span className="text-sm text-slate-500 italic">ยังไม่มีกลุ่มสิทธิ์อื่นนอกจาก Admin</span>
                                                 ) : (
-                                                    roles.map(role => (
+                                                    groupRoles.map(role => (
                                                         <label key={role.RoleId} className="flex items-center gap-2 cursor-pointer bg-slate-50 border border-slate-200 px-3 py-2 rounded-lg hover:bg-slate-100 transition-colors">
                                                             <input
                                                                 type="checkbox"

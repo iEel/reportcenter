@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { useConfirm } from '@/components/providers/ConfirmProvider';
-import { registerPageLeaveGuard } from '@/lib/page-leave-guard';
+import { isPageLeaveForced, registerPageLeaveGuard } from '@/lib/page-leave-guard';
 
 /** Protect edited forms when switching a local context, following a link or reloading. */
 export default function useUnsavedChanges(dirty: boolean) {
@@ -22,7 +22,10 @@ export default function useUnsavedChanges(dirty: boolean) {
     useEffect(() => {
         if (!dirty) return;
         const unregister = registerPageLeaveGuard(confirmDiscard);
-        const beforeUnload = (event: BeforeUnloadEvent) => { event.preventDefault(); event.returnValue = ''; };
+        const beforeUnload = (event: BeforeUnloadEvent) => {
+            if (isPageLeaveForced()) return; // idle logout must not leave admin data on screen behind a prompt
+            event.preventDefault(); event.returnValue = '';
+        };
         const click = (event: MouseEvent) => {
             if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
             const link = (event.target as Element).closest<HTMLAnchorElement>('a[href]');

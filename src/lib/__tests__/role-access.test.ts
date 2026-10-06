@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-    createRoleDraft, draftChanges, draftPayload, editReports, setDraftReports,
+    applyRoleChanges, createRoleDraft, draftChanges, draftPayload, editReports, setDraftReports,
     reportsForRole, reportCounts, compareRoleReports,
 } from '../role-access';
 
@@ -17,7 +17,8 @@ describe('role permission drafts', () => {
         const source = { ...role, assignedReports: [10, 11] };
         const draft = createRoleDraft(source);
         source.assignedReports.push(12);
-        expect(draftPayload(draft)).toEqual({ roleId: 2, roleName: 'Reviewers', assignedReports: [10, 11] });
+        expect(draft.originalReports).toEqual([10, 11]);
+        expect(draftPayload(draft)).toEqual({ roleId: 2, addReports: [], removeReports: [] });
     });
 
     it('offers active reports and only the inactive reports already assigned to this role', () => {
@@ -29,16 +30,23 @@ describe('role permission drafts', () => {
         const original = createRoleDraft(role);
         const added = setDraftReports(original, [12], true);
         const changed = setDraftReports(added, [10], false);
-        expect(draftPayload(changed)).toEqual({ roleId: 2, roleName: 'Reviewers', assignedReports: [11, 12] });
+        expect(draftPayload(changed)).toEqual({ roleId: 2, addReports: [12], removeReports: [10] });
         expect(draftChanges(changed)).toEqual({ added: [12], removed: [10], dirty: true });
-        expect(draftPayload(original).assignedReports).toEqual([10, 11]);
+        expect(draftPayload(original)).toEqual({ roleId: 2, addReports: [], removeReports: [] });
     });
 
     it('restoring the initial assignment clears the dirty state without duplicating ids', () => {
         const changed = setDraftReports(createRoleDraft(role), [12, 12], true);
         const restored = setDraftReports(changed, [12], false);
         expect(draftChanges(restored)).toEqual({ added: [], removed: [], dirty: false });
-        expect(draftPayload(restored).assignedReports).toEqual([10, 11]);
+        expect(draftPayload(restored)).toEqual({ roleId: 2, addReports: [], removeReports: [] });
+    });
+
+    it('sends only the changes, so assignments made elsewhere since loading survive', () => {
+        const payload = draftPayload(setDraftReports(createRoleDraft(role), [12], true));
+        // Another admin added report 13 after this page loaded.
+        expect(applyRoleChanges([10, 11, 13], payload)).toEqual([10, 11, 13, 12]);
+        expect(applyRoleChanges([10, 11, 13], { addReports: [10], removeReports: [11] })).toEqual([10, 13]);
     });
 
     it('counts inactive assignments separately and Admin automatically sees all active reports', () => {

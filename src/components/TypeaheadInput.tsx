@@ -154,17 +154,17 @@ export default function TypeaheadInput({
 
             {/* Suggestions dropdown */}
             {isOpen && suggestions.length > 0 && (
-                <div className="absolute z-50 w-full mt-1 bg-white border border-slate-200 rounded-lg shadow-lg max-h-60 overflow-auto animate-in fade-in slide-in-from-top-1 duration-150">
+                <div className="absolute z-50 w-full mt-1 bg-white border border-slate-200 rounded-lg shadow-lg max-h-60 overflow-auto animate-in fade-in slide-in-from-top-1 duration-150 dark:border-slate-600 dark:bg-slate-800">
                     {suggestions.map((s, idx) => (
                         <button
                             key={`${s.value}-${idx}`}
                             onClick={() => handleSelect(s)}
                             className={`w-full text-left px-3 py-2 text-sm transition-colors flex items-center gap-2 ${idx === highlightIdx
-                                ? 'bg-purple-50 text-purple-700'
-                                : 'hover:bg-slate-50 text-slate-700'
-                                } ${idx !== suggestions.length - 1 ? 'border-b border-slate-50' : ''}`}
+                                ? 'bg-purple-50 text-purple-700 dark:bg-purple-900/50 dark:text-purple-100'
+                                : 'hover:bg-slate-50 text-slate-700 dark:text-slate-200'
+                                } ${idx !== suggestions.length - 1 ? 'border-b border-slate-50 dark:border-slate-700' : ''}`}
                         >
-                            <span className="font-medium text-slate-900">{s.value}</span>
+                            <span className="font-medium text-slate-900 dark:text-slate-100">{s.value}</span>
                             {s.label !== s.value && (
                                 <span className="text-xs text-slate-400 truncate">— {s.label}</span>
                             )}

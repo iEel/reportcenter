@@ -11,6 +11,7 @@ import CompanySelector from "@/components/CompanySelector";
 import Link from "next/link";
 import { formatDate } from '@/lib/dateUtils';
 import type { StandardReport } from '@/lib/report-selector';
+import { exportProblem, getRunBlocker, pickReportCompany, shouldConfirmEmptyConditions, startJobPolling } from '@/lib/standard-report';
 
 interface Report extends StandardReport { ReportType: number }
 interface ReportParameter { ParameterId: number; ParameterName: string; DisplayLabel?: string; InputType: string; LookupQuery?: string | null }
@@ -25,6 +26,8 @@ export default function StandardReportPage() {
     const [parameters, setParameters] = useState<ReportParameter[]>([]);
     const [isLoadingReports, setIsLoadingReports] = useState(true);
     const [isLoadingParams, setIsLoadingParams] = useState(false);
+    const [paramsError, setParamsError] = useState<string | null>(null);
+    const [paramsAttempt, setParamsAttempt] = useState(0);
 
     // Form parameter values
     const [paramValues, setParamValues] = useState<Record<string, string>>({});
@@ -50,17 +53,27 @@ export default function StandardReportPage() {
 
     // Background Job state
     const [activeJob, setActiveJob] = useState<{ jobId: number; status: string; rowCount?: number; fileName?: string; error?: string; reportName?: string } | null>(null);
+    const jobStartingRef = useRef(false);
+    const stopPollRef = useRef<(() => void) | null>(null);
+    const mountedRef = useRef(true);
+    useEffect(() => {
+        mountedRef.current = true;
+        return () => { mountedRef.current = false; stopPollRef.current?.(); };
+    }, []);
+    // Paging re-runs the conditions of the last fresh run, not whatever the form holds now
+    const lastRunParamsRef = useRef<Record<string, string>>({});
 
     const [companies, setCompanies] = useState<ReportCompany[]>([]);
+    const [companiesLoaded, setCompaniesLoaded] = useState(false);
 
     const allowedCompanies = user?.allowedCompanies || NO_COMPANIES;
+    const companyChoices = companies.filter(company => allowedCompanies.includes(company.companyId));
 
-    // Set default selected company when user loads
+    // Default to (and stay on) a company the user may read and the selector actually lists
     useEffect(() => {
-        if (allowedCompanies.length > 0 && !selectedCompany) {
-            setSelectedCompany(allowedCompanies[0].toString());
-        }
-    }, [allowedCompanies, selectedCompany]);
+        const next = pickReportCompany(selectedCompany, allowedCompanies, companiesLoaded ? companies.map(company => company.companyId) : null);
+        if (next !== selectedCompany) setSelectedCompany(next);
+    }, [allowedCompanies, companies, companiesLoaded, selectedCompany]);
 
     // Fetch available standard reports + favorites
     useEffect(() => {
@@ -83,6 +96,7 @@ export default function StandardReportPage() {
                 }
                 if (compData.success) {
                     setCompanies(compData.companies);
+                    setCompaniesLoaded(true);
                 }
             } catch (error) {
                 console.error("Failed to fetch reports:", error);
@@ -118,7 +132,7 @@ export default function StandardReportPage() {
     // A new report owns a new set of conditions and results. Late responses are ignored.
     useEffect(() => {
         const controller = new AbortController();
-        setParameters([]); setParamValues({}); setReportData(null); setExecutionError(null);
+        setParameters([]); setParamValues({}); setReportData(null); setExecutionError(null); setParamsError(null);
         setReportColumns([]); setTotalRows(0); setCurrentPage(1);
         if (!selectedReportId) { setIsLoadingParams(false); return; }
         const fetchParams = async () => {
@@ -131,20 +145,26 @@ export default function StandardReportPage() {
                 setParameters(data.parameters);
                 setParamValues(Object.fromEntries(data.parameters.map((parameter: { ParameterName: string }) => [parameter.ParameterName, ''])));
             } catch (error) {
-                if (!controller.signal.aborted) setExecutionError(error instanceof Error ? error.message : 'ไม่สามารถโหลดเงื่อนไขรายงานได้');
+                if (!controller.signal.aborted) setParamsError(error instanceof Error ? error.message : 'ไม่สามารถโหลดเงื่อนไขรายงานได้');
             } finally { if (!controller.signal.aborted) setIsLoadingParams(false); }
         };
         void fetchParams();
         return () => controller.abort();
-    }, [selectedReportId]);
+    }, [selectedReportId, paramsAttempt]);
+
+    const hasCompanyChoices = companiesLoaded ? companyChoices.length > 0 : allowedCompanies.length > 0;
+    const runBlocker = getRunBlocker({ reportId: selectedReportId, company: selectedCompany, isLoadingParams, paramsError, hasCompanyChoices });
+    const jobRunning = activeJob?.status === 'running';
 
     const handleParamChange = (paramName: string, value: string) => {
         setParamValues(prev => ({ ...prev, [paramName]: value }));
     };
 
-    const handleExecuteReport = async (requestedPage?: number) => {
-        if (!selectedReportId) {
-            toast('กรุณาเลือกรายงานก่อนดึงข้อมูล', 'info');
+    // requestedPage is set when paging through results already fetched; the size is passed explicitly
+    // because a page-size change calls this before React has applied the new state.
+    const handleExecuteReport = async (requestedPage?: number, requestedPageSize = pageSize) => {
+        if (runBlocker) {
+            toast(runBlocker, 'info');
             return;
         }
 
@@ -160,20 +180,14 @@ export default function StandardReportPage() {
             if (!confirmed) return;
         }
 
-        // Validate required params visually (optional, but good UX)
-        let hasEmptyFields = false;
-        Object.keys(paramValues).forEach(key => {
-            if (!paramValues[key] && paramValues[key] !== '0') {
-                hasEmptyFields = true;
-            }
-        });
-
-        if (hasEmptyFields && parameters.length > 0) {
+        if (shouldConfirmEmptyConditions(paramValues, parameters.length, requestedPage !== undefined)) {
             const confirmRun = window.confirm("ยังไม่ได้กรอกเงื่อนไขบางช่อง ต้องการดำเนินการต่อหรือไม่?");
             if (!confirmRun) return;
         }
 
         const pg = requestedPage || 1;
+        if (requestedPage === undefined) lastRunParamsRef.current = { ...paramValues };
+        const runParams = lastRunParamsRef.current;
         setIsExecuting(true);
         setExecutionError(null);
         if (pg === 1) setReportData(null);
@@ -185,9 +199,9 @@ export default function StandardReportPage() {
                 body: JSON.stringify({
                     reportId: selectedReportId,
                     companyId: selectedCompany,
-                    parameters: paramValues,
+                    parameters: runParams,
                     page: pg,
-                    pageSize,
+                    pageSize: requestedPageSize,
                 })
             });
 
@@ -217,21 +231,19 @@ export default function StandardReportPage() {
 
     const columns = getColumns();
 
-    // Direct Background Export — skip data preview, go straight to Background Job
-    const handleBackgroundExport = async () => {
-        if (!selectedReportId) {
-            toast('กรุณาเลือกรายงานก่อน', 'info');
+    // One entry point for every background export, so a second click or the results-bar button
+    // cannot start a duplicate job while one is running.
+    const startBackgroundJob = async () => {
+        if (runBlocker) {
+            toast(runBlocker, 'info');
             return;
         }
-        if (!selectedCompany) {
-            toast('กรุณาเลือกบริษัทก่อน', 'info');
+        if (jobStartingRef.current || jobRunning) {
+            toast('มีไฟล์กำลังสร้างอยู่ กรุณารอให้เสร็จก่อน', 'info');
             return;
         }
-        if (activeJob?.status === 'running') {
-            toast('มี Job กำลังทำงานอยู่ กรุณารอสักครู่', 'info');
-            return;
-        }
-
+        jobStartingRef.current = true;
+        const reportName = reports.find(r => String(r.ReportId) === selectedReportId)?.ReportName;
         try {
             const res = await fetch('/api/reports/execute-async', {
                 method: 'POST',
@@ -243,35 +255,50 @@ export default function StandardReportPage() {
                 }),
             });
             const data = await res.json();
-            if (data.success) {
-                setActiveJob({ jobId: data.jobId, status: 'running', reportName: reports.find(r => String(r.ReportId) === selectedReportId)?.ReportName });
-                toast('🚀 กำลังสร้างรายงานในพื้นหลัง...', 'info');
-                const poll = setInterval(async () => {
-                    try {
-                        const jr = await fetch(`/api/reports/jobs/${data.jobId}`);
-                        const jd = await jr.json();
-                        if (jd.success) {
-                            setActiveJob({ ...jd.job, reportName: reports.find(r => String(r.ReportId) === selectedReportId)?.ReportName });
-                            if (jd.job.status === 'done') {
-                                clearInterval(poll);
-                                toast(`✅ รายงานพร้อมดาวน์โหลด (${jd.job.rowCount?.toLocaleString()} แถว)`, 'success');
-                            } else if (jd.job.status === 'failed') {
-                                clearInterval(poll);
-                                toast(`สร้างรายงานไม่สำเร็จ: ${jd.job.error}`, 'error');
-                            }
-                        }
-                    } catch { clearInterval(poll); }
-                }, 3000);
-            } else {
+            if (!data.success) {
                 toast(data.message || 'ไม่สามารถสร้าง Job ได้', 'error');
+                return;
             }
+            // The job keeps running on the server; if the user already left this page, history shows the result
+            if (!mountedRef.current) return;
+            setActiveJob({ jobId: data.jobId, status: 'running', reportName });
+            toast('กำลังสร้างรายงานในพื้นหลัง...', 'info');
+            stopPollRef.current?.();
+            stopPollRef.current = startJobPolling<{ status: string; rowCount?: number; error?: string }>({
+                check: async () => {
+                    const jr = await fetch(`/api/reports/jobs/${data.jobId}`);
+                    const jd = await jr.json();
+                    return jr.ok && jd.success ? jd.job : null;
+                },
+                onJob: job => setActiveJob({ ...job, jobId: data.jobId, reportName }),
+                onStop: (outcome, job) => {
+                    stopPollRef.current = null;
+                    if (outcome === 'done') toast(`รายงานพร้อมดาวน์โหลด (${(job?.rowCount ?? 0).toLocaleString()} แถว)`, 'success');
+                    else if (outcome === 'failed') toast(`สร้างรายงานไม่สำเร็จ: ${job?.error}`, 'error');
+                    else if (outcome === 'cancelled') toast('งานสร้างไฟล์ถูกยกเลิกแล้ว', 'info');
+                    else {
+                        setActiveJob(current => current && { ...current, status: 'unknown' });
+                        toast('ตรวจสถานะงานไม่สำเร็จ ดูผลได้ที่ประวัติ', 'error');
+                    }
+                },
+            });
         } catch {
             toast('เกิดข้อผิดพลาดในการเชื่อมต่อ', 'error');
+        } finally {
+            jobStartingRef.current = false;
         }
     };
 
     const handleExportExcel = async () => {
         if (!selectedReportId || isExporting) return;
+        const report = reports.find(r => r.ReportId.toString() === selectedReportId);
+
+        // IsHeavy → background job (same guarded path as the conditions-area button)
+        if (report?.IsHeavy) {
+            await startBackgroundJob();
+            return;
+        }
+
         setIsExporting(true);
         setExportElapsed(0);
         setExportStatus('กำลังดึงข้อมูลจากฐานข้อมูล...');
@@ -289,52 +316,8 @@ export default function StandardReportPage() {
             }
         };
 
-        const report = reports.find(r => r.ReportId.toString() === selectedReportId);
         const reportName = report ? report.ReportName : 'Report';
         const dateStr = new Date().toISOString().split('T')[0];
-
-        // IsHeavy → background job
-        if (report?.IsHeavy) {
-            try {
-                const res = await fetch('/api/reports/execute-async', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        reportId: selectedReportId,
-                        companyId: selectedCompany,
-                        parameters: paramValues,
-                    }),
-                });
-                const data = await res.json();
-                if (data.success) {
-                    setActiveJob({ jobId: data.jobId, status: 'running', reportName: reports.find(r => String(r.ReportId) === selectedReportId)?.ReportName });
-                    toast('กำลังสร้างรายงานในพื้นหลัง...', 'info');
-                    const poll = setInterval(async () => {
-                        try {
-                            const jr = await fetch(`/api/reports/jobs/${data.jobId}`);
-                            const jd = await jr.json();
-                            if (jd.success) {
-                                setActiveJob({ ...jd.job, reportName: reports.find(r => String(r.ReportId) === selectedReportId)?.ReportName });
-                                if (jd.job.status === 'done') {
-                                    clearInterval(poll);
-                                    toast(`รายงานพร้อมดาวน์โหลด (${jd.job.rowCount} แถว)`, 'success');
-                                } else if (jd.job.status === 'failed') {
-                                    clearInterval(poll);
-                                    toast(`สร้างรายงานไม่สำเร็จ: ${jd.job.error}`, 'error');
-                                }
-                            }
-                        } catch { clearInterval(poll); }
-                    }, 3000);
-                } else {
-                    toast(data.message || 'ไม่สามารถสร้าง Job ได้', 'error');
-                }
-            } catch {
-                toast('เกิดข้อผิดพลาด', 'error');
-            }
-            stopTimer();
-            setIsExporting(false);
-            return;
-        }
 
         // Normal export
         try {
@@ -349,7 +332,12 @@ export default function StandardReportPage() {
                 })
             });
             const data = await res.json();
-            if (!data.success || !data.data.length) {
+            const problem = exportProblem(data);
+            if (problem?.kind === 'error') {
+                toast(problem.message, 'error');
+                return;
+            }
+            if (problem?.kind === 'empty') {
                 toast('ไม่มีข้อมูลให้ส่งออก', 'info');
                 return;
             }
@@ -427,10 +415,21 @@ export default function StandardReportPage() {
                                 <div className="grid grid-cols-[repeat(auto-fill,minmax(min(100%,210px),1fr))] gap-x-4 gap-y-1.5">
                                     <div className={conditionFieldClass}>
                                         <label htmlFor="report-company" className={conditionLabelClass}>บริษัท <span className="text-red-600">*</span></label>
-                                        <CompanySelector id="report-company" companies={companies.filter(company => allowedCompanies.includes(company.companyId))}
+                                        <CompanySelector id="report-company" companies={companyChoices}
                                             value={selectedCompany} onChange={setSelectedCompany} disabled={isExecuting || isExporting} />
-                                        <p className="text-xs text-slate-500 dark:text-slate-400">แสดงเฉพาะบริษัทที่คุณได้รับสิทธิ์</p>
+                                        {!hasCompanyChoices
+                                            ? <p className="text-xs text-amber-700 dark:text-amber-300">ไม่มีบริษัทที่คุณได้รับสิทธิ์ ติดต่อผู้ดูแลระบบ</p>
+                                            : !companiesLoaded && !isLoadingReports
+                                                ? <p className="text-xs text-amber-700 dark:text-amber-300">โหลดรายชื่อบริษัทไม่สำเร็จ จะดึงข้อมูลจากบริษัท #{selectedCompany} รีเฟรชหน้าเพื่อเลือกบริษัทอื่น</p>
+                                                : <p className="text-xs text-slate-500 dark:text-slate-400">แสดงเฉพาะบริษัทที่คุณได้รับสิทธิ์</p>}
                                     </div>
+                                    {paramsError && (
+                                        <div role="alert" className="col-span-full flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-800 dark:bg-red-950 dark:text-red-200">
+                                            <AlertCircle className="h-4 w-4 shrink-0" aria-hidden="true" />
+                                            <span className="min-w-0 flex-1">โหลดเงื่อนไขรายงานไม่สำเร็จ: {paramsError}</span>
+                                            <button type="button" onClick={() => setParamsAttempt(attempt => attempt + 1)} className="font-medium underline focus-visible:outline-2 focus-visible:outline-blue-600">ลองใหม่</button>
+                                        </div>
+                                    )}
                                     {parameters.map(param => (
                                         <div key={param.ParameterId} className={conditionFieldClass}>
                                             <label htmlFor={"report-param-" + param.ParameterId} className={conditionLabelClass}>{param.DisplayLabel || param.ParameterName}</label>
@@ -448,23 +447,24 @@ export default function StandardReportPage() {
                                             )}
                                         </div>
                                     ))}
-                                    {!parameters.length && !executionError && <div className={conditionFieldClass}><span className={conditionLabelClass}>เงื่อนไขเพิ่มเติม</span><p className="self-center text-xs text-slate-500 dark:text-slate-400">รายงานนี้ไม่มีเงื่อนไขอื่น</p></div>}
+                                    {!parameters.length && !paramsError && <div className={conditionFieldClass}><span className={conditionLabelClass}>เงื่อนไขเพิ่มเติม</span><p className="self-center text-xs text-slate-500 dark:text-slate-400">รายงานนี้ไม่มีเงื่อนไขอื่น</p></div>}
                                 </div>
                                 <div className="flex flex-wrap items-center gap-2 pt-0.5">
-                                    <button type="button" onClick={() => handleExecuteReport()} disabled={isExecuting}
+                                    <button type="button" onClick={() => handleExecuteReport()} disabled={isExecuting || !!runBlocker}
                                         className="inline-flex h-9 items-center justify-center gap-2 rounded-lg border border-blue-600 bg-blue-600 px-3.5 text-[13.5px] font-medium text-white hover:bg-blue-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 disabled:cursor-not-allowed disabled:opacity-60">
                                         {isExecuting ? <Loader2 className="h-4 w-4 motion-safe:animate-spin" aria-hidden="true" /> : <Search className="h-4 w-4" aria-hidden="true" />}
                                         {isExecuting ? 'กำลังดึงข้อมูล…' : 'ดึงข้อมูล'}
                                     </button>
                                     {selectedReport?.IsHeavy && (
                                         <>
-                                            <button type="button" onClick={handleBackgroundExport} disabled={activeJob?.status === 'running'} className={secondaryButton}>
-                                                {activeJob?.status === 'running' ? <Loader2 className="h-4 w-4 motion-safe:animate-spin" aria-hidden="true" /> : <FileSpreadsheet className="h-4 w-4" aria-hidden="true" />}
-                                                {activeJob?.status === 'running' ? 'กำลังสร้างไฟล์…' : 'สร้างไฟล์เบื้องหลัง (CSV)'}
+                                            <button type="button" onClick={() => void startBackgroundJob()} disabled={jobRunning || !!runBlocker} className={secondaryButton}>
+                                                {jobRunning ? <Loader2 className="h-4 w-4 motion-safe:animate-spin" aria-hidden="true" /> : <FileSpreadsheet className="h-4 w-4" aria-hidden="true" />}
+                                                {jobRunning ? 'กำลังสร้างไฟล์…' : 'สร้างไฟล์เบื้องหลัง (CSV)'}
                                             </button>
                                             <span className="text-xs text-slate-500 dark:text-slate-400">รายงานนี้ข้อมูลมาก สร้างไฟล์แล้วดาวน์โหลดจากประวัติได้</span>
                                         </>
                                     )}
+                                    {runBlocker && !paramsError && <span className="text-xs text-amber-700 dark:text-amber-300">{runBlocker}</span>}
                                 </div>
                             </>
                         )}
@@ -476,13 +476,16 @@ export default function StandardReportPage() {
                 <div role="status" className={"flex flex-wrap items-center gap-3 rounded-xl border px-4 py-3 text-sm " + (activeJob.status === 'running'
                     ? "border-blue-200 bg-blue-50 text-blue-900 dark:border-blue-800 dark:bg-blue-950 dark:text-blue-200"
                     : activeJob.status === 'done' ? "border-emerald-200 bg-emerald-50 text-emerald-900 dark:border-emerald-800 dark:bg-emerald-950 dark:text-emerald-200"
-                        : "border-red-200 bg-red-50 text-red-800 dark:border-red-800 dark:bg-red-950 dark:text-red-200")}>
+                        : activeJob.status === 'failed' ? "border-red-200 bg-red-50 text-red-800 dark:border-red-800 dark:bg-red-950 dark:text-red-200"
+                            : "border-slate-200 bg-slate-50 text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200")}>
                     {activeJob.status === 'running' ? <Loader2 className="h-4 w-4 shrink-0 motion-safe:animate-spin" aria-hidden="true" />
                         : activeJob.status === 'done' ? <Check className="h-4 w-4 shrink-0" aria-hidden="true" /> : <AlertCircle className="h-4 w-4 shrink-0" aria-hidden="true" />}
                     <div className="min-w-0 flex-1">
                         {activeJob.status === 'running' && <>กำลังสร้างไฟล์ <strong>{activeJob.reportName || 'รายงาน'}</strong> เบื้องหลัง ใช้หน้าอื่นต่อได้ระหว่างรอ</>}
                         {activeJob.status === 'done' && <>ไฟล์ <strong>{activeJob.reportName || activeJob.fileName || 'รายงาน'}</strong> พร้อมแล้ว{activeJob.rowCount != null ? " · " + activeJob.rowCount.toLocaleString() + " แถว" : ''}</>}
                         {activeJob.status === 'failed' && <>สร้างไฟล์ <strong>{activeJob.reportName || 'รายงาน'}</strong> ไม่สำเร็จ: {activeJob.error}</>}
+                        {activeJob.status === 'cancelled' && <>งานสร้างไฟล์ <strong>{activeJob.reportName || 'รายงาน'}</strong> ถูกยกเลิกแล้ว</>}
+                        {activeJob.status === 'unknown' && <>ตรวจสถานะงานสร้างไฟล์ <strong>{activeJob.reportName || 'รายงาน'}</strong> ไม่สำเร็จ ดูผลล่าสุดได้ที่ประวัติ</>}
                     </div>
                     {activeJob.status === 'done' && <button type="button" onClick={handleJobDownload} className={secondaryButton}><Download className="h-4 w-4" aria-hidden="true" />ดาวน์โหลด</button>}
                     <Link href="/reports/job-history" className={secondaryButton}>ดูประวัติ</Link>
@@ -504,7 +507,7 @@ export default function StandardReportPage() {
                             ? <>พบ <strong className="font-semibold tabular-nums">{totalRows.toLocaleString()}</strong> รายการ · หน้า {currentPage} จาก {pageCount}</>
                             : selectedReportId ? 'ยังไม่ได้ดึงข้อมูล' : 'ยังไม่ได้เลือกรายงาน'}
                     </p>
-                    <button type="button" onClick={handleExportExcel} disabled={!reportData || reportData.length === 0 || isExporting || isExecuting}
+                    <button type="button" onClick={handleExportExcel} disabled={!reportData || reportData.length === 0 || isExporting || isExecuting || (!!selectedReport?.IsHeavy && jobRunning)}
                         className={secondaryButton + " !h-[30px] !rounded-[7px] !px-2.5 !text-[12.5px]"}>
                         {isExporting ? <RefreshCw className="h-3.5 w-3.5 motion-safe:animate-spin" aria-hidden="true" /> : <Download className="h-3.5 w-3.5" aria-hidden="true" />}
                         {isExporting ? 'กำลังส่งออก…' : selectedReport?.IsHeavy ? 'ส่งออก CSV' : 'ส่งออก Excel (.xlsb)'}
@@ -560,7 +563,7 @@ export default function StandardReportPage() {
                     <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 px-4 py-2.5 text-[12.5px] text-slate-500 dark:border-slate-700 dark:text-slate-400">
                         <span className="tabular-nums">แสดง {((currentPage - 1) * pageSize + 1).toLocaleString()}–{Math.min(currentPage * pageSize, totalRows).toLocaleString()} จาก {totalRows.toLocaleString()} รายการ</span>
                         {totalRows > pageSize && <div className="flex flex-wrap items-center gap-2">
-                            <label className="flex items-center gap-2">รายการ/หน้า<select value={pageSize} onChange={event => { setPageSize(Number(event.target.value)); handleExecuteReport(1); }} className="h-[30px] rounded-lg border border-slate-300 bg-white px-2 text-xs text-slate-700 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200"><option value={25}>25</option><option value={50}>50</option><option value={100}>100</option></select></label>
+                            <label className="flex items-center gap-2">รายการ/หน้า<select value={pageSize} onChange={event => { const size = Number(event.target.value); setPageSize(size); void handleExecuteReport(1, size); }} className="h-[30px] rounded-lg border border-slate-300 bg-white px-2 text-xs text-slate-700 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200"><option value={25}>25</option><option value={50}>50</option><option value={100}>100</option></select></label>
                             <button type="button" aria-label="หน้าก่อน" onClick={() => handleExecuteReport(currentPage - 1)} disabled={currentPage <= 1 || isExecuting} className={secondaryButton + " !h-[30px] !px-2"}><ChevronLeft className="h-4 w-4" aria-hidden="true" /></button>
                             <span className="tabular-nums">หน้า {currentPage} / {pageCount}</span>
                             <button type="button" aria-label="หน้าถัดไป" onClick={() => handleExecuteReport(currentPage + 1)} disabled={currentPage >= pageCount || isExecuting} className={secondaryButton + " !h-[30px] !px-2"}><ChevronRight className="h-4 w-4" aria-hidden="true" /></button>

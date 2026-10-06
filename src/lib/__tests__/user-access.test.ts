@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { getUserAccessSummary, hasUserDraftChanges, isAdAccount, isCurrentUser } from '../user-access';
+import { applyAdProfile, changeAdUsername, getUserAccessSummary, hasUserDraftChanges, isAdAccount, isCurrentUser } from '../user-access';
 
 const roles = [
     { RoleId: 1, RoleName: 'Admin', assignedReports: [] },
@@ -76,5 +76,39 @@ describe('user draft and action guards', () => {
         expect(isAdAccount('LDAP')).toBe(true);
         expect(isAdAccount('local')).toBe(false);
         expect(isAdAccount(undefined)).toBe(false);
+    });
+});
+
+describe('AD profile belongs to one username', () => {
+    const picked = {
+        Username: 'somchai.k', FullName: 'Somchai K', Email: 'somchai@example.test', EmployeeId: 'E100',
+        ADCompany: 'Affiliation', Department: 'Finance', Branch: 'HQ', RoleId: '2', allowedCompanies: [1],
+    };
+
+    it('drops the AD details when the username is typed again', () => {
+        expect(changeAdUsername(picked, 'somchai.kx')).toEqual({
+            ...picked, Username: 'somchai.kx', FullName: '', Email: '', EmployeeId: '', ADCompany: '', Department: '', Branch: '',
+        });
+    });
+
+    it('keeps the AD details when the username did not change', () => {
+        expect(changeAdUsername(picked, 'somchai.k')).toBe(picked);
+    });
+
+    it('keeps the AD details when only surrounding spaces change', () => {
+        expect(changeAdUsername(picked, 'somchai.k ')).toEqual({ ...picked, Username: 'somchai.k ' });
+    });
+
+    it('uses the username as the name when AD has no display name', () => {
+        const draft = { ...picked, FullName: '' };
+        expect(applyAdProfile(draft, 'somchai.k', { fullName: '', email: 'x@example.test' }).FullName).toBe('somchai.k');
+    });
+
+    it('applies a lookup result only to the username it was looked up for', () => {
+        const draft = { ...picked, Username: 'malee.s', FullName: '', Email: '' };
+        const profile = { fullName: 'Somchai K', email: 'somchai@example.test' };
+        expect(applyAdProfile(draft, 'somchai.k', profile)).toBe(draft);
+        expect(applyAdProfile({ ...draft, Username: ' somchai.k ' }, 'somchai.k', profile))
+            .toMatchObject({ FullName: 'Somchai K', Email: 'somchai@example.test', EmployeeId: '', Department: '' });
     });
 });

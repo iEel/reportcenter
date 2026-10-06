@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useContext, useState, useCallback, ReactNode } from "react";
+import { createContext, useContext, useState, useCallback, useEffect, useRef, ReactNode } from "react";
 import { CheckCircle2, AlertCircle, Info, X } from "lucide-react";
 
 type ToastType = "success" | "error" | "info";
@@ -25,6 +25,16 @@ let toastId = 0;
 
 export default function ToastProvider({ children }: { children: ReactNode }) {
     const [toasts, setToasts] = useState<Toast[]>([]);
+    const regionRef = useRef<HTMLDivElement>(null);
+
+    // Native modal dialogs sit in the browser's top layer, above any z-index. Showing the toast region as a
+    // popover puts it in the top layer too; re-showing it on every change keeps it above dialogs opened since.
+    useEffect(() => {
+        const region = regionRef.current;
+        if (!region || typeof region.showPopover !== 'function') return;
+        if (region.matches(':popover-open')) region.hidePopover();
+        if (toasts.length) region.showPopover();
+    }, [toasts]);
 
     const addToast = useCallback((message: string, type: ToastType = "success") => {
         const id = ++toastId;
@@ -54,7 +64,7 @@ export default function ToastProvider({ children }: { children: ReactNode }) {
         <ToastContext.Provider value={{ toast: addToast }}>
             {children}
             {/* Toast Container */}
-            <div className="fixed top-4 right-4 z-[100] space-y-2 pointer-events-none">
+            <div ref={regionRef} popover="manual" className="fixed inset-auto top-4 right-4 z-[100] m-0 space-y-2 overflow-visible border-0 bg-transparent p-0 pointer-events-none">
                 {toasts.map(t => (
                     <div
                         key={t.id}
