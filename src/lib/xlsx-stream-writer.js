@@ -73,6 +73,27 @@ function cellXml(ref, value) {
     return `<c r="${ref}" t="inlineStr"><is><t xml:space="preserve">${cellText(value)}</t></is></c>`;
 }
 
+const MIN_COL_WIDTH = 10;
+const MAX_COL_WIDTH = 60;
+
+/** Characters a value needs on screen; Excel shows #### when a date does not fit its column. */
+function displayLength(value) {
+    if (value === null || value === undefined || value === '') return 0;
+    if (typeof value === 'number') return Number.isFinite(value) ? String(value).length : 0;
+    if (typeof value === 'boolean') return 5;
+    if (value instanceof Date) return value.getTime() % DAY_MS === 0 ? 10 : 19;
+    return Math.min(String(value).length, MAX_COL_WIDTH);
+}
+
+function colsXml(widths) {
+    if (widths.length === 0) return '';
+    const cols = widths.map((length, i) => {
+        const width = Math.min(MAX_COL_WIDTH, Math.max(MIN_COL_WIDTH, length + 2));
+        return `<col min="${i + 1}" max="${i + 1}" width="${width}" customWidth="1"/>`;
+    }).join('');
+    return `<cols>${cols}</cols>`;
+}
+
 function rowXml(rowNumber, refs, values) {
     let cells = '';
     for (let i = 0; i < refs.length; i++) cells += cellXml(`${refs[i]}${rowNumber}`, values[i]);
@@ -177,16 +198,23 @@ class XlsxStreamWriter extends Transform {
 
     appendRow(row) {
         this.sheetRows++;
-        this.xml += rowXml(this.sheetRows + 1, this.refs, this.columns.map(name => row?.[name]));
+        const values = this.columns.map(name => row?.[name]);
+        if (!this.colsWritten) {
+            values.forEach((value, i) => { this.widths[i] = Math.max(this.widths[i], displayLength(value)); });
+        }
+        this.xml += rowXml(this.sheetRows + 1, this.refs, values);
         return this.xml.length >= CHUNK_CHARS ? this.flushXml() : null;
     }
 
+    /** Column widths come from the header and the rows buffered before the sheet's first chunk is written. */
     beginSheet() {
         this.sheetCount++;
         this.sheetRows = 0;
         this.sheetOpen = true;
+        this.colsWritten = false;
+        this.widths = this.columns.map(displayLength);
         this.beginEntry(`xl/worksheets/sheet${this.sheetCount}.xml`);
-        this.xml = `${XML_HEADER}<worksheet xmlns="${MAIN_NS}"><sheetData>${rowXml(1, this.refs, this.columns)}`;
+        this.xml = rowXml(1, this.refs, this.columns);
     }
 
     async endSheet() {
@@ -197,8 +225,12 @@ class XlsxStreamWriter extends Transform {
     }
 
     flushXml() {
-        const text = this.xml;
+        let text = this.xml;
         this.xml = '';
+        if (!this.colsWritten) {
+            text = `${XML_HEADER}<worksheet xmlns="${MAIN_NS}">${colsXml(this.widths)}<sheetData>${text}`;
+            this.colsWritten = true;
+        }
         return this.writeEntryData(text);
     }
 

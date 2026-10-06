@@ -138,6 +138,26 @@ describe('createXlsxStreamWriter', () => {
         }
     });
 
+    it('sizes columns so dates are not shown as #### in Excel', async () => {
+        const columns = ['Id', 'Day', 'Stamp', 'Customer'];
+        const buffer = await writeXlsx(columns, [
+            { Id: 1, Day: new Date(Date.UTC(2026, 0, 6)), Stamp: new Date(Date.UTC(2026, 0, 6, 8, 30)), Customer: 'บริษัท โซนิค อินเตอร์เฟรท จำกัด' },
+        ]);
+        const sheetXml = zipEntries(buffer)[0].data.toString('utf8');
+        expect(sheetXml).toMatch(/<worksheet [^>]*><cols>.*<\/cols><sheetData>/);
+        const widths = Object.fromEntries([...sheetXml.matchAll(/<col min="(\d+)" max="\d+" width="(\d+)" customWidth="1"\/>/g)]
+            .map(([, column, width]) => [Number(column), Number(width)]));
+        expect(widths[1]).toBe(10);                  // narrow columns keep a readable minimum
+        expect(widths[2]).toBeGreaterThanOrEqual(12); // yyyy-mm-dd
+        expect(widths[3]).toBeGreaterThanOrEqual(21); // yyyy-mm-dd hh:mm:ss
+        expect(widths[4]).toBeGreaterThan(widths[1]);
+    });
+
+    it('writes no column widths when there are no columns', async () => {
+        const sheetXml = zipEntries(await writeXlsx([], []))[0].data.toString('utf8');
+        expect(sheetXml).not.toContain('<cols>');
+    });
+
     it('signals back-pressure and drains once the output is read', async () => {
         const writer = createXlsxStreamWriter(['Hex']);
         let accepted = 0;
