@@ -110,7 +110,9 @@ reportcenter/
 │   │           ├── search-param/route.js # GET: typeahead search for parameters with LookupQuery
 │   │           ├── execute-async/route.js # POST: background job — mssql streaming + CSV (constant memory, no OOM on 1M+ rows)
 │   │           ├── jobs/[id]/route.js    # GET: poll job status | PATCH: cancel running job
-│   │           ├── jobs/[id]/download/route.js # GET: download job file (auto-detect CSV/Excel)
+│   │           ├── jobs/[id]/download/route.js # GET: stream job file from disk | HEAD: check before download
+│   │           ├── export/route.js       # POST: ordinary-report .xlsx export — mssql streaming → tmp/exports (bounded memory), returns downloadId
+│   │           ├── export/[id]/route.js  # GET: send the export once, then delete it
 │   │           ├── job-history/route.js  # GET: list completed jobs (ElapsedSeconds via DATEDIFF + CompletedAt)
 │   │           └── favorites/route.js    # GET/POST: toggle favorite reports
 │   ├── components/
@@ -132,7 +134,14 @@ reportcenter/
 │   │   ├── auth.js                       # JWT sign/verify (jose) + getSession()
 │   │   ├── db.js                         # MSSQL connection pool manager
 │   │   ├── email.js                      # Email sender (Microsoft Graph API primary + SMTP password fallback)
-│   │   ├── excel-export.js               # Shared .xlsx write options (ZIP compression + shared strings), file name, MIME
+│   │   ├── excel-export.js               # Shared .xlsx write options (ZIP compression + shared strings), file name, MIME, safeFileBase
+│   │   ├── xlsx-stream-writer.js         # Streaming .xlsx writer (Transform: rows in, bytes out; bounded memory, column widths, sheet split)
+│   │   ├── report-export-stream.js       # Stream an mssql query into an .xlsx file with back-pressure (first recordset only)
+│   │   ├── report-run.js                 # Shared report checks (lookup, SQL validation, company, role) + parameter binding
+│   │   ├── report-columns.js             # Column names in SQL SELECT order from mssql metadata
+│   │   ├── export-files.js               # tmp/exports store for ordinary exports (single download, 15-min sweep)
+│   │   ├── content-disposition.js        # Content-Disposition with RFC 5987 filename* for Thai file names
+│   │   ├── file-download.ts              # Browser downloads via the download manager (HEAD check for job files)
 │   │   ├── ldap.js                       # LDAP/AD integration (bind, lookup, search with person-only filter)
 │   │   ├── sql-validator.js              # SQL query security validator (blocklist DML/DDL/metadata/procs)
 │   │   ├── report-selector.ts             # Pure report filtering/grouping/keyboard navigation helpers
@@ -308,6 +317,8 @@ CreatedAt DATETIME DEFAULT GETDATE()
 | GET    | `/api/reports/available`    | List reports user can access      |
 | GET    | `/api/reports/parameters`   | Get parameters for a report (incl. `LookupQuery`)       |
 | POST   | `/api/reports/execute`      | Execute T-SQL on company DB (ROW_NUMBER pagination → client-side fallback) |
+| POST   | `/api/reports/export`       | Ordinary-report .xlsx export streamed to a temporary file; answers `downloadId` |
+| GET    | `/api/reports/export/[id]`  | Download the export once (then deleted) |
 | GET    | `/api/reports/search-param` | Typeahead search for parameter values (`?reportId=&paramName=&q=&companyId=`) |
 | GET    | `/api/reports/favorites`    | Get user's favorite reports       |
 | POST   | `/api/reports/favorites`    | Toggle favorite (add/remove)      |
@@ -604,7 +615,7 @@ curl http://localhost:4000/api/cron/execute-schedules?secret=rc-cron-secret-2026
 
 ### Background Job System (Heavy Reports)
 - Admin ติ๊ก **"รายงานขนาดใหญ่ (Background Job)"** ที่หน้าเพิ่ม/แก้ไขรายงาน → เซ็ต `IsHeavy = 1`
-- Report ปกติ → export client-side เหมือนเดิม
+- Report ปกติ → `POST /api/reports/export` สร้าง .xlsx แบบ stream ที่ server แล้วดาวน์โหลดผ่าน `GET /api/reports/export/[id]` ครั้งเดียว ลบไฟล์ทันที (ไม่เก็บ 24 ชม., ไม่เข้าประวัติ/กระดิ่ง; ไฟล์ค้างกวาดทิ้งเมื่อเกิน 15 นาที) — การเก็บไฟล์ให้ดาวน์โหลดภายหลังมีไว้เฉพาะรายงาน IsHeavy
 - Report IsHeavy → `POST /api/reports/execute-async` → สร้าง Job record → รัน query ใน background (timeout 15 นาที) → สร้าง CSV → disk
 - **Direct Background Export button** 📤: รายงาน IsHeavy แสดงปุ่ม **"Export (Background)"** สีเขียวข้างปุ่ม "ดึงข้อมูล" → กดแล้วส่งตรงไป Background Job **โดยไม่ต้องดึงข้อมูลมาแสดงก่อน** (ประหยัดเวลาและ RAM)
 - **Streaming mode** (`req.stream = true`): ใช้ `mssql` streaming API ประมวลผลทีละแถว → memory คงที่ ~50MB ไม่ว่าจะมีกี่แถว (รองรับ 1M+ rows ไม่ OOM)
@@ -612,7 +623,7 @@ curl http://localhost:4000/api/cron/execute-schedules?secret=rc-cron-secret-2026
 - **Live progress**: อัพเดท `RowCount` ใน DB ทุก 10,000 แถว → frontend แสดง "กำลังประมวลผล 120,000 แถว..." แบบ live (รีเฟรชทุก 10 วินาที)
 - **Concurrent job limit**: จำกัดจำนวน job ที่รันพร้อมกันต่อ user (default 2, ตั้งค่าได้ที่ Admin Settings > ความปลอดภัย)
 - Frontend poll `GET /api/reports/jobs/{id}` ทุก 3 วินาที → แสดง banner: running/done/failed
-- `GET /api/reports/jobs/{id}/download` → stream ไฟล์ให้ user, กดซ้ำได้
+- `GET /api/reports/jobs/{id}/download` → stream ไฟล์จากดิสก์ (Content-Disposition แบบ `filename*` ชื่อไทยไม่เพี้ยน), กดซ้ำได้ · `HEAD` ใช้ตรวจก่อนดาวน์โหลด; หน้าเว็บส่ง URL ให้ตัวจัดการดาวน์โหลดของเบราว์เซอร์ ไม่โหลดไฟล์เป็น blob
 - **Auto-cleanup:** ไฟล์ลบหลัง 24 ชม., DB records ลบหลัง 7 วัน, Notifications อ่านแล้วลบ 30 วัน / ยังไม่อ่านลบ 90 วัน (ทำตอน cron รัน)
 - **Bell notification 🔔**: เมื่อ job เสร็จ/ล้มเหลว → สร้าง Notification ให้ user (✅ สำเร็จ / ❌ ล้มเหลว) + กดแล้ว navigate ไปหน้า job-history
 - Schema: `Reports.IsHeavy BIT` (auto-add), `ReportJobs` table (auto-create)
@@ -744,7 +755,8 @@ curl http://localhost:4000/api/cron/execute-schedules?secret=rc-cron-secret-2026
 - แก้ปัญหา JavaScript `Object.keys()` เรียง numeric key ก่อน string key (เช่น "1", "2" ขึ้นก่อน "FY")
 - ส่ง `columns` array กลับใน API response → frontend + Excel export ใช้ลำดับเดียวกัน
 - Excel export ใช้ `xlsx.utils.json_to_sheet()` พร้อม `{ header }` option บังคับลำดับคอลัมน์
-- ทุกจุดที่เขียนไฟล์ Excel ใช้ `excelWriteOptions()` / `excelFileName()` จาก `src/lib/excel-export.js` (`.xlsx` + `compression` + `bookSST`) อย่าเขียน `bookType` เองในแต่ละหน้า
+- ทุกจุดที่เขียนไฟล์ Excel ด้วย SheetJS (Template, Audit log, อีเมลตั้งเวลา) ใช้ `excelWriteOptions()` / `excelFileName()` จาก `src/lib/excel-export.js` (`.xlsx` + `compression` + `bookSST`) อย่าเขียน `bookType` เองในแต่ละหน้า
+- หน้า Standard ไม่สร้าง Excel ในเบราว์เซอร์แล้ว: ใช้ `POST /api/reports/export` (ตัวเขียน `xlsx-stream-writer.js`) วันที่ใน Excel เป็นวันที่จริง (`yyyy-mm-dd` / `yyyy-mm-dd hh:mm:ss` จากค่า UTC ของ mssql) และเกิน 1,048,575 แถวต่อชีตจะขึ้นชีต "Report Data (2)" ต่อ
 
 ### Report Parameter Reordering
 - หน้าเพิ่ม/แก้ไขรายงาน: แต่ละ parameter card มีปุ่ม **▲▼** สำหรับเลื่อนลำดับ
@@ -830,6 +842,7 @@ npm run test:watch
 - [x] TemplateEditor component (click-to-insert, preview mode)
 - [x] Parameter Typeahead search (LookupQuery + TypeaheadInput + auto-execute on select)
 - [x] Excel export เป็น `.xlsx` แบบบีบอัด + shared strings (เปลี่ยนจาก `.xlsb` 2026-10-06: SheetJS 0.18.5 เขียน xlsb ช้ากว่าราว 13–18 เท่าและไฟล์ใหญ่กว่า ดู `docs/12_DECISION_LOG.md`)
+- [x] Streaming .xlsx export for ordinary reports (server-side, bounded memory, single-use download, no retention)
 - [x] Session timeout auto-logout (JWT 8h + frontend 401 redirect + 5min recheck)
 - [x] SQL Injection guard for LookupQuery (SELECT-only whitelist)
 - [x] Environment validation on startup (`src/lib/env-check.js`)
@@ -901,7 +914,7 @@ npm run test:watch
 | `LOGOUT` | `/api/auth/logout` | Before clearing cookie |
 | `CHANGE_PASSWORD` | `/api/auth/change-password` | After successful password change |
 | `EXECUTE_REPORT` | `/api/reports/execute` | Includes parameter values in details + ChangeData JSON |
-| `EXPORT_EXCEL` | `/api/reports/execute` | When `exportAll=true`, includes parameter values |
+| `EXPORT_EXCEL` | `/api/reports/export` | Logged when the export finishes (including 0 rows), includes parameter values |
 | `CREATE_REPORT` | `/api/admin/reports` POST | After transaction commit |
 | `UPDATE_REPORT` | `/api/admin/reports/[id]` PUT | With `ChangeData` JSON (old→new diff) |
 | `RUN_SCHEDULE` | `/api/admin/schedules` PATCH | Manual trigger |
