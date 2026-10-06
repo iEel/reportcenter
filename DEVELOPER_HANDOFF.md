@@ -1,5 +1,7 @@
 # ReportCenter — Developer Handoff
 
+> P0 fix 2026-10-06 (branch `claude/ui-ux-report-permissions-users-9850aa`, ยังไม่ merge/deploy): [ผลการแก้ P0](docs/audits/2026-10-06-implementation-review/README.md#ผลการแก้-p0-6-ตค-2026) — `GET /api/admin/reports`, `DELETE`/`PATCH /api/admin/reports/[id]` ตรวจ Admin แล้ว (ก่อนหน้านี้ข้อ “Admin role checks ครบทุก admin route” ด้านล่างไม่จริงสำหรับสาม handler นี้); DELETE เป็น transaction และตอบ 409 เมื่อติด FK (รายงานที่มีประวัติใช้งานให้ปิดใช้งานแทน ตาม decision log 2026-10-06); `execute`/`execute-async` ตรวจ `allowedCompanies` ทุก role ก่อนเชื่อมฐานบริษัท ผลตรวจเป็น unit test แบบ mock ไม่ใช่ live DB/deployment
+
 > Follow-up ล่าสุด 2026-10-02: [แก้แนวและขนาดช่องเงื่อนไข Standard พร้อมผลตรวจรวมก่อน commit/push](docs/audits/2026-10-02-standard-field-alignment/README.md) — controls สูง44pxและใช้ subgrid; วัด DOM/ภาพ AP, GL, Statement และมือถือแล้ว รัน tests ใหม่หลังแก้ CSS ผ่าน160/1 todo (15 files), build50pages และ ESLint source28ไฟล์ผ่าน ยังคงเป็นผลในเครื่อง ไม่ใช่ deployment/UAT
 
 > Local implementation 2026-10-02: ผู้ใช้อนุมัตินำ v3 มาใช้ใน Next.js app 5 หน้า ดู [รายละเอียดและสถานะตรวจ](docs/design/2026-10-02-ui-implementation.md) ก่อนอ้างหน้าจอเดิม — GET กลุ่มสิทธิ์คืน inactive mapping พร้อม `IsActive` เพื่อรักษาสิทธิ์เดิม; GET หมวดเพิ่มรายละเอียดทุกสถานะเฉพาะ Admin โดยคงชุด active เดิม UI guard ของ Admin/บัญชีตนเองไม่ใช่ enforcement ใหม่ฝั่ง API และงานนี้ยังไม่ใช่หลักฐาน live CRUD, deployment หรือ UAT
@@ -315,7 +317,7 @@ CreatedAt DATETIME DEFAULT GETDATE()
 | PUT    | `/api/admin/reports/[id]`    | Update report + roles (auto-creates version snapshot) |
 | GET    | `/api/admin/reports/[id]/versions` | Get version history / single snapshot |
 | POST   | `/api/admin/reports/[id]/versions` | Rollback report to a specific version |
-| DELETE | `/api/admin/reports/[id]`    | **Hard-delete** (removes params + roles + favorites + report) |
+| DELETE | `/api/admin/reports/[id]`    | **Hard-delete** in one transaction (params + roles + favorites + report); 409 if another table still references the report (e.g. schedules, ActivityLogs) |
 | PATCH  | `/api/admin/reports/[id]`    | Toggle IsActive (enable/disable)  |
 | GET    | `/api/admin/users`           | List users + roles + allowedCompanies + AD info |
 | POST   | `/api/admin/users`           | Create user (local bcrypt / AD LDAP_AUTH) + company mappings + logs CREATE_USER |
@@ -678,6 +680,7 @@ curl http://localhost:4000/api/cron/execute-schedules?secret=rc-cron-secret-2026
   - `GET /api/reports/parameters`
   - `GET /api/reports/search-param`
 - ป้องกัน user แก้ URL เดา reportId เพื่อเรียกใช้รายงานที่ไม่มีสิทธิ์
+- **Company access:** `execute`, `execute-async` และ `search-param` ตรวจ `companyId` กับ `session.allowedCompanies` สำหรับทุก role รวม Admin → ไม่อยู่ในรายการได้ **403** (execute/execute-async เพิ่ม 2026-10-06)
 
 ### Security Hardening
 - **ลบ hardcoded credentials** — `db.js` ไม่มี default password/server แล้ว → บังคับ `.env`
