@@ -31,13 +31,6 @@ export function getRunBlocker({ reportId, company, isLoadingParams, paramsError,
     return null;
 }
 
-/** Tell a failed export apart from an export that found no rows. */
-export function exportProblem(data: { success?: boolean; message?: string; data?: unknown[] }) {
-    if (!data.success) return { kind: 'error' as const, message: data.message || 'ไม่สามารถส่งออกข้อมูลได้' };
-    if (!data.data?.length) return { kind: 'empty' as const };
-    return null;
-}
-
 export interface ExportResponse { success?: boolean; message?: string; rowCount?: number; downloadId?: string }
 export type ExportOutcome =
     | { kind: 'download'; url: string; rowCount: number }

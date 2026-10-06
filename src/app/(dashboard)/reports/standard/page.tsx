@@ -2,7 +2,6 @@
 
 import { Search, Download, ChevronLeft, ChevronRight, RefreshCw, Loader2, AlertCircle, Star, Check, FileSpreadsheet, X } from "lucide-react";
 import { useState, useEffect, useRef } from "react";
-import * as xlsx from 'xlsx';
 import { useAuth } from "@/components/providers/AuthProvider";
 import { useToast } from "@/components/providers/ToastProvider";
 import TypeaheadInput from "@/components/TypeaheadInput";
@@ -10,9 +9,9 @@ import ReportSelector from "@/components/ReportSelector";
 import CompanySelector from "@/components/CompanySelector";
 import Link from "next/link";
 import { formatDate } from '@/lib/dateUtils';
-import { excelFileName, excelWriteOptions } from '@/lib/excel-export';
 import type { StandardReport } from '@/lib/report-selector';
-import { exportProblem, getRunBlocker, pickReportCompany, shouldConfirmEmptyConditions, startJobPolling } from '@/lib/standard-report';
+import { exportOutcome, getRunBlocker, pickReportCompany, shouldConfirmEmptyConditions, startJobPolling } from '@/lib/standard-report';
+import { downloadJobFile, triggerBrowserDownload } from '@/lib/file-download';
 
 interface Report extends StandardReport { ReportType: number }
 interface ReportParameter { ParameterId: number; ParameterName: string; DisplayLabel?: string; InputType: string; LookupQuery?: string | null }
@@ -57,9 +56,11 @@ export default function StandardReportPage() {
     const jobStartingRef = useRef(false);
     const stopPollRef = useRef<(() => void) | null>(null);
     const mountedRef = useRef(true);
+    const exportAbortRef = useRef<AbortController | null>(null);
     useEffect(() => {
         mountedRef.current = true;
-        return () => { mountedRef.current = false; stopPollRef.current?.(); };
+        // Leaving the page cancels an ordinary export: nothing is kept for later download
+        return () => { mountedRef.current = false; stopPollRef.current?.(); exportAbortRef.current?.abort(); };
     }, []);
     // Paging re-runs the conditions of the last fresh run, not whatever the form holds now
     const lastRunParamsRef = useRef<Record<string, string>>({});
@@ -300,70 +301,52 @@ export default function StandardReportPage() {
             return;
         }
 
+        // The server streams the rows into a temporary .xlsx; the browser only downloads the file
+        const controller = new AbortController();
+        exportAbortRef.current = controller;
         setIsExporting(true);
         setExportElapsed(0);
-        setExportStatus('กำลังดึงข้อมูลจากฐานข้อมูล...');
-
-        // Start elapsed timer
+        setExportStatus('กำลังสร้างไฟล์ Excel…');
         const startTime = Date.now();
         exportTimerRef.current = setInterval(() => {
             setExportElapsed(Math.floor((Date.now() - startTime) / 1000));
         }, 1000);
 
-        const stopTimer = () => {
+        try {
+            const res = await fetch('/api/reports/export', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ reportId: selectedReportId, companyId: selectedCompany, parameters: paramValues }),
+                signal: controller.signal,
+            });
+            const outcome = exportOutcome(await res.json());
+            if (outcome.kind === 'error') toast(outcome.message, 'error');
+            else if (outcome.kind === 'empty') toast('ไม่มีข้อมูลให้ส่งออก', 'info');
+            else {
+                triggerBrowserDownload(outcome.url);
+                toast(`ส่งออก ${outcome.rowCount.toLocaleString()} รายการเรียบร้อย`, 'success');
+            }
+        } catch {
+            if (mountedRef.current) {
+                if (controller.signal.aborted) toast('ยกเลิกการส่งออกแล้ว', 'info');
+                else toast('ไม่สามารถส่งออกข้อมูลได้', 'error');
+            }
+        } finally {
             if (exportTimerRef.current) {
                 clearInterval(exportTimerRef.current);
                 exportTimerRef.current = null;
             }
-        };
-
-        const reportName = report ? report.ReportName : 'Report';
-        const dateStr = new Date().toISOString().split('T')[0];
-
-        // Normal export
-        try {
-            const res = await fetch('/api/reports/execute', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    reportId: selectedReportId,
-                    companyId: selectedCompany,
-                    parameters: paramValues,
-                    exportAll: true,
-                })
-            });
-            const data = await res.json();
-            const problem = exportProblem(data);
-            if (problem?.kind === 'error') {
-                toast(problem.message, 'error');
-                return;
-            }
-            if (problem?.kind === 'empty') {
-                toast('ไม่มีข้อมูลให้ส่งออก', 'info');
-                return;
-            }
-            setExportStatus(`กำลังสร้างไฟล์ Excel (${data.data.length.toLocaleString()} แถว)...`);
-            // Small delay to let UI update before heavy xlsx work
-            await new Promise(r => setTimeout(r, 100));
-            // Use API column order via header option (Object.keys reorders numeric keys)
-            const exportCols = data.columns || Object.keys(data.data[0]);
-            const worksheet = xlsx.utils.json_to_sheet(data.data, { header: exportCols });
-            const workbook = xlsx.utils.book_new();
-            xlsx.utils.book_append_sheet(workbook, worksheet, "Report Data");
-            xlsx.writeFile(workbook, excelFileName(`${reportName}_${dateStr}`), excelWriteOptions());
-            toast(`ส่งออก ${data.data.length.toLocaleString()} รายการเรียบร้อย`, 'success');
-        } catch {
-            toast('ไม่สามารถส่งออกข้อมูลได้', 'error');
-        } finally {
-            stopTimer();
-            setIsExporting(false);
+            exportAbortRef.current = null;
+            if (mountedRef.current) setIsExporting(false);
         }
     };
 
-    const handleJobDownload = () => {
-        if (activeJob?.jobId) {
-            window.open(`/api/reports/jobs/${activeJob.jobId}/download`, '_blank');
-        }
+    const cancelExport = () => exportAbortRef.current?.abort();
+
+    const handleJobDownload = async () => {
+        if (!activeJob?.jobId) return;
+        const result = await downloadJobFile(activeJob.jobId);
+        if (!result.ok) toast(result.message, 'error');
     };
 
 
@@ -580,7 +563,8 @@ export default function StandardReportPage() {
                         <h2 className="font-semibold text-slate-900 dark:text-white">กำลังส่งออกไฟล์</h2>
                         <p className="text-sm text-slate-500 dark:text-slate-400">{exportStatus}</p>
                         <p className="font-mono text-sm tabular-nums text-slate-600 dark:text-slate-300">{Math.floor(exportElapsed / 60).toString().padStart(2, '0')}:{(exportElapsed % 60).toString().padStart(2, '0')}</p>
-                        <p className="text-xs text-slate-500 dark:text-slate-400">กรุณาอย่าปิดหน้านี้ระหว่างส่งออก</p>
+                        <p className="text-xs text-slate-500 dark:text-slate-400">ถ้าปิดหน้านี้ การส่งออกจะถูกยกเลิก</p>
+                        <button type="button" onClick={cancelExport} className={secondaryButton}>ยกเลิก</button>
                     </div>
                 </div>
             )}
