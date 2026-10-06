@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server';
 import sql from 'mssql';
-import { connectToCentralDB } from '@/lib/db';
+import { connectToCentralDB, getCompanyList } from '@/lib/db';
 import { getSession } from '@/lib/auth';
+import { buildAuditFilter } from '@/lib/audit-log-filter';
 
 export async function GET(request) {
     try {
@@ -13,10 +14,15 @@ export async function GET(request) {
         const { searchParams } = new URL(request.url);
         const page = parseInt(searchParams.get('page') || '1');
         const pageSize = parseInt(searchParams.get('pageSize') || '50');
-        const actionType = searchParams.get('actionType') || '';
-        const userId = searchParams.get('userId') || '';
-        const dateFrom = searchParams.get('dateFrom') || '';
-        const dateTo = searchParams.get('dateTo') || '';
+        const filter = buildAuditFilter({
+            q: searchParams.get('q'),
+            actionType: searchParams.get('actionType'),
+            userId: searchParams.get('userId'),
+            reportId: searchParams.get('reportId'),
+            companyId: searchParams.get('companyId'),
+            dateFrom: searchParams.get('dateFrom'),
+            dateTo: searchParams.get('dateTo'),
+        });
 
         const pool = await connectToCentralDB();
 
@@ -28,52 +34,25 @@ export async function GET(request) {
             `);
         } catch (e) { /* ignore */ }
 
-        // Build WHERE clause
-        let where = 'WHERE 1=1';
-        const req = pool.request();
-
-        if (actionType) {
-            where += ' AND a.ActionType = @ActionType';
-            req.input('ActionType', sql.NVarChar(50), actionType);
-        }
-        if (userId) {
-            where += ' AND a.UserId = @FilterUserId';
-            req.input('FilterUserId', sql.Int, parseInt(userId));
-        }
-        if (dateFrom) {
-            where += ' AND a.CreatedAt >= @DateFrom';
-            req.input('DateFrom', sql.Date, dateFrom);
-        }
-        if (dateTo) {
-            where += ' AND a.CreatedAt < DATEADD(DAY, 1, @DateTo)';
-            req.input('DateTo', sql.Date, dateTo);
-        }
-
-        // Count total
-        const countResult = await req.query(`
+        // The keyword filter searches user names too, so both queries join Users
+        const countResult = await filter.bind(pool.request()).query(`
             SELECT COUNT(*) AS total
             FROM ActivityLogs a
-            ${where}
+            LEFT JOIN Users u ON a.UserId = u.UserId
+            ${filter.where}
         `);
         const totalRows = countResult.recordset[0].total;
 
-        // Fetch paginated
-        const req2 = pool.request();
-        if (actionType) req2.input('ActionType', sql.NVarChar(50), actionType);
-        if (userId) req2.input('FilterUserId', sql.Int, parseInt(userId));
-        if (dateFrom) req2.input('DateFrom', sql.Date, dateFrom);
-        if (dateTo) req2.input('DateTo', sql.Date, dateTo);
-
         const offset = (page - 1) * pageSize;
-        req2.input('Offset', sql.Int, offset);
-        req2.input('PageSize', sql.Int, pageSize);
-
-        const result = await req2.query(`
+        const result = await filter.bind(pool.request())
+            .input('Offset', sql.Int, offset)
+            .input('PageSize', sql.Int, pageSize)
+            .query(`
             SELECT a.LogId, a.UserId, a.ReportId, a.CompanyId, a.ActionType, a.Details, a.ChangeData, a.CreatedAt,
                    u.FullName AS UserName
             FROM ActivityLogs a
             LEFT JOIN Users u ON a.UserId = u.UserId
-            ${where}
+            ${filter.where}
             ORDER BY a.CreatedAt DESC
             OFFSET @Offset ROWS FETCH NEXT @PageSize ROWS ONLY
         `);
@@ -88,6 +67,12 @@ export async function GET(request) {
             SELECT UserId, FullName FROM Users ORDER BY FullName
         `);
 
+        // Reports and companies for the report/company filters
+        const reportsResult = await pool.request().query(`
+            SELECT ReportId, ReportName FROM Reports ORDER BY ReportName
+        `);
+        const companies = (await getCompanyList()).map(({ companyId, label }) => ({ companyId, label }));
+
         return NextResponse.json({
             success: true,
             logs: result.recordset,
@@ -96,6 +81,8 @@ export async function GET(request) {
             pageSize,
             actionTypes: typesResult.recordset.map(r => r.ActionType),
             users: usersResult.recordset,
+            reports: reportsResult.recordset,
+            companies,
         });
 
     } catch (error) {

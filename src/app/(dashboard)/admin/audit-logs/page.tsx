@@ -5,6 +5,7 @@ import { Activity, Download, Filter, ChevronLeft, ChevronRight, Loader2, Search,
 import { formatDateTime } from "@/lib/dateUtils";
 import * as xlsx from 'xlsx';
 import { excelFileName, excelWriteOptions } from "@/lib/excel-export";
+import { actionLabel, actionOptionLabel } from "@/lib/audit-actions";
 
 const ACTION_COLORS: Record<string, string> = {
     LOGIN: 'bg-blue-100 text-blue-700',
@@ -26,6 +27,12 @@ const ACTION_COLORS: Record<string, string> = {
     BLOCKED_QUERY: 'bg-red-200 text-red-800 ring-1 ring-red-300',
 };
 
+interface AuditFilters { q: string; actionType: string; userId: string; reportId: string; companyId: string; dateFrom: string; dateTo: string }
+const EMPTY_FILTERS: AuditFilters = { q: '', actionType: '', userId: '', reportId: '', companyId: '', dateFrom: '', dateTo: '' };
+const hasAny = (filters: AuditFilters) => Object.values(filters).some(value => value.trim() !== '');
+const fieldClass = "w-full px-3 py-2 bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-lg text-sm dark:text-white focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20";
+const labelClass = "block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1";
+
 export default function AuditLogsPage() {
     const [logs, setLogs] = useState<any[]>([]);
     const [isLoading, setIsLoading] = useState(true);
@@ -34,13 +41,14 @@ export default function AuditLogsPage() {
     const [pageSize] = useState(30);
     const [selectedLog, setSelectedLog] = useState<any>(null);
 
-    // Filters
-    const [actionType, setActionType] = useState('');
-    const [userId, setUserId] = useState('');
-    const [dateFrom, setDateFrom] = useState('');
-    const [dateTo, setDateTo] = useState('');
+    // Filters: `filters` is what the form shows, `applied` is what the table was loaded with
+    const [filters, setFilters] = useState<AuditFilters>(EMPTY_FILTERS);
+    const [applied, setApplied] = useState<AuditFilters>(EMPTY_FILTERS);
     const [actionTypes, setActionTypes] = useState<string[]>([]);
     const [users, setUsers] = useState<any[]>([]);
+    const [reports, setReports] = useState<{ ReportId: number; ReportName: string }[]>([]);
+    const [companies, setCompanies] = useState<{ companyId: number; label: string }[]>([]);
+    const setFilter = (key: keyof AuditFilters) => (value: string) => setFilters(current => ({ ...current, [key]: value }));
 
     // Bulk delete
     const [showDeleteModal, setShowDeleteModal] = useState(false);
@@ -54,10 +62,9 @@ export default function AuditLogsPage() {
                 page: page.toString(),
                 pageSize: pageSize.toString(),
             });
-            if (actionType) params.set('actionType', actionType);
-            if (userId) params.set('userId', userId);
-            if (dateFrom) params.set('dateFrom', dateFrom);
-            if (dateTo) params.set('dateTo', dateTo);
+            for (const [key, value] of Object.entries(applied)) {
+                if (value.trim()) params.set(key, value.trim());
+            }
 
             const res = await fetch(`/api/admin/audit-logs?${params}`);
             const data = await res.json();
@@ -66,12 +73,20 @@ export default function AuditLogsPage() {
                 setTotalRows(data.totalRows);
                 setActionTypes(data.actionTypes);
                 setUsers(data.users);
+                setReports(data.reports || []);
+                setCompanies(data.companies || []);
             }
         } catch { }
         finally { setIsLoading(false); }
     };
 
-    useEffect(() => { fetchLogs(); }, [page]);
+    useEffect(() => { fetchLogs(); }, [page, applied]);
+
+    // A new object reloads page 1 even when the filters did not change (search again / refresh)
+    const search = () => { setPage(1); setApplied({ ...filters, q: filters.q.trim() }); };
+    const refresh = () => { setPage(1); setApplied(current => ({ ...current })); };
+    const clearFilters = () => { setFilters(EMPTY_FILTERS); setPage(1); setApplied({ ...EMPTY_FILTERS }); };
+    const filtered = hasAny(applied);
 
     const totalPages = Math.ceil(totalRows / pageSize);
 
@@ -99,8 +114,7 @@ export default function AuditLogsPage() {
             if (data.success) {
                 setShowDeleteModal(false);
                 setDeleteBefore('');
-                setPage(1);
-                fetchLogs();
+                refresh();
             }
         } catch { }
         finally { setIsDeleting(false); }
@@ -205,14 +219,16 @@ export default function AuditLogsPage() {
                     </div>
                     <div>
                         <h1 className="text-xl font-bold text-slate-900 dark:text-white">Audit Trail</h1>
-                        <p className="text-sm text-slate-500 dark:text-slate-400">ประวัติกิจกรรมทั้งหมดในระบบ ({totalRows} รายการ)</p>
+                        <p className="text-sm text-slate-500 dark:text-slate-400">
+                            {filtered ? `พบ ${totalRows.toLocaleString()} รายการตามตัวกรอง` : `ประวัติกิจกรรมทั้งหมดในระบบ (${totalRows.toLocaleString()} รายการ)`}
+                        </p>
                     </div>
                 </div>
                 <div className="flex items-center gap-2">
                     <button onClick={() => setShowDeleteModal(true)} className="p-2.5 bg-red-50 dark:bg-red-900/30 text-red-500 rounded-lg hover:bg-red-100 dark:hover:bg-red-900/50 transition-colors" title="ลบ log เก่า">
                         <Trash2 className="w-5 h-5" />
                     </button>
-                    <button onClick={() => { setPage(1); fetchLogs(); }} className="p-2.5 bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-600 transition-colors" title="รีเฟรช">
+                    <button onClick={refresh} className="p-2.5 bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-600 transition-colors" title="รีเฟรช">
                         <RefreshCw className={`w-5 h-5 ${isLoading ? 'animate-spin' : ''}`} />
                     </button>
                     <button onClick={handleExport} className="flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors text-sm font-medium shadow-sm">
@@ -223,27 +239,68 @@ export default function AuditLogsPage() {
             </div>
 
             {/* Filters */}
-            <div className="bg-white dark:bg-slate-800 p-4 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700">
+            <form onSubmit={e => { e.preventDefault(); search(); }} className="bg-white dark:bg-slate-800 p-4 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700">
                 <div className="flex items-center gap-2 mb-3">
                     <Filter className="w-4 h-4 text-slate-500" />
                     <span className="text-sm font-medium text-slate-700 dark:text-slate-300">ตัวกรอง</span>
                 </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
-                    <select value={actionType} onChange={e => setActionType(e.target.value)} className="px-3 py-2 bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-lg text-sm dark:text-white">
-                        <option value="">ทุกประเภท</option>
-                        {actionTypes.map(t => <option key={t} value={t}>{t}</option>)}
-                    </select>
-                    <select value={userId} onChange={e => setUserId(e.target.value)} className="px-3 py-2 bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-lg text-sm dark:text-white">
-                        <option value="">ทุกผู้ใช้</option>
-                        {users.map(u => <option key={u.UserId} value={u.UserId}>{u.FullName}</option>)}
-                    </select>
-                    <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} placeholder="จากวันที่" className="px-3 py-2 bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-lg text-sm dark:text-white" />
-                    <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} placeholder="ถึงวันที่" className="px-3 py-2 bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-lg text-sm dark:text-white" />
-                    <button onClick={() => { setPage(1); fetchLogs(); }} className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium flex items-center justify-center gap-2">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                    <label className="block sm:col-span-2">
+                        <span className={labelClass}>ค้นหาคำ</span>
+                        <span className="relative block">
+                            <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" aria-hidden="true" />
+                            <input type="search" value={filters.q} onChange={e => setFilter('q')(e.target.value)} maxLength={100}
+                                placeholder="ชื่อรายงาน ค่าเงื่อนไข หรือชื่อผู้ใช้" className={`${fieldClass} pl-9`} />
+                        </span>
+                    </label>
+                    <label className="block">
+                        <span className={labelClass}>ประเภท</span>
+                        <select value={filters.actionType} onChange={e => setFilter('actionType')(e.target.value)} className={fieldClass}>
+                            <option value="">ทุกประเภท</option>
+                            {actionTypes.map(t => <option key={t} value={t}>{actionOptionLabel(t)}</option>)}
+                        </select>
+                    </label>
+                    <label className="block">
+                        <span className={labelClass}>ผู้ใช้</span>
+                        <select value={filters.userId} onChange={e => setFilter('userId')(e.target.value)} className={fieldClass}>
+                            <option value="">ทุกผู้ใช้</option>
+                            {users.map(u => <option key={u.UserId} value={u.UserId}>{u.FullName}</option>)}
+                        </select>
+                    </label>
+                    <label className="block">
+                        <span className={labelClass}>รายงาน</span>
+                        <select value={filters.reportId} onChange={e => setFilter('reportId')(e.target.value)} className={fieldClass}>
+                            <option value="">ทุกรายงาน</option>
+                            {reports.map(r => <option key={r.ReportId} value={r.ReportId}>{r.ReportName}</option>)}
+                        </select>
+                    </label>
+                    <label className="block">
+                        <span className={labelClass}>บริษัท</span>
+                        <select value={filters.companyId} onChange={e => setFilter('companyId')(e.target.value)} className={fieldClass}>
+                            <option value="">ทุกบริษัท</option>
+                            {companies.map(c => <option key={c.companyId} value={c.companyId}>{c.label}</option>)}
+                        </select>
+                    </label>
+                    <label className="block">
+                        <span className={labelClass}>จากวันที่</span>
+                        <input type="date" value={filters.dateFrom} max={filters.dateTo || undefined} onChange={e => setFilter('dateFrom')(e.target.value)} className={fieldClass} />
+                    </label>
+                    <label className="block">
+                        <span className={labelClass}>ถึงวันที่</span>
+                        <input type="date" value={filters.dateTo} min={filters.dateFrom || undefined} onChange={e => setFilter('dateTo')(e.target.value)} className={fieldClass} />
+                    </label>
+                </div>
+                <div className="flex flex-wrap items-center justify-end gap-2 mt-3">
+                    {(hasAny(filters) || filtered) && (
+                        <button type="button" onClick={clearFilters} className="px-4 py-2 text-sm font-medium text-slate-600 dark:text-slate-300 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 flex items-center gap-2">
+                            <X className="w-4 h-4" /> ล้างตัวกรอง
+                        </button>
+                    )}
+                    <button type="submit" className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium flex items-center justify-center gap-2">
                         <Search className="w-4 h-4" /> ค้นหา
                     </button>
                 </div>
-            </div>
+            </form>
 
             {/* Table */}
             <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden">
@@ -269,7 +326,7 @@ export default function AuditLogsPage() {
                                         <td className="px-4 py-3 text-slate-500 dark:text-slate-400 whitespace-nowrap">{formatDateTime(log.CreatedAt)}</td>
                                         <td className="px-4 py-3 font-medium text-slate-800 dark:text-slate-200">{log.UserName || '-'}</td>
                                         <td className="px-4 py-3">
-                                            <span className={`px-2.5 py-1 rounded-full text-xs font-semibold ${ACTION_COLORS[log.ActionType] || 'bg-slate-100 text-slate-600'}`}>
+                                            <span title={actionLabel(log.ActionType)} className={`px-2.5 py-1 rounded-full text-xs font-semibold ${ACTION_COLORS[log.ActionType] || 'bg-slate-100 text-slate-600'}`}>
                                                 {log.ActionType}
                                             </span>
                                         </td>
