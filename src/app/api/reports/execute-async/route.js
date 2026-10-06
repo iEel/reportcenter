@@ -60,6 +60,12 @@ export async function POST(request) {
             return NextResponse.json({ success: false, message: 'reportId and companyId required' }, { status: 400 });
         }
 
+        // Company access applies to every role, admins included (same rule as search-param)
+        const allowed = session.allowedCompanies || [];
+        if (!allowed.includes(parseInt(companyId))) {
+            return NextResponse.json({ success: false, message: 'คุณไม่มีสิทธิ์เข้าถึงข้อมูลบริษัทนี้' }, { status: 403 });
+        }
+
         const centralPool = await connectToCentralDB();
 
         // Check concurrent job limit per user

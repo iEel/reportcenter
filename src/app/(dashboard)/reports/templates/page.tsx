@@ -489,7 +489,7 @@ export default function TemplateReportPage() {
                                     onChange={e => setSelectedCompany(e.target.value)}
                                     className="w-full bg-white border border-slate-200 text-sm py-2 px-3 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 transition-colors"
                                 >
-                                    {companies.map(c => (
+                                    {companies.filter(c => allowedCompanies.includes(c.companyId)).map(c => (
                                         <option key={c.companyId} value={c.companyId}>{c.companyId}. {c.name} ({c.label})</option>
                                     ))}
                                 </select>

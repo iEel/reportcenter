@@ -143,6 +143,11 @@ export async function POST(request) {
 
 export async function GET(request) {
     try {
+        const session = await getSession(request);
+        if (!session || session.roleName?.toLowerCase() !== 'admin') {
+            return NextResponse.json({ success: false, message: 'Forbidden' }, { status: 403 });
+        }
+
         const pool = await connectToCentralDB();
 
         // Auto-create ReportCategories + CategoryId if missing

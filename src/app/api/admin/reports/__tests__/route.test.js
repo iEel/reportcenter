@@ -135,6 +135,24 @@ describe('admin/reports route', () => {
     // ─── GET ────────────────────────────────────────────────────
 
     describe('GET /api/admin/reports', () => {
+        beforeEach(() => {
+            getSession.mockResolvedValue({ userId: 1, roleName: 'Admin' });
+        });
+
+        it('returns 403 when not logged in', async () => {
+            getSession.mockResolvedValue(null);
+            const res = await GET({});
+            expect(res.status).toBe(403);
+            expect(connectToCentralDB).not.toHaveBeenCalled();
+        });
+
+        it('returns 403 when user is not admin', async () => {
+            getSession.mockResolvedValue({ userId: 2, roleName: 'User' });
+            const res = await GET({});
+            expect(res.status).toBe(403);
+            expect(connectToCentralDB).not.toHaveBeenCalled();
+        });
+
         it('returns list of reports', async () => {
             const reports = [{ ReportId: 1, ReportName: 'Sales' }];
             globalThis.__adminTest.queryResults = [

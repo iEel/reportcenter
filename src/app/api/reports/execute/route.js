@@ -56,6 +56,12 @@ export async function POST(request) {
             return NextResponse.json({ success: false, message: 'Unauthorized' }, { status: 401 });
         }
 
+        // Company access applies to every role, admins included (same rule as search-param)
+        const allowed = session.allowedCompanies || [];
+        if (!allowed.includes(parseInt(companyId))) {
+            return NextResponse.json({ success: false, message: 'คุณไม่มีสิทธิ์เข้าถึงข้อมูลบริษัทนี้' }, { status: 403 });
+        }
+
         const isAdmin = session.roleName?.toLowerCase() === 'admin';
         if (!isAdmin) {
             const accessCheck = await centralPool.request()
