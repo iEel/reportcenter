@@ -325,34 +325,52 @@ export async function PUT(request, props) {
 }
 
 export async function DELETE(request, props) {
+    let transaction;
     try {
+        const session = await getSession(request);
+        if (!session || session.roleName?.toLowerCase() !== 'admin') {
+            return NextResponse.json({ success: false, message: 'Forbidden' }, { status: 403 });
+        }
+
         const { id } = await props.params;
         if (!id) return NextResponse.json({ success: false, message: "Report ID required" }, { status: 400 });
 
         const pool = await connectToCentralDB();
         const reportId = parseInt(id);
 
-        // Hard delete — remove related data first (FK constraints)
-        await pool.request().input('ReportId', sql.Int, reportId)
+        // Hard delete in one transaction — remove related data first (FK constraints);
+        // if any step fails, nothing is deleted
+        transaction = pool.transaction();
+        await transaction.begin();
+
+        await transaction.request().input('ReportId', sql.Int, reportId)
             .query('DELETE FROM ReportParameters WHERE ReportId = @ReportId');
 
-        try {
-            await pool.request().input('ReportId', sql.Int, reportId)
-                .query('DELETE FROM ReportRoleMapping WHERE ReportId = @ReportId');
-        } catch (e) { /* table may not exist */ }
+        // Optional tables — skip when not created yet
+        await transaction.request().input('ReportId', sql.Int, reportId)
+            .query("IF OBJECT_ID('ReportRoleMapping', 'U') IS NOT NULL DELETE FROM ReportRoleMapping WHERE ReportId = @ReportId");
 
-        try {
-            await pool.request().input('ReportId', sql.Int, reportId)
-                .query('DELETE FROM UserFavoriteReports WHERE ReportId = @ReportId');
-        } catch (e) { /* table may not exist */ }
+        await transaction.request().input('ReportId', sql.Int, reportId)
+            .query("IF OBJECT_ID('UserFavorites', 'U') IS NOT NULL DELETE FROM UserFavorites WHERE ReportId = @ReportId");
 
         // Delete the report itself
-        await pool.request().input('ReportId', sql.Int, reportId)
+        await transaction.request().input('ReportId', sql.Int, reportId)
             .query('DELETE FROM Reports WHERE ReportId = @ReportId');
 
+        await transaction.commit();
         return NextResponse.json({ success: true, message: "Report deleted permanently" });
 
     } catch (error) {
+        if (transaction) {
+            try { await transaction.rollback(); } catch { /* already rolled back */ }
+        }
+        // 547 = FK conflict, e.g. a schedule or ActivityLogs row still points at this report
+        if (error.number === 547) {
+            return NextResponse.json({
+                success: false,
+                message: 'ลบรายงานไม่ได้ เพราะยังมีข้อมูลอื่นอ้างอิงรายงานนี้อยู่ เช่น ตั้งเวลารายงานหรือประวัติการใช้งาน — ให้ปิดใช้งานรายงานแทน',
+            }, { status: 409 });
+        }
         console.error("Error deleting report:", error);
         return NextResponse.json({ success: false, message: "Internal Server Error" }, { status: 500 });
     }
@@ -364,6 +382,11 @@ export async function DELETE(request, props) {
  */
 export async function PATCH(request, props) {
     try {
+        const session = await getSession(request);
+        if (!session || session.roleName?.toLowerCase() !== 'admin') {
+            return NextResponse.json({ success: false, message: 'Forbidden' }, { status: 403 });
+        }
+
         const { id } = await props.params;
         if (!id) return NextResponse.json({ success: false, message: "Report ID required" }, { status: 400 });
 

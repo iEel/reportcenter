@@ -1,5 +1,10 @@
 # ReportCenter changelog
 
+## 2026-10-06
+
+- แก้ P0 ตามคำสั่งผู้ใช้ (commit บน branch `claude/ui-ux-report-permissions-users-9850aa` ยังไม่ merge/deploy): `GET /api/admin/reports` และ `DELETE`/`PATCH /api/admin/reports/[id]` ตรวจ Admin; DELETE ลบใน transaction เดียว ใช้ `UserFavorites` และตอบ 409 เมื่อติด FK; `execute`/`execute-async` ตรวจ `allowedCompanies` ทุก role ก่อนเชื่อมฐานบริษัท และหน้า Template กรอง dropdown บริษัทตามสิทธิ์ เขียน test ก่อนแก้ (RED 16 ข้อ) แล้วผ่าน 17 files/184 passed/1 todo, tsc ผ่าน, ESLint ไม่มีปัญหาใหม่ ผู้ตรวจอิสระ 3 มุมไม่พบทางเลี่ยงสิทธิ์ ผู้ใช้เลือกให้รายงานที่มี `ActivityLogs` อ้างอิงไม่ลบถาวรแต่ปิดใช้งานแทน ([decision log](12_DECISION_LOG.md)) ดู [ผลการแก้ P0](audits/2026-10-06-implementation-review/README.md#ผลการแก้-p0-6-ตค-2026) ทดสอบด้วย mock เท่านั้น ไม่ได้แตะหน้าเว็บจริงหรือฐานข้อมูล
+- รีวิว commit `06ec60a` ตามคำขอผู้ใช้: อ่านโค้ด 8 ด้านพร้อมผู้ตรวจหักล้างซ้ำ (หลังรวมข้อซ้ำ 61 ข้อ) และเปิดหน้าจริง 5 หน้าที่ desktop/mobile/โหมดมืดโดยยกเลิกทุกฟอร์ม พบ P0 ฝั่ง API 2 ข้อที่มีมาก่อน commit, ปัญหาใหม่จาก native dialog (toast ถูกบัง, dialog ค้างหลัง Esc ซ้ำ, beforeunload ขวาง logout อัตโนมัติ) และปุ่มหลักหน้ากลุ่มสิทธิ์หายตอน hover; ยืนยัน (e)(f) แก้แล้ว (a)(b)(c) กันเฉพาะหน้าเว็บ (d) แก้บางส่วน; tests 160/1 todo, tsc และ ESLint ไฟล์ที่แก้ผ่าน บันทึก [ผลรีวิว](audits/2026-10-06-implementation-review/README.md) ไม่แก้ src และไม่ทดลอง live CRUD/execute/export
+
 ## 2026-10-02
 
 - เตรียม commit/push ตามคำสั่งผู้ใช้: อัปเดต Handoff/docs/wiki ให้รวมการแก้ alignment; รันตรวจรวมหลังแก้ CSS ใหม่ได้ tests15files/160passed/1todo, build50pages และ ESLint source28ไฟล์ผ่าน ดู [คำสั่งและขอบเขตผลตรวจ](audits/2026-10-02-standard-field-alignment/README.md) ไม่ใช่ deployment/UAT

@@ -21,6 +21,7 @@
 | [QA ของ UI implementation รอบแรก](audits/2026-10-02-ui-implementation/README.md) | ประวัติผลตรวจ/ภาพ 11 ภาพ; ภาพทะเบียนมือถือยังโหลดและภาพผู้ใช้ก่อนแก้ scroll จึงต้องอ่านผลทวนล่าสุดประกอบ |
 | [ทวน app เทียบ mock v3 ล่าสุด](audits/2026-10-02-ui-parity-recheck/README.md) | แก้ส่วน UI ที่ตกหล่น ตรวจจริง 5 หน้า ภาพใหม่ 15 ภาพ และระบุส่วนที่ยังไม่ตรงแบบ; 160 tests passed/1 todo, build/lint source ผ่าน ไม่มี live CRUD/deploy/UAT |
 | [แก้แนว/ขนาดช่องเงื่อนไข Standard](audits/2026-10-02-standard-field-alignment/README.md) | Follow-up จากผู้ใช้: controls44px/แนวร่วม; DOM measurementsและภาพdesktop/mobile พร้อมผลตรวจรวมก่อน commit/push หลังแก้ CSS: tests160/1todo, build50pages และ lint source28ไฟล์ผ่าน |
+| [รีวิว implementation 06ec60a](audits/2026-10-06-implementation-review/README.md) | อ่านโค้ดทั้ง commit 8 ด้านพร้อมหักล้างซ้ำ และเปิดหน้าจริง 5 หน้า: P0 ฝั่ง API 2 ข้อ (ลบ/ปิดรายงานไม่ตรวจสิทธิ์, execute ไม่ตรวจบริษัท), ปัญหาใหม่จาก native dialog และสถานะปัญหาเดิม (a)–(f); ยังไม่แก้โค้ด |
 
 วิกิ: `D:\Obsidian\Eltross\ReportCenter\rc-index.md` · วิธีบันทึก: [AGENTS.md](../AGENTS.md)
 

@@ -52,7 +52,7 @@ describe('POST /api/reports/execute', () => {
         vi.clearAllMocks();
         queryIndex = 0;
         queryResults = [];
-        getSession.mockResolvedValue({ userId: 1, username: 'admin', roleId: 1, roleName: 'Admin' });
+        getSession.mockResolvedValue({ userId: 1, username: 'admin', roleId: 1, roleName: 'Admin', allowedCompanies: [1, 2, 3] });
         validateQuery.mockReturnValue({ safe: true });
         connectToCentralDB.mockImplementation(() => Promise.resolve(createMockPool()));
         connectToCompanyDB.mockImplementation(() => Promise.resolve(createMockPool()));
@@ -119,7 +119,7 @@ describe('POST /api/reports/execute', () => {
     });
 
     it('returns 403 when non-admin lacks role mapping', async () => {
-        getSession.mockResolvedValue({ userId: 2, username: 'user', roleId: 2, roleName: 'User' });
+        getSession.mockResolvedValue({ userId: 2, username: 'user', roleId: 2, roleName: 'User', allowedCompanies: [1] });
         queryResults = [
             { recordset: [{ TSqlQuery: 'SELECT 1', ReportName: 'Test' }] },
             { recordset: [] }, // access check fails
@@ -127,6 +127,53 @@ describe('POST /api/reports/execute', () => {
 
         const res = await POST(createRequest({ reportId: 1, companyId: 1 }));
         expect(res.status).toBe(403);
+    });
+
+    // ─── Company Access ─────────────────────────────────────────
+
+    it('returns 403 and never connects to a company the user is not allowed to read', async () => {
+        getSession.mockResolvedValue({ userId: 2, username: 'user', roleId: 2, roleName: 'User', allowedCompanies: [1] });
+        queryResults = [
+            { recordset: [{ TSqlQuery: 'SELECT 1', ReportName: 'Test' }] },
+            { recordset: [{ 1: 1 }] }, // role mapping would pass
+        ];
+
+        const res = await POST(createRequest({ reportId: 1, companyId: 2 }));
+        const data = await res.json();
+        expect(res.status).toBe(403);
+        expect(data.message).toMatch(/บริษัท/);
+        expect(connectToCompanyDB).not.toHaveBeenCalled();
+    });
+
+    it('applies the company check to admins too', async () => {
+        getSession.mockResolvedValue({ userId: 1, username: 'admin', roleId: 1, roleName: 'Admin', allowedCompanies: [1] });
+        queryResults = [{ recordset: [{ TSqlQuery: 'SELECT 1', ReportName: 'Test' }] }];
+
+        const res = await POST(createRequest({ reportId: 1, companyId: '3' }));
+        expect(res.status).toBe(403);
+        expect(connectToCompanyDB).not.toHaveBeenCalled();
+    });
+
+    it('returns 403 when the session carries no company list', async () => {
+        getSession.mockResolvedValue({ userId: 1, username: 'admin', roleId: 1, roleName: 'Admin' });
+        queryResults = [{ recordset: [{ TSqlQuery: 'SELECT 1', ReportName: 'Test' }] }];
+
+        const res = await POST(createRequest({ reportId: 1, companyId: 1 }));
+        expect(res.status).toBe(403);
+        expect(connectToCompanyDB).not.toHaveBeenCalled();
+    });
+
+    it('accepts a companyId sent as a string when it is allowed', async () => {
+        queryResults = [
+            { recordset: [{ TSqlQuery: 'SELECT 1', ReportName: 'T' }] },
+            { recordset: [] }, // params
+            { recordset: [] }, // data
+            { recordset: [] }, // activity log
+        ];
+
+        const res = await POST(createRequest({ reportId: 1, companyId: '2' }));
+        expect(res.status).toBe(200);
+        expect(connectToCompanyDB).toHaveBeenCalled();
     });
 
     // ─── Success ────────────────────────────────────────────────
