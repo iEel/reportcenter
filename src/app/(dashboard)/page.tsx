@@ -296,7 +296,9 @@ export default function Home() {
                   <div className="flex gap-1.5 mt-1.5 pl-7">
                     {usageDays.map((d, i) => (
                       <span key={d.date} className={`flex-1 min-w-0 truncate text-center text-[9px] tabular-nums ${i === usageDays.length - 1 ? 'font-semibold text-slate-600 dark:text-slate-300' : 'text-slate-400'}`}>
-                        {d.date.slice(5)}
+                        {/* Phones have ~16px per day: show the day of month; wider screens keep MM-DD */}
+                        <span className="sm:hidden">{Number(d.date.slice(8))}</span>
+                        <span className="hidden sm:inline">{d.date.slice(5)}</span>
                       </span>
                     ))}
                   </div>
