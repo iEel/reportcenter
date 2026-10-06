@@ -36,21 +36,13 @@ vi.mock('@/lib/sql-validator', () => ({
     validateQuery: vi.fn(() => ({ safe: true })),
 }));
 
-// The route cleans up and writes job files; keep the real filesystem out of these tests.
-vi.mock('fs', () => ({
-    default: {
-        existsSync: vi.fn(() => false),
-        readdirSync: vi.fn(() => []),
-        statSync: vi.fn(),
-        unlinkSync: vi.fn(),
-        mkdirSync: vi.fn(),
-        createWriteStream: vi.fn(),
-    },
-}));
+// The background export is tested in src/lib/__tests__/report-job.test.js
+vi.mock('@/lib/report-job', () => ({ runReportJob: vi.fn(async () => {}) }));
 
 import { POST } from '@/app/api/reports/execute-async/route';
 import { getSession } from '@/lib/auth';
 import { connectToCentralDB, connectToCompanyDB } from '@/lib/db';
+import { runReportJob } from '@/lib/report-job';
 
 function createRequest(body) {
     return { json: () => Promise.resolve(body) };
@@ -109,5 +101,22 @@ describe('POST /api/reports/execute-async', () => {
         const res = await POST(createRequest({ reportId: 99, companyId: '1' }));
         expect(res.status).toBe(404);
         expect(connectToCentralDB).toHaveBeenCalled();
+    });
+
+    it('queues the job and runs it in the background with the report details', async () => {
+        queryResults = [
+            { recordset: [] }, // max_concurrent_jobs setting
+            { recordset: [] }, // ReportJobs auto-create
+            { recordset: [{ TSqlQuery: 'SELECT 1', ReportName: 'GL Data' }] },
+            { recordset: [{ 1: 1 }] }, // role mapping
+            { recordset: [{ ParameterName: '@from', InputType: 'date' }] },
+            { recordset: [{ JobId: 27 }] }, // job insert
+        ];
+        const res = await POST(createRequest({ reportId: 5, companyId: '1', parameters: { '@from': '2026-09-01' } }));
+        expect(await res.json()).toEqual({ success: true, jobId: 27 });
+        await vi.waitFor(() => expect(runReportJob).toHaveBeenCalledWith({
+            jobId: 27, userId: 2, companyId: '1', reportName: 'GL Data', tSqlQuery: 'SELECT 1',
+            expectedParams: [{ ParameterName: '@from', InputType: 'date' }], parameters: { '@from': '2026-09-01' },
+        }));
     });
 });

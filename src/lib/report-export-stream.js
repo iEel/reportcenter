@@ -8,8 +8,10 @@ import { createXlsxStreamWriter } from '@/lib/xlsx-stream-writer';
  * as .xlsx, pausing the SQL stream whenever the writer falls behind. Resolves with the number of
  * data rows once the file is complete. Rejects on SQL, write or abort errors; the caller deletes
  * the file. Later recordsets are ignored, matching what `execute` shows.
+ * `onProgress(rowCount)` runs every `progressEvery` rows with the SQL stream held until it settles;
+ * its failures are ignored (background jobs use it for best-effort progress and cancel checks).
  */
-export function streamQueryToXlsx({ sqlRequest, query, filePath, signal }) {
+export function streamQueryToXlsx({ sqlRequest, query, filePath, signal, onProgress, progressEvery = 10000 }) {
     return new Promise((resolve, reject) => {
         if (signal?.aborted) {
             reject(signal.reason ?? new Error('Export aborted'));
@@ -21,6 +23,10 @@ export function streamQueryToXlsx({ sqlRequest, query, filePath, signal }) {
         let rowCount = 0;
         let waitingForDrain = false;
         let settled = false;
+        // The SQL stream may be held for back-pressure and for a progress callback at the same time
+        let holds = 0;
+        const hold = () => { if (holds++ === 0) sqlRequest.pause(); };
+        const release = () => { if (--holds === 0 && !settled) sqlRequest.resume(); };
 
         const fail = (error) => {
             if (settled) return;
@@ -51,11 +57,16 @@ export function streamQueryToXlsx({ sqlRequest, query, filePath, signal }) {
             rowCount++;
             if (!writer.write(row) && !waitingForDrain) {
                 waitingForDrain = true;
-                sqlRequest.pause();
+                hold();
                 writer.once('drain', () => {
                     waitingForDrain = false;
-                    sqlRequest.resume();
+                    release();
                 });
+            }
+            if (onProgress && rowCount % progressEvery === 0) {
+                hold();
+                const rows = rowCount;
+                Promise.resolve().then(() => onProgress(rows)).catch(() => { /* best effort */ }).finally(release);
             }
         });
         sqlRequest.on('error', fail);

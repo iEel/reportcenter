@@ -13,7 +13,7 @@ const REPORT_TIMEOUT = parseInt(process.env.REPORT_REQUEST_TIMEOUT) || 120000;
 /**
  * Export an ordinary report as .xlsx without holding it in memory: rows stream from SQL into a
  * temporary file, and the browser fetches it once from GET /api/reports/export/[id].
- * IsHeavy reports use /api/reports/execute-async instead (CSV kept 24 hours for later download).
+ * IsHeavy reports use /api/reports/execute-async instead (.xlsx kept 24 hours for later download).
  */
 export async function POST(request) {
     let exportId = null;

@@ -176,7 +176,7 @@ export default function StandardReportPage() {
             const confirmed = window.confirm(
                 '⚠️ รายงานนี้ถูกตั้งเป็น "รายงานขนาดใหญ่"\n\n' +
                 'การดึงข้อมูลจะแสดง 50 แถวแรก\n' +
-                'หากต้องการข้อมูลทั้งหมด ใช้ปุ่ม "สร้างไฟล์เบื้องหลัง (CSV)"\n\n' +
+                'หากต้องการข้อมูลทั้งหมด ใช้ปุ่ม "สร้างไฟล์เบื้องหลัง (.xlsx)"\n\n' +
                 'ต้องการดึงข้อมูลต่อหรือไม่?'
             );
             if (!confirmed) return;
@@ -443,7 +443,7 @@ export default function StandardReportPage() {
                                         <>
                                             <button type="button" onClick={() => void startBackgroundJob()} disabled={jobRunning || !!runBlocker} className={secondaryButton}>
                                                 {jobRunning ? <Loader2 className="h-4 w-4 motion-safe:animate-spin" aria-hidden="true" /> : <FileSpreadsheet className="h-4 w-4" aria-hidden="true" />}
-                                                {jobRunning ? 'กำลังสร้างไฟล์…' : 'สร้างไฟล์เบื้องหลัง (CSV)'}
+                                                {jobRunning ? 'กำลังสร้างไฟล์…' : 'สร้างไฟล์เบื้องหลัง (.xlsx)'}
                                             </button>
                                             <span className="text-xs text-slate-500 dark:text-slate-400">รายงานนี้ข้อมูลมาก สร้างไฟล์แล้วดาวน์โหลดจากประวัติได้</span>
                                         </>
@@ -494,7 +494,7 @@ export default function StandardReportPage() {
                     <button type="button" onClick={handleExportExcel} disabled={!reportData || reportData.length === 0 || isExporting || isExecuting || (!!selectedReport?.IsHeavy && jobRunning)}
                         className={secondaryButton + " !h-[30px] !rounded-[7px] !px-2.5 !text-[12.5px]"}>
                         {isExporting ? <RefreshCw className="h-3.5 w-3.5 motion-safe:animate-spin" aria-hidden="true" /> : <Download className="h-3.5 w-3.5" aria-hidden="true" />}
-                        {isExporting ? 'กำลังส่งออก…' : selectedReport?.IsHeavy ? 'ส่งออก CSV' : 'ส่งออก Excel (.xlsx)'}
+                        {isExporting ? 'กำลังส่งออก…' : 'ส่งออก Excel (.xlsx)'}
                     </button>
                 </div>
 

@@ -1,53 +1,14 @@
 import { NextResponse } from 'next/server';
 import sql from 'mssql';
-import { connectToCentralDB, connectToCompanyDB } from '@/lib/db';
+import { connectToCentralDB } from '@/lib/db';
 import { getSession } from '@/lib/auth';
 import { validateQuery } from '@/lib/sql-validator';
-import { numberParameterType } from '@/lib/report-run';
-import fs from 'fs';
-import path from 'path';
+import { runReportJob } from '@/lib/report-job';
 
-const JOBS_DIR = path.join(process.cwd(), 'tmp', 'jobs');
-const BG_JOB_TIMEOUT = parseInt(process.env.BACKGROUND_JOB_TIMEOUT) || 900000; // 15 min default
-const JOBS_MAX_AGE_MS = 24 * 60 * 60 * 1000; // 24 hours
-
-// Auto-cleanup: delete job files older than 24 hours
-async function cleanupOldJobFiles() {
-    try {
-        if (!fs.existsSync(JOBS_DIR)) return;
-
-        const now = Date.now();
-        const files = fs.readdirSync(JOBS_DIR);
-        let deleted = 0;
-
-        for (const file of files) {
-            const filePath = path.join(JOBS_DIR, file);
-            try {
-                const stat = fs.statSync(filePath);
-                if (now - stat.mtimeMs > JOBS_MAX_AGE_MS) {
-                    fs.unlinkSync(filePath);
-                    deleted++;
-                }
-            } catch { }
-        }
-
-        // Also clean old DB records (mark files as expired)
-        if (deleted > 0) {
-            try {
-                const pool = await connectToCentralDB();
-                await pool.request().query(`
-                    UPDATE ReportJobs 
-                    SET FilePath = NULL, ErrorMessage = N'ไฟล์หมดอายุ (24 ชม.)'
-                    WHERE Status = 'done' AND FilePath IS NOT NULL AND CreatedAt < DATEADD(HOUR, -24, GETDATE())
-                `);
-            } catch { }
-            console.log(`[Cleanup] Deleted ${deleted} expired job file(s)`);
-        }
-    } catch (e) {
-        console.warn('[Cleanup] Error:', e.message);
-    }
-}
-
+/**
+ * Queue a background export for an IsHeavy report: answers with the job id at once, then
+ * runReportJob streams the rows into an .xlsx kept 24 hours for download from job history.
+ */
 export async function POST(request) {
     try {
         const session = await getSession(request);
@@ -169,185 +130,9 @@ export async function POST(request) {
         // Return immediately — run query in background
         const responseData = { success: true, jobId };
 
-        // Background execution (non-blocking) — uses STREAMING to avoid OOM on large datasets
-        setImmediate(async () => {
-            try {
-                // Cleanup expired files before creating new ones
-                await cleanupOldJobFiles();
-
-                const companyPool = await connectToCompanyDB(parseInt(companyId));
-                const req = companyPool.request();
-
-                // Bind parameters
-                if (parameters && expectedParams.length > 0) {
-                    for (const ep of expectedParams) {
-                        const paramName = ep.ParameterName.replace('@', '');
-                        const value = parameters[ep.ParameterName];
-                        if (value !== undefined && value !== '') {
-                            switch (ep.InputType) {
-                                case 'date':
-                                    req.input(paramName, sql.Date, value);
-                                    break;
-                                case 'number':
-                                    req.input(paramName, numberParameterType(value), parseFloat(value));
-                                    break;
-                                default:
-                                    req.input(paramName, sql.NVarChar(sql.MAX), value);
-                            }
-                        } else {
-                            req.input(paramName, sql.NVarChar(sql.MAX), null);
-                        }
-                    }
-                }
-
-                // Prepare output directory & file
-                if (!fs.existsSync(JOBS_DIR)) {
-                    fs.mkdirSync(JOBS_DIR, { recursive: true });
-                }
-                const dateStr = new Date().toISOString().split('T')[0];
-                const fileName = `${reportName}_${dateStr}_job${jobId}.csv`;
-                const filePath = path.join(JOBS_DIR, fileName);
-
-                // Helper: escape CSV values (RFC 4180 — handles commas, quotes, newlines, Thai text)
-                const escapeCSV = (val) => {
-                    if (val === null || val === undefined) return '';
-                    const str = String(val);
-                    if (str.includes(',') || str.includes('"') || str.includes('\n') || str.includes('\r')) {
-                        return '"' + str.replace(/"/g, '""') + '"';
-                    }
-                    return str;
-                };
-
-                const writeStream = fs.createWriteStream(filePath, { encoding: 'utf8' });
-                // UTF-8 BOM — ensures Thai characters display correctly in Excel
-                writeStream.write('\uFEFF');
-
-                // === STREAMING MODE ===
-                // Process rows one-at-a-time — constant memory usage (~50MB) regardless of result size
-                req.stream = true;
-                req.timeout = BG_JOB_TIMEOUT;
-
-                let columns = null;
-                let rowCount = 0;
-                let isCancelled = false;
-
-                await new Promise((resolve, reject) => {
-                    // Column metadata arrives first
-                    req.on('recordset', (cols) => {
-                        columns = Object.keys(cols);
-                        writeStream.write(columns.map(escapeCSV).join(',') + '\n');
-                    });
-
-                    // Each row arrives individually — write to CSV immediately
-                    req.on('row', (row) => {
-                        if (isCancelled) return;
-                        rowCount++;
-
-                        const line = columns.map(col => {
-                            const val = row[col];
-                            if (val instanceof Date) {
-                                return escapeCSV(val.toISOString().replace('T', ' ').substring(0, 19));
-                            }
-                            return escapeCSV(val);
-                        }).join(',') + '\n';
-
-                        const canContinue = writeStream.write(line);
-
-                        // Back-pressure: pause SQL stream if file writer is overwhelmed
-                        if (!canContinue) {
-                            req.pause();
-                            writeStream.once('drain', () => req.resume());
-                        }
-
-                        // Every 10,000 rows: update progress + check for cancellation
-                        if (rowCount % 10000 === 0) {
-                            req.pause();
-                            connectToCentralDB().then(checkPool => {
-                                // Update progress (RowCount) for live tracking
-                                checkPool.request()
-                                    .input('JobId', sql.Int, jobId)
-                                    .input('RowCount', sql.Int, rowCount)
-                                    .query('UPDATE ReportJobs SET [RowCount] = @RowCount WHERE JobId = @JobId')
-                                    .catch(() => { /* ignore */ });
-
-                                // Check if user cancelled the job
-                                checkPool.request()
-                                    .input('JobId', sql.Int, jobId)
-                                    .query('SELECT Status FROM ReportJobs WHERE JobId = @JobId')
-                                    .then(check => {
-                                        if (check.recordset[0]?.Status === 'cancelled') {
-                                            isCancelled = true;
-                                            writeStream.destroy();
-                                            try { fs.unlinkSync(filePath); } catch { }
-                                            console.log(`[Job ${jobId}] Cancelled at row ${rowCount}`);
-                                            resolve();
-                                        } else {
-                                            req.resume();
-                                        }
-                                    })
-                                    .catch(() => req.resume());
-                            }).catch(() => req.resume());
-                        }
-                    });
-
-                    req.on('error', (err) => {
-                        writeStream.destroy();
-                        try { fs.unlinkSync(filePath); } catch { }
-                        reject(err);
-                    });
-
-                    req.on('done', () => {
-                        if (isCancelled) return;
-                        writeStream.end(() => resolve());
-                    });
-
-                    // Start the streaming query
-                    req.query(tSqlQuery);
-                });
-
-                if (isCancelled) return;
-
-                // Update job: done
-                const pool2 = await connectToCentralDB();
-                await pool2.request()
-                    .input('JobId', sql.Int, jobId)
-                    .input('FilePath', sql.NVarChar(500), filePath)
-                    .input('FileName', sql.NVarChar(200), fileName)
-                    .input('RowCount', sql.Int, rowCount)
-                    .query('UPDATE ReportJobs SET Status = \'done\', FilePath = @FilePath, FileName = @FileName, [RowCount] = @RowCount, CompletedAt = GETDATE() WHERE JobId = @JobId');
-
-                // Notify user via bell 🔔
-                try {
-                    await pool2.request()
-                        .input('UserId', sql.Int, session.userId)
-                        .input('Title', sql.NVarChar(200), `✅ รายงานเสร็จแล้ว: ${reportName}`)
-                        .input('Message', sql.NVarChar(500), `สร้างเสร็จแล้ว ${rowCount.toLocaleString()} แถว — กดเพื่อดาวน์โหลด`)
-                        .input('Type', sql.NVarChar(20), 'success')
-                        .input('LinkUrl', sql.NVarChar(500), '/reports/job-history')
-                        .query(`INSERT INTO Notifications (UserId, Title, Message, Type, LinkUrl) VALUES (@UserId, @Title, @Message, @Type, @LinkUrl)`);
-                } catch (e) { /* ignore */ }
-
-                console.log(`[Job ${jobId}] Completed: ${rowCount} rows → ${fileName} (streamed)`);
-
-            } catch (error) {
-                console.error(`[Job ${jobId}] Failed:`, error.message);
-                try {
-                    const pool2 = await connectToCentralDB();
-                    await pool2.request()
-                        .input('JobId', sql.Int, jobId)
-                        .input('ErrorMessage', sql.NVarChar(500), error.message?.substring(0, 500))
-                        .query('UPDATE ReportJobs SET Status = \'failed\', ErrorMessage = @ErrorMessage WHERE JobId = @JobId');
-
-                    // Notify user via bell 🔔
-                    await pool2.request()
-                        .input('UserId', sql.Int, session.userId)
-                        .input('Title', sql.NVarChar(200), `❌ รายงานล้มเหลว: ${reportName}`)
-                        .input('Message', sql.NVarChar(500), `${error.message?.substring(0, 300)}`)
-                        .input('Type', sql.NVarChar(20), 'error')
-                        .input('LinkUrl', sql.NVarChar(500), '/reports/job-history')
-                        .query(`INSERT INTO Notifications (UserId, Title, Message, Type, LinkUrl) VALUES (@UserId, @Title, @Message, @Type, @LinkUrl)`);
-                } catch (e) { console.warn('Activity log failed:', e.message); }
-            }
+        // Background execution (non-blocking); the job records its own result and notifies the user
+        setImmediate(() => {
+            void runReportJob({ jobId, userId: session.userId, companyId, reportName, tSqlQuery, expectedParams, parameters });
         });
 
         return NextResponse.json(responseData);

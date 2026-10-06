@@ -86,6 +86,52 @@ describe('streamQueryToXlsx', () => {
         expect(sqlRequest.query).not.toHaveBeenCalled();
     });
 
+    it('reports progress every N rows and holds the SQL stream until the callback settles', async () => {
+        let sent = 0;
+        let paused = false;
+        let finished = false;
+        const events = [];
+        const sqlRequest = fakeSqlRequest(req => {
+            const pump = () => {
+                while (!paused && sent < 25) {
+                    sent++;
+                    req.emit('row', { N: sent });
+                }
+                if (!paused && sent === 25 && !finished) {
+                    finished = true;
+                    req.emit('done', {});
+                }
+            };
+            req.pause.mockImplementation(() => { paused = true; events.push('pause'); });
+            req.resume.mockImplementation(() => { paused = false; events.push('resume'); setImmediate(pump); });
+            req.emit('recordset', { N: { index: 0 } });
+            pump();
+        });
+        const onProgress = vi.fn(async rows => {
+            events.push(`start ${rows}${paused ? ' (paused)' : ''}`);
+            await new Promise(resolve => setTimeout(resolve, 5));
+            events.push(`end ${rows}`);
+        });
+
+        await expect(streamQueryToXlsx({ sqlRequest, query: 'q', filePath, onProgress, progressEvery: 10 })).resolves.toBe(25);
+        expect(events).toEqual([
+            'pause', 'start 10 (paused)', 'end 10', 'resume',
+            'pause', 'start 20 (paused)', 'end 20', 'resume',
+        ]);
+        expect(readRows()).toHaveLength(26);
+    });
+
+    it('keeps exporting when a progress callback fails', async () => {
+        const sqlRequest = fakeSqlRequest(req => {
+            req.emit('recordset', { N: { index: 0 } });
+            for (let i = 1; i <= 3; i++) req.emit('row', { N: i });
+            req.emit('done', {});
+        });
+        const onProgress = vi.fn(async () => { throw new Error('central DB down'); });
+        await expect(streamQueryToXlsx({ sqlRequest, query: 'q', filePath, onProgress, progressEvery: 1 })).resolves.toBe(3);
+        expect(onProgress).toHaveBeenCalledTimes(3);
+    });
+
     it('pauses the SQL stream under back-pressure and resumes after drain', async () => {
         // Like mssql, stop emitting rows while paused and carry on when resumed
         let sent = 0;

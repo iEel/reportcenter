@@ -162,7 +162,7 @@ export default function TemplateReportPage() {
             const confirmed = window.confirm(
                 '⚠️ รายงานนี้ถูกตั้งเป็น "รายงานขนาดใหญ่"\n\n' +
                 'การดึงข้อมูลจะแสดงตัวอย่างเพียงบางส่วน\n' +
-                'หากต้องการข้อมูลทั้งหมด กรุณาใช้ปุ่ม "Export Excel" (จะส่งออกเป็น CSV)\n\n' +
+                'หากต้องการข้อมูลทั้งหมด กรุณาใช้ปุ่ม "Export Excel" (จะสร้างไฟล์ .xlsx เบื้องหลัง)\n\n' +
                 'ต้องการดูตัวอย่างต่อหรือไม่?'
             );
             if (!confirmed) return;
