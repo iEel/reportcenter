@@ -5,7 +5,7 @@ import Link from "next/link";
 import { ArrowRight, BarChart3, FileText, Database, Users, Shield, Clock, Activity, RefreshCw, Calendar, AlertTriangle, Star, Zap } from "lucide-react";
 import { useAuth } from "@/components/providers/AuthProvider";
 import { timeAgo } from '@/lib/dateUtils';
-import { barHeightPercent, fillDailyUsage, localDateKey } from '@/lib/dashboard-chart';
+import { barHeightPercent, fillDailyUsage, localDateKey, shortThaiDate, summarizeUsage } from '@/lib/dashboard-chart';
 
 interface DashboardStats {
   totalReports: number;
@@ -80,6 +80,7 @@ export default function Home() {
   // Every one of the last 14 days, including days without activity
   const usageDays = chartData ? fillDailyUsage(chartData.usagePerDay, localDateKey(new Date())) : [];
   const usageMax = Math.max(0, ...usageDays.map(d => d.count));
+  const usageSummary = summarizeUsage(usageDays);
 
   const greeting = (() => {
     const h = new Date().getHours();
@@ -254,26 +255,61 @@ export default function Home() {
       {isAdmin && chartData && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* Usage per Day Bar Chart */}
-          <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700 p-6">
-            <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-300 mb-4">📊 การใช้งานรายวัน (14 วัน)</h3>
-            {chartData.usagePerDay.length > 0 ? (
-              <div className="flex gap-1 h-32">
-                {usageDays.map(d => (
-                  // Each column fills the row height so the bar's % height has something to resolve against
-                  <div key={d.date} title={`${d.date}: ${d.count.toLocaleString()} ครั้ง`} className="flex-1 min-w-0 h-full flex flex-col items-center gap-1 group">
-                    <span className="text-[10px] text-slate-400 opacity-0 group-hover:opacity-100 transition-opacity">{d.count}</span>
-                    <div className="w-full flex-1 flex items-end">
-                      <div
-                        className="w-full bg-gradient-to-t from-blue-600 to-blue-400 rounded-t-sm transition-all duration-500 hover:from-blue-500 hover:to-blue-300"
-                        style={{ height: `${barHeightPercent(d.count, usageMax)}%` }}
-                      />
+          {/* flex-col: the plot grows to the height of the neighbouring card instead of leaving a gap below */}
+          <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700 p-6 flex flex-col">
+            <div className="flex items-baseline justify-between gap-3 mb-4">
+              <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-300">📊 การใช้งานรายวัน (14 วัน)</h3>
+              {usageSummary.total > 0 && (
+                <span className="text-xs text-slate-400 shrink-0 tabular-nums">รวม {usageSummary.total.toLocaleString()} ครั้ง</span>
+              )}
+            </div>
+            {usageSummary.total > 0 ? (
+              <>
+                <div className="flex-1 min-h-40 flex flex-col">
+                  {/* mt-5 leaves room for the tallest bar's hover count; pl-7 is the gutter for the scale labels */}
+                  <div className="relative flex-1 mt-5 pl-7">
+                    <div aria-hidden="true" className="pointer-events-none absolute inset-0 pl-7">
+                      {[1, 0.5].map(level => (
+                        <div key={level} className="absolute inset-x-0 border-t border-dashed border-slate-200 dark:border-slate-700" style={{ top: `${(1 - level) * 100}%` }}>
+                          <span className="absolute left-0 -translate-x-full -translate-y-1/2 pr-2 text-[10px] leading-none text-slate-400 tabular-nums">
+                            {Math.round(usageMax * level)}
+                          </span>
+                        </div>
+                      ))}
+                      <div className="absolute inset-x-0 bottom-0 border-t border-slate-200 dark:border-slate-700" />
                     </div>
-                    <span className="text-[9px] text-slate-400 truncate w-full text-center">{d.date.slice(5)}</span>
+                    <div className="relative h-full flex items-end gap-1.5">
+                      {usageDays.map(d => (
+                        <div key={d.date} title={`${shortThaiDate(d.date)}: ${d.count.toLocaleString()} ครั้ง`} className="group flex-1 min-w-0 h-full flex items-end">
+                          <div
+                            className="relative w-full rounded-t-[3px] bg-gradient-to-t from-blue-600 to-blue-400 transition-all duration-500 group-hover:from-blue-500 group-hover:to-blue-300"
+                            style={{ height: `${barHeightPercent(d.count, usageMax)}%` }}
+                          >
+                            <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1 text-[10px] font-medium text-slate-500 dark:text-slate-300 tabular-nums opacity-0 group-hover:opacity-100 transition-opacity">
+                              {d.count}
+                            </span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
                   </div>
-                ))}
-              </div>
+                  <div className="flex gap-1.5 mt-1.5 pl-7">
+                    {usageDays.map((d, i) => (
+                      <span key={d.date} className={`flex-1 min-w-0 truncate text-center text-[9px] tabular-nums ${i === usageDays.length - 1 ? 'font-semibold text-slate-600 dark:text-slate-300' : 'text-slate-400'}`}>
+                        {d.date.slice(5)}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+                <div className="mt-4 pt-3 border-t border-slate-100 dark:border-slate-700 flex flex-wrap items-center justify-between gap-x-4 gap-y-1 text-xs text-slate-500 dark:text-slate-400">
+                  <span>เฉลี่ย <span className="font-semibold text-slate-700 dark:text-slate-200 tabular-nums">{usageSummary.average.toLocaleString()}</span> ครั้ง/วัน</span>
+                  {usageSummary.peak && (
+                    <span>สูงสุด <span className="font-semibold text-slate-700 dark:text-slate-200 tabular-nums">{usageSummary.peak.count.toLocaleString()}</span> ครั้ง · {shortThaiDate(usageSummary.peak.date)}</span>
+                  )}
+                </div>
+              </>
             ) : (
-              <p className="text-sm text-slate-400 text-center py-8">ยังไม่มีข้อมูล</p>
+              <p className="flex-1 flex items-center justify-center text-sm text-slate-400 py-8">ยังไม่มีข้อมูล</p>
             )}
           </div>
 

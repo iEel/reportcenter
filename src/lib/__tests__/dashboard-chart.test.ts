@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { barHeightPercent, fillDailyUsage, localDateKey } from '../dashboard-chart';
+import { barHeightPercent, fillDailyUsage, localDateKey, shortThaiDate, summarizeUsage } from '../dashboard-chart';
 
 describe('fillDailyUsage', () => {
     it('returns the last 14 days ending today, with 0 for days without activity', () => {
@@ -48,5 +48,27 @@ describe('localDateKey', () => {
     it('formats the local calendar date as YYYY-MM-DD', () => {
         expect(localDateKey(new Date(2026, 9, 6, 23, 59))).toBe('2026-10-06');
         expect(localDateKey(new Date(2027, 0, 1, 0, 0))).toBe('2027-01-01');
+    });
+});
+
+describe('summarizeUsage', () => {
+    it('totals the window, averages per day and finds the busiest day', () => {
+        const days = fillDailyUsage([
+            { date: '2026-10-01', count: 54 },
+            { date: '2026-10-02', count: 72 },
+            { date: '2026-10-06', count: 25 },
+        ], '2026-10-06');
+        expect(summarizeUsage(days)).toEqual({ total: 151, average: 11, peak: { date: '2026-10-02', count: 72 } });
+    });
+
+    it('reports no peak when there was no activity', () => {
+        expect(summarizeUsage(fillDailyUsage([], '2026-10-06'))).toEqual({ total: 0, average: 0, peak: null });
+    });
+});
+
+describe('shortThaiDate', () => {
+    it('shows a YYYY-MM-DD key as a short Thai day and month', () => {
+        expect(shortThaiDate('2026-10-02')).toBe('2 ต.ค.');
+        expect(shortThaiDate('2027-01-15')).toBe('15 ม.ค.');
     });
 });

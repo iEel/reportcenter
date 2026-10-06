@@ -26,3 +26,15 @@ export function barHeightPercent(count: number, max: number) {
     if (count <= 0 || max <= 0) return 0;
     return Math.max((count / max) * 100, 4);
 }
+
+/** Total, rounded daily average and busiest day of a filled window (peak is null when nothing happened). */
+export function summarizeUsage(days: DailyUsage[]) {
+    const total = days.reduce((sum, day) => sum + day.count, 0);
+    const peak = days.reduce<DailyUsage | null>((best, day) => (day.count > (best?.count ?? 0) ? day : best), null);
+    return { total, average: days.length ? Math.round(total / days.length) : 0, peak };
+}
+
+/** "2026-10-02" → "2 ต.ค." */
+export function shortThaiDate(dateKey: string) {
+    return new Date(`${dateKey}T00:00:00`).toLocaleDateString('th-TH', { day: 'numeric', month: 'short' });
+}
