@@ -4,6 +4,7 @@ import { connectToCentralDB, getCompanyLabelAsync } from '@/lib/db';
 import { verifyToken } from '@/lib/auth';
 import { cookies } from 'next/headers';
 import { sendMail } from '@/lib/email';
+import { EXCEL_MIME, excelFileName, excelWriteOptions } from '@/lib/excel-export';
 
 // Auto-create ReportSchedules table with email fields
 async function ensureTable(pool) {
@@ -358,7 +359,7 @@ export async function PATCH(request) {
         const worksheet = xlsx.utils.json_to_sheet(rows);
         const workbook = xlsx.utils.book_new();
         xlsx.utils.book_append_sheet(workbook, worksheet, 'Report Data');
-        const buffer = xlsx.write(workbook, { bookType: 'xlsb', type: 'buffer' });
+        const buffer = xlsx.write(workbook, { type: 'buffer', ...excelWriteOptions() });
 
         // Build params text for email
         const paramEntries = Object.entries(resolvedParams);
@@ -378,8 +379,9 @@ export async function PATCH(request) {
             subject: `${subject} (Manual)`,
             text: `รายงาน "${sched.ReportName}"\nบริษัท: ${companyName}${paramsText}\nถูกรันด้วยตนเองโดย ${user.fullName}\nพบข้อมูล ${rows.length} รายการ`,
             attachments: [{
-                filename: `${sched.ReportName}_${companyName.split('(')[1]?.replace(')', '') || sched.CompanyId}_${dateStr}.xlsb`,
+                filename: excelFileName(`${sched.ReportName}_${companyName.split('(')[1]?.replace(')', '') || sched.CompanyId}_${dateStr}`),
                 content: buffer,
+                contentType: EXCEL_MIME,
             }],
         });
 

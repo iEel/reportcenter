@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { Activity, Download, Filter, ChevronLeft, ChevronRight, Loader2, Search, Eye, X, ArrowRight, RefreshCw, Trash2, AlertTriangle } from "lucide-react";
 import { formatDateTime } from "@/lib/dateUtils";
 import * as xlsx from 'xlsx';
+import { excelFileName, excelWriteOptions } from "@/lib/excel-export";
 
 const ACTION_COLORS: Record<string, string> = {
     LOGIN: 'bg-blue-100 text-blue-700',
@@ -86,7 +87,7 @@ export default function AuditLogsPage() {
         const ws = xlsx.utils.json_to_sheet(exportData);
         const wb = xlsx.utils.book_new();
         xlsx.utils.book_append_sheet(wb, ws, 'Audit Logs');
-        xlsx.writeFile(wb, `audit_logs_${new Date().toISOString().split('T')[0]}.xlsb`, { bookType: 'xlsb' });
+        xlsx.writeFile(wb, excelFileName(`audit_logs_${new Date().toISOString().split('T')[0]}`), excelWriteOptions());
     };
 
     const handleBulkDelete = async () => {

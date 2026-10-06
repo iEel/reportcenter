@@ -6,6 +6,7 @@ import * as xlsx from 'xlsx';
 import { useAuth } from "@/components/providers/AuthProvider";
 import { useToast } from "@/components/providers/ToastProvider";
 import TypeaheadInput from "@/components/TypeaheadInput";
+import { excelFileName, excelWriteOptions } from "@/lib/excel-export";
 
 export default function TemplateReportPage() {
     const { user } = useAuth();
@@ -310,7 +311,7 @@ export default function TemplateReportPage() {
         const worksheet = xlsx.utils.json_to_sheet(exportData, { header: exportCols });
         const workbook = xlsx.utils.book_new();
         xlsx.utils.book_append_sheet(workbook, worksheet, "Report Data");
-        xlsx.writeFile(workbook, `${reportName}_${dateStr}.xlsb`, { bookType: 'xlsb' });
+        xlsx.writeFile(workbook, excelFileName(`${reportName}_${dateStr}`), excelWriteOptions());
     };
 
     const handleJobDownload = () => {

@@ -69,7 +69,7 @@ export default function JobHistoryPage() {
             const url = window.URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
-            a.download = fileName || `report_${jobId}.xlsb`;
+            a.download = fileName || `report_${jobId}.csv`;
             document.body.appendChild(a);
             a.click();
             window.URL.revokeObjectURL(url);

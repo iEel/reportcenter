@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import sql from 'mssql';
 import { connectToCentralDB } from '@/lib/db';
 import { getSession } from '@/lib/auth';
+import { EXCEL_MIME } from '@/lib/excel-export';
 import fs from 'fs';
 
 export async function GET(request, props) {
@@ -39,7 +40,7 @@ export async function GET(request, props) {
         const isCSV = job.FileName?.endsWith('.csv');
         const contentType = isCSV
             ? 'text/csv; charset=utf-8'
-            : 'application/vnd.ms-excel.sheet.binary.macroEnabled.12';
+            : EXCEL_MIME;
 
         return new Response(fileBuffer, {
             headers: {

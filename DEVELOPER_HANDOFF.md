@@ -132,6 +132,7 @@ reportcenter/
 │   │   ├── auth.js                       # JWT sign/verify (jose) + getSession()
 │   │   ├── db.js                         # MSSQL connection pool manager
 │   │   ├── email.js                      # Email sender (Microsoft Graph API primary + SMTP password fallback)
+│   │   ├── excel-export.js               # Shared .xlsx write options (ZIP compression + shared strings), file name, MIME
 │   │   ├── ldap.js                       # LDAP/AD integration (bind, lookup, search with person-only filter)
 │   │   ├── sql-validator.js              # SQL query security validator (blocklist DML/DDL/metadata/procs)
 │   │   ├── report-selector.ts             # Pure report filtering/grouping/keyboard navigation helpers
@@ -743,6 +744,7 @@ curl http://localhost:4000/api/cron/execute-schedules?secret=rc-cron-secret-2026
 - แก้ปัญหา JavaScript `Object.keys()` เรียง numeric key ก่อน string key (เช่น "1", "2" ขึ้นก่อน "FY")
 - ส่ง `columns` array กลับใน API response → frontend + Excel export ใช้ลำดับเดียวกัน
 - Excel export ใช้ `xlsx.utils.json_to_sheet()` พร้อม `{ header }` option บังคับลำดับคอลัมน์
+- ทุกจุดที่เขียนไฟล์ Excel ใช้ `excelWriteOptions()` / `excelFileName()` จาก `src/lib/excel-export.js` (`.xlsx` + `compression` + `bookSST`) อย่าเขียน `bookType` เองในแต่ละหน้า
 
 ### Report Parameter Reordering
 - หน้าเพิ่ม/แก้ไขรายงาน: แต่ละ parameter card มีปุ่ม **▲▼** สำหรับเลื่อนลำดับ
@@ -827,7 +829,7 @@ npm run test:watch
 - [x] Conditional sidebar menus based on user's available report types
 - [x] TemplateEditor component (click-to-insert, preview mode)
 - [x] Parameter Typeahead search (LookupQuery + TypeaheadInput + auto-execute on select)
-- [x] Excel Binary Workbook (.xlsb) — ไฟล์เล็กกว่า .xlsx 50-70%
+- [x] Excel export เป็น `.xlsx` แบบบีบอัด + shared strings (เปลี่ยนจาก `.xlsb` 2026-10-06: SheetJS 0.18.5 เขียน xlsb ช้ากว่าราว 13–18 เท่าและไฟล์ใหญ่กว่า ดู `docs/12_DECISION_LOG.md`)
 - [x] Session timeout auto-logout (JWT 8h + frontend 401 redirect + 5min recheck)
 - [x] SQL Injection guard for LookupQuery (SELECT-only whitelist)
 - [x] Environment validation on startup (`src/lib/env-check.js`)

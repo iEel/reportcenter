@@ -3,6 +3,7 @@ import sql from 'mssql';
 import { connectToCentralDB, connectToCompanyDB, getCompanyLabelAsync } from '@/lib/db';
 import { sendMail } from '@/lib/email';
 import { validateQuery } from '@/lib/sql-validator';
+import { EXCEL_MIME, excelFileName, excelWriteOptions } from '@/lib/excel-export';
 import * as xlsx from 'xlsx';
 import fs from 'fs';
 import path from 'path';
@@ -188,7 +189,7 @@ export async function GET(request) {
                 const ws = xlsx.utils.json_to_sheet(data);
                 const wb = xlsx.utils.book_new();
                 xlsx.utils.book_append_sheet(wb, ws, 'Report');
-                const excelBuffer = xlsx.write(wb, { type: 'buffer', bookType: 'xlsb' });
+                const excelBuffer = xlsx.write(wb, { type: 'buffer', ...excelWriteOptions() });
 
                 // 3. Send email
                 const companyName = await getCompanyLabelAsync(schedule.CompanyId);
@@ -225,9 +226,9 @@ export async function GET(request) {
                     `,
                     attachments: [
                         {
-                            filename: `${schedule.ReportName}_${companyName.split('(')[1]?.replace(')', '') || schedule.CompanyId}_${dateStr.replace(/\//g, '-')}.xlsb`,
+                            filename: excelFileName(`${schedule.ReportName}_${companyName.split('(')[1]?.replace(')', '') || schedule.CompanyId}_${dateStr.replace(/\//g, '-')}`),
                             content: excelBuffer,
-                            contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                            contentType: EXCEL_MIME,
                         },
                     ],
                 };

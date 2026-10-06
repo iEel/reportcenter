@@ -10,6 +10,7 @@ import ReportSelector from "@/components/ReportSelector";
 import CompanySelector from "@/components/CompanySelector";
 import Link from "next/link";
 import { formatDate } from '@/lib/dateUtils';
+import { excelFileName, excelWriteOptions } from '@/lib/excel-export';
 import type { StandardReport } from '@/lib/report-selector';
 import { exportProblem, getRunBlocker, pickReportCompany, shouldConfirmEmptyConditions, startJobPolling } from '@/lib/standard-report';
 
@@ -349,7 +350,7 @@ export default function StandardReportPage() {
             const worksheet = xlsx.utils.json_to_sheet(data.data, { header: exportCols });
             const workbook = xlsx.utils.book_new();
             xlsx.utils.book_append_sheet(workbook, worksheet, "Report Data");
-            xlsx.writeFile(workbook, `${reportName}_${dateStr}.xlsb`, { bookType: 'xlsb' });
+            xlsx.writeFile(workbook, excelFileName(`${reportName}_${dateStr}`), excelWriteOptions());
             toast(`ส่งออก ${data.data.length.toLocaleString()} รายการเรียบร้อย`, 'success');
         } catch {
             toast('ไม่สามารถส่งออกข้อมูลได้', 'error');
@@ -510,7 +511,7 @@ export default function StandardReportPage() {
                     <button type="button" onClick={handleExportExcel} disabled={!reportData || reportData.length === 0 || isExporting || isExecuting || (!!selectedReport?.IsHeavy && jobRunning)}
                         className={secondaryButton + " !h-[30px] !rounded-[7px] !px-2.5 !text-[12.5px]"}>
                         {isExporting ? <RefreshCw className="h-3.5 w-3.5 motion-safe:animate-spin" aria-hidden="true" /> : <Download className="h-3.5 w-3.5" aria-hidden="true" />}
-                        {isExporting ? 'กำลังส่งออก…' : selectedReport?.IsHeavy ? 'ส่งออก CSV' : 'ส่งออก Excel (.xlsb)'}
+                        {isExporting ? 'กำลังส่งออก…' : selectedReport?.IsHeavy ? 'ส่งออก CSV' : 'ส่งออก Excel (.xlsx)'}
                     </button>
                 </div>
 
