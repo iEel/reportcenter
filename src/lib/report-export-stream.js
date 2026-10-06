@@ -10,8 +10,9 @@ import { createXlsxStreamWriter } from '@/lib/xlsx-stream-writer';
  * the file. Later recordsets are ignored, matching what `execute` shows.
  * `onProgress(rowCount)` runs every `progressEvery` rows with the SQL stream held until it settles;
  * its failures are ignored (background jobs use it for best-effort progress and cancel checks).
+ * `sheetName` names the sheet (default 'Report Data').
  */
-export function streamQueryToXlsx({ sqlRequest, query, filePath, signal, onProgress, progressEvery = 10000 }) {
+export function streamQueryToXlsx({ sqlRequest, query, filePath, signal, onProgress, progressEvery = 10000, sheetName }) {
     return new Promise((resolve, reject) => {
         if (signal?.aborted) {
             reject(signal.reason ?? new Error('Export aborted'));
@@ -41,7 +42,7 @@ export function streamQueryToXlsx({ sqlRequest, query, filePath, signal, onProgr
         signal?.addEventListener('abort', onAbort, { once: true });
 
         const startWriter = (columns) => {
-            writer = createXlsxStreamWriter(columns);
+            writer = createXlsxStreamWriter(columns, { sheetName });
             writer.on('error', fail);
             writer.pipe(file);
         };

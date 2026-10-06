@@ -3,8 +3,9 @@
 import { useState, useEffect } from "react";
 import { Activity, Download, Filter, ChevronLeft, ChevronRight, Loader2, Search, Eye, X, ArrowRight, RefreshCw, Trash2, AlertTriangle } from "lucide-react";
 import { formatDateTime } from "@/lib/dateUtils";
-import * as xlsx from 'xlsx';
-import { excelFileName, excelWriteOptions } from "@/lib/excel-export";
+import { useToast } from "@/components/providers/ToastProvider";
+import { exportOutcome } from "@/lib/standard-report";
+import { triggerBrowserDownload } from "@/lib/file-download";
 import { actionLabel, actionOptionLabel } from "@/lib/audit-actions";
 
 const ACTION_COLORS: Record<string, string> = {
@@ -50,6 +51,9 @@ export default function AuditLogsPage() {
     const [companies, setCompanies] = useState<{ companyId: number; label: string; name: string }[]>([]);
     const setFilter = (key: keyof AuditFilters) => (value: string) => setFilters(current => ({ ...current, [key]: value }));
 
+    const { toast } = useToast();
+    const [isExporting, setIsExporting] = useState(false);
+
     // Bulk delete
     const [showDeleteModal, setShowDeleteModal] = useState(false);
     const [deleteBefore, setDeleteBefore] = useState('');
@@ -90,19 +94,29 @@ export default function AuditLogsPage() {
 
     const totalPages = Math.ceil(totalRows / pageSize);
 
-    const handleExport = () => {
-        if (logs.length === 0) return;
-        const exportData = logs.map(l => ({
-            'วันที่': l.CreatedAt,
-            'ผู้ใช้': l.UserName,
-            'ประเภท': l.ActionType,
-            'รายละเอียด': l.Details,
-            'บริษัท': l.CompanyId,
-        }));
-        const ws = xlsx.utils.json_to_sheet(exportData);
-        const wb = xlsx.utils.book_new();
-        xlsx.utils.book_append_sheet(wb, ws, 'Audit Logs');
-        xlsx.writeFile(wb, excelFileName(`audit_logs_${new Date().toISOString().split('T')[0]}`), excelWriteOptions());
+    // Every row matching the applied filters, not just this page: the server streams them into a
+    // temporary .xlsx and the browser only downloads the file
+    const handleExport = async () => {
+        if (isExporting || totalRows === 0) return;
+        setIsExporting(true);
+        try {
+            const res = await fetch('/api/admin/audit-logs/export', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(applied),
+            });
+            const outcome = exportOutcome(await res.json());
+            if (outcome.kind === 'error') toast(outcome.message, 'error');
+            else if (outcome.kind === 'empty') toast('ไม่มีข้อมูลให้ส่งออก', 'info');
+            else {
+                triggerBrowserDownload(outcome.url);
+                toast(`ส่งออก ${outcome.rowCount.toLocaleString()} รายการเรียบร้อย`, 'success');
+            }
+        } catch {
+            toast('ไม่สามารถส่งออกข้อมูลได้', 'error');
+        } finally {
+            setIsExporting(false);
+        }
     };
 
     const handleBulkDelete = async () => {
@@ -231,8 +245,10 @@ export default function AuditLogsPage() {
                     <button onClick={refresh} className="p-2.5 bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-600 transition-colors" title="รีเฟรช">
                         <RefreshCw className={`w-5 h-5 ${isLoading ? 'animate-spin' : ''}`} />
                     </button>
-                    <button onClick={handleExport} className="flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors text-sm font-medium shadow-sm">
-                        <Download className="w-4 h-4" />
+                    <button onClick={handleExport} disabled={isExporting || totalRows === 0}
+                        title={`ส่งออกทุกรายการ${filtered ? 'ตามตัวกรอง' : ''} (${totalRows.toLocaleString()} รายการ)`}
+                        className="flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 disabled:opacity-60 disabled:cursor-not-allowed transition-colors text-sm font-medium shadow-sm">
+                        {isExporting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
                         <span className="hidden sm:inline">Export</span> Excel
                     </button>
                 </div>

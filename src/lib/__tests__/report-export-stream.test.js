@@ -158,3 +158,15 @@ describe('streamQueryToXlsx', () => {
         expect(sqlRequest.resume).toHaveBeenCalled();
     });
 });
+
+describe('streamQueryToXlsx sheet name', () => {
+    it('names the sheet from the sheetName option', async () => {
+        const sqlRequest = fakeSqlRequest(req => {
+            req.emit('recordset', { A: { index: 0 } });
+            req.emit('row', { A: 1 });
+            req.emit('done', {});
+        });
+        await streamQueryToXlsx({ sqlRequest, query: 'q', filePath, sheetName: 'Audit Logs' });
+        expect(xlsx.readFile(filePath).SheetNames).toEqual(['Audit Logs']);
+    });
+});
