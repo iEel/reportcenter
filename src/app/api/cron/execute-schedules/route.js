@@ -5,6 +5,7 @@ import { sendMail } from '@/lib/email';
 import { validateQuery } from '@/lib/sql-validator';
 import { EXCEL_MIME, excelFileName, excelWriteOptions } from '@/lib/excel-export';
 import { sweepExportFiles } from '@/lib/export-files';
+import { numberParameterType } from '@/lib/report-run';
 import * as xlsx from 'xlsx';
 import fs from 'fs';
 import path from 'path';
@@ -166,7 +167,7 @@ export async function GET(request) {
 
                             if (value !== undefined && value !== '') {
                                 if (def.InputType === 'date') request.input(paramName, sql.Date, value);
-                                else if (def.InputType === 'number') request.input(paramName, sql.Decimal, parseFloat(value));
+                                else if (def.InputType === 'number') request.input(paramName, numberParameterType(value), parseFloat(value));
                                 else request.input(paramName, sql.NVarChar(sql.MAX), value);
                             } else {
                                 request.input(paramName, sql.NVarChar(sql.MAX), null);

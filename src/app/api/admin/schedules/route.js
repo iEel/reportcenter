@@ -5,6 +5,7 @@ import { verifyToken } from '@/lib/auth';
 import { cookies } from 'next/headers';
 import { sendMail } from '@/lib/email';
 import { EXCEL_MIME, excelFileName, excelWriteOptions } from '@/lib/excel-export';
+import { numberParameterType } from '@/lib/report-run';
 
 // Auto-create ReportSchedules table with email fields
 async function ensureTable(pool) {
@@ -341,7 +342,7 @@ export async function PATCH(request) {
 
                     if (value !== undefined && value !== '') {
                         if (def.InputType === 'date') reqExec.input(paramName, sql.Date, value);
-                        else if (def.InputType === 'number') reqExec.input(paramName, sql.Decimal, parseFloat(value));
+                        else if (def.InputType === 'number') reqExec.input(paramName, numberParameterType(value), parseFloat(value));
                         else reqExec.input(paramName, sql.NVarChar(sql.MAX), value);
                     } else {
                         reqExec.input(paramName, sql.NVarChar(sql.MAX), null);

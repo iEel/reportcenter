@@ -3,6 +3,7 @@ import sql from 'mssql';
 import { connectToCentralDB, connectToCompanyDB } from '@/lib/db';
 import { getSession } from '@/lib/auth';
 import { validateQuery } from '@/lib/sql-validator';
+import { numberParameterType } from '@/lib/report-run';
 import fs from 'fs';
 import path from 'path';
 
@@ -188,7 +189,7 @@ export async function POST(request) {
                                     req.input(paramName, sql.Date, value);
                                     break;
                                 case 'number':
-                                    req.input(paramName, sql.Decimal, parseFloat(value));
+                                    req.input(paramName, numberParameterType(value), parseFloat(value));
                                     break;
                                 default:
                                     req.input(paramName, sql.NVarChar(sql.MAX), value);

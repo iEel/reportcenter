@@ -45,6 +45,19 @@ export async function prepareReportRun({ session, reportId, companyId, centralPo
     return { ok: true, tSqlQuery, reportName, expectedParams: paramResult.recordset };
 }
 
+const MAX_NUMBER_SCALE = 8;
+
+/**
+ * SQL type for a 'number' report parameter: decimal(18, s) with s = the decimals in the value, so 12.5 reaches
+ * SQL Server as 12.5. A bare sql.Decimal is declared decimal(18, 0) by tedious, which rounded 12.5 to 13;
+ * whole numbers keep exactly that declaration, so CAST(@n AS varchar) and friends behave as before.
+ */
+export function numberParameterType(value) {
+    const text = String(parseFloat(value));
+    const decimals = text.includes('e') ? MAX_NUMBER_SCALE : (text.split('.')[1] || '').length;
+    return sql.Decimal(18, Math.min(decimals, MAX_NUMBER_SCALE));
+}
+
 /** Bind the report's declared parameters; values the user left empty are sent as NULL. */
 export function bindReportParameters(request, expectedParams, parameters) {
     if (!parameters) return;
@@ -60,7 +73,7 @@ export function bindReportParameters(request, expectedParams, parameters) {
                 request.input(paramName, sql.Date, value);
                 break;
             case 'number':
-                request.input(paramName, sql.Decimal, parseFloat(value));
+                request.input(paramName, numberParameterType(value), parseFloat(value));
                 break;
             default:
                 request.input(paramName, sql.NVarChar(sql.MAX), value);

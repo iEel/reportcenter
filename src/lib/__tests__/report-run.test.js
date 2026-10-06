@@ -3,7 +3,8 @@ import sql from 'mssql';
 
 vi.mock('@/lib/sql-validator', () => ({ validateQuery: vi.fn(() => ({ safe: true })) }));
 
-import { prepareReportRun, bindReportParameters } from '@/lib/report-run';
+import TediousDecimal from 'tedious/lib/data-types/decimal';
+import { prepareReportRun, bindReportParameters, numberParameterType } from '@/lib/report-run';
 import { validateQuery } from '@/lib/sql-validator';
 
 let results;
@@ -106,7 +107,7 @@ describe('bindReportParameters', () => {
         const req = { input: vi.fn() };
         bindReportParameters(req, expected, { '@from': '2026-01-01', '@amount': '12.5', '@name': 'ก', '@blank': '' });
         expect(req.input).toHaveBeenCalledWith('from', sql.Date, '2026-01-01');
-        expect(req.input).toHaveBeenCalledWith('amount', sql.Decimal, 12.5);
+        expect(req.input).toHaveBeenCalledWith('amount', expect.objectContaining({ type: sql.Decimal, precision: 18, scale: 1 }), 12.5);
         expect(req.input).toHaveBeenCalledWith('name', expect.objectContaining({ type: sql.NVarChar }), 'ก');
         expect(req.input).toHaveBeenCalledWith('blank', expect.objectContaining({ type: sql.NVarChar }), null);
     });
@@ -115,5 +116,33 @@ describe('bindReportParameters', () => {
         const req = { input: vi.fn() };
         bindReportParameters(req, expected, undefined);
         expect(req.input).not.toHaveBeenCalled();
+    });
+});
+
+describe('numberParameterType', () => {
+    const scaleOf = value => numberParameterType(value).scale;
+
+    it('keeps whole numbers as decimal(18, 0), exactly as before', () => {
+        expect(numberParameterType('2026')).toEqual({ type: sql.Decimal, precision: 18, scale: 0 });
+        expect(numberParameterType('-15')).toEqual({ type: sql.Decimal, precision: 18, scale: 0 });
+    });
+
+    it('keeps the decimals the user typed', () => {
+        expect(scaleOf('12.5')).toBe(1);
+        expect(scaleOf('0.125')).toBe(3);
+        expect(scaleOf('-3.25')).toBe(2);
+    });
+
+    it('caps the scale at 8 decimals, including exponent notation', () => {
+        expect(scaleOf('1.123456789')).toBe(8);
+        expect(scaleOf('1e-7')).toBe(8);
+    });
+
+    it('makes SQL Server receive 12.5, not 13', () => {
+        const type = numberParameterType('12.5');
+        const parameter = { value: 12.5, precision: type.precision, scale: type.scale };
+        expect(TediousDecimal.declaration(parameter)).toBe('decimal(18, 1)');
+        const sent = Buffer.concat([...TediousDecimal.generateParameterData(parameter, {})]);
+        expect(sent.readUInt32LE(1)).toBe(125); // unscaled integer: 125 × 10^-1 = 12.5
     });
 });
