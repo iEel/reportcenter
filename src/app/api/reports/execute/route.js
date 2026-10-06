@@ -2,7 +2,8 @@ import { NextResponse } from 'next/server';
 import sql from 'mssql';
 import { connectToCentralDB, connectToCompanyDB, getCompanyLabel } from '@/lib/db';
 import { getSession } from '@/lib/auth';
-import { validateQuery } from '@/lib/sql-validator';
+import { bindReportParameters, prepareReportRun } from '@/lib/report-run';
+import { orderedColumns } from '@/lib/report-columns';
 
 // Report queries can be complex — allow longer timeout (default 120s)
 const REPORT_TIMEOUT = parseInt(process.env.REPORT_REQUEST_TIMEOUT) || 120000;
@@ -10,111 +11,34 @@ const REPORT_TIMEOUT = parseInt(process.env.REPORT_REQUEST_TIMEOUT) || 120000;
 export async function POST(request) {
     try {
         const body = await request.json();
-        const { reportId, companyId, parameters, page, pageSize, exportAll } = body;
+        const { reportId, companyId, parameters, page, pageSize } = body;
 
         if (!reportId || !companyId) {
             return NextResponse.json({ success: false, message: "ReportId and CompanyId are required" }, { status: 400 });
         }
 
-        // 1. Fetch Report Query from Central Database
-        const centralPool = await connectToCentralDB();
-        const reportResult = await centralPool.request()
-            .input('ReportId', sql.Int, parseInt(reportId))
-            .query('SELECT TSqlQuery, ReportName FROM Reports WHERE ReportId = @ReportId');
-
-        if (reportResult.recordset.length === 0) {
-            return NextResponse.json({ success: false, message: "Report not found" }, { status: 404 });
-        }
-
-        const tSqlQuery = reportResult.recordset[0].TSqlQuery;
-        const reportName = reportResult.recordset[0].ReportName;
-
-        // 1.1 SQL Security Validation — block dangerous queries
-        const validation = validateQuery(tSqlQuery);
-        if (!validation.safe) {
-            // Log blocked attempt
-            try {
-                const sess = await getSession(request);
-                if (sess) {
-                    await centralPool.request()
-                        .input('UserId', sql.Int, sess.userId)
-                        .input('ReportId', sql.Int, parseInt(reportId))
-                        .input('ActionType', sql.NVarChar(50), 'BLOCKED_QUERY')
-                        .input('Details', sql.NVarChar(500), `ถูกบล็อก: "${reportName}" — ${validation.reason}`)
-                        .query(`INSERT INTO ActivityLogs (UserId, ReportId, ActionType, Details) VALUES (@UserId, @ReportId, @ActionType, @Details)`);
-                }
-            } catch (e) { /* ignore log errors */ }
-            return NextResponse.json({
-                success: false,
-                message: `คำสั่ง SQL ถูกบล็อกเนื่องจากมีคำสั่งที่ไม่อนุญาต: ${validation.reason}`
-            }, { status: 403 });
-        }
-
-        // 1.5 Authorization — check user's role has access to this report
         const session = await getSession(request);
         if (!session) {
             return NextResponse.json({ success: false, message: 'Unauthorized' }, { status: 401 });
         }
 
-        // Company access applies to every role, admins included (same rule as search-param)
-        const allowed = session.allowedCompanies || [];
-        if (!allowed.includes(parseInt(companyId))) {
-            return NextResponse.json({ success: false, message: 'คุณไม่มีสิทธิ์เข้าถึงข้อมูลบริษัทนี้' }, { status: 403 });
+        const centralPool = await connectToCentralDB();
+        const run = await prepareReportRun({ session, reportId, companyId, centralPool });
+        if (!run.ok) {
+            return NextResponse.json({ success: false, message: run.message }, { status: run.status });
         }
+        const { tSqlQuery, reportName, expectedParams } = run;
 
-        const isAdmin = session.roleName?.toLowerCase() === 'admin';
-        if (!isAdmin) {
-            const accessCheck = await centralPool.request()
-                .input('ReportId', sql.Int, parseInt(reportId))
-                .input('RoleId', sql.Int, session.roleId)
-                .query('SELECT 1 FROM ReportRoleMapping WHERE ReportId = @ReportId AND RoleId = @RoleId');
-
-            if (accessCheck.recordset.length === 0) {
-                return NextResponse.json(
-                    { success: false, message: 'คุณไม่มีสิทธิ์เข้าถึงรายงานนี้' },
-                    { status: 403 }
-                );
-            }
-        }
-
-        // 2. Fetch Expected Parameters from Central Database to ensure type safety (basic protection)
-        const paramResult = await centralPool.request()
-            .input('ReportId', sql.Int, parseInt(reportId))
-            .query('SELECT ParameterName, InputType FROM ReportParameters WHERE ReportId = @ReportId');
-
-        const expectedParams = paramResult.recordset;
-
-        // 3. Get connection to the specified Company Database
         const companyPool = await connectToCompanyDB(companyId);
 
-        // Helper: bind parameters to a request + set report timeout
+        // Bind parameters to a request + set report timeout
         const bindParams = (req) => {
             req.timeout = REPORT_TIMEOUT;
-            if (parameters && expectedParams.length > 0) {
-                for (const expectedParam of expectedParams) {
-                    const paramName = expectedParam.ParameterName.replace('@', '');
-                    let value = parameters[expectedParam.ParameterName];
-
-                    if (value !== undefined && value !== '') {
-                        switch (expectedParam.InputType) {
-                            case 'date':
-                                req.input(paramName, sql.Date, value);
-                                break;
-                            case 'number':
-                                req.input(paramName, sql.Decimal, parseFloat(value));
-                                break;
-                            default:
-                                req.input(paramName, sql.NVarChar(sql.MAX), value);
-                        }
-                    } else {
-                        req.input(paramName, sql.NVarChar(sql.MAX), null);
-                    }
-                }
-            }
+            bindReportParameters(req, expectedParams, parameters);
         };
 
         // 4. Execute — with or without pagination
-        let usePagination = page && pageSize && !exportAll;
+        let usePagination = page && pageSize;
         let dataResult;
         let totalRows = 0;
 
@@ -123,14 +47,7 @@ export async function POST(request) {
         const captureColumns = (result) => {
             if (capturedColumns) return; // already captured
             const meta = result?.recordset?.columns;
-            if (meta) {
-                // Sort by mssql index to preserve original SQL SELECT order
-                // (Object.keys/entries reorders numeric-like keys like "1","2","10")
-                capturedColumns = Object.entries(meta)
-                    .sort((a, b) => (a[1].index ?? 0) - (b[1].index ?? 0))
-                    .map(([name]) => name)
-                    .filter(n => n !== '_rowNum'); // exclude pagination helper column
-            }
+            if (meta) capturedColumns = orderedColumns(meta);
         };
 
         if (usePagination) {
@@ -236,37 +153,26 @@ export async function POST(request) {
 
         // 5. Log Activity (non-blocking, don't fail if table doesn't exist)
         try {
-            if (session) {
-                const actionType = exportAll ? 'EXPORT_EXCEL' : 'EXECUTE_REPORT';
-                const companyLabel = getCompanyLabel(companyId);
-
-                // Build parameter summary for details
-                let paramSummary = '';
-                if (parameters && Object.keys(parameters).length > 0) {
-                    const paramParts = Object.entries(parameters)
-                        .filter(([, v]) => v !== undefined && v !== null && v !== '')
-                        .map(([k, v]) => `${k}=${v}`);
-                    if (paramParts.length > 0) paramSummary = ` | ${paramParts.join(', ')}`;
-                }
-
-                const details = exportAll
-                    ? `Export Excel "${reportName}" (${companyLabel}) ได้ ${totalRows.toLocaleString()} แถว${paramSummary}`
-                    : `รัน "${reportName}" (${companyLabel}) ได้ ${totalRows.toLocaleString()} แถว${paramSummary}`;
-
-                // Store full parameter data in ChangeData for detailed audit
-                const changeData = parameters && Object.keys(parameters).length > 0
-                    ? JSON.stringify({ parameters })
-                    : null;
-
-                await centralPool.request()
-                    .input('UserId', sql.Int, session.userId)
-                    .input('ReportId', sql.Int, parseInt(reportId))
-                    .input('CompanyId', sql.Int, parseInt(companyId))
-                    .input('ActionType', sql.NVarChar(50), actionType)
-                    .input('Details', sql.NVarChar(sql.MAX), details)
-                    .input('ChangeData', sql.NVarChar(sql.MAX), changeData)
-                    .query(`INSERT INTO ActivityLogs (UserId, ReportId, CompanyId, ActionType, Details, ChangeData) VALUES (@UserId, @ReportId, @CompanyId, @ActionType, @Details, @ChangeData)`);
+            const companyLabel = getCompanyLabel(companyId);
+            let paramSummary = '';
+            if (parameters && Object.keys(parameters).length > 0) {
+                const paramParts = Object.entries(parameters)
+                    .filter(([, v]) => v !== undefined && v !== null && v !== '')
+                    .map(([k, v]) => `${k}=${v}`);
+                if (paramParts.length > 0) paramSummary = ` | ${paramParts.join(', ')}`;
             }
+            const changeData = parameters && Object.keys(parameters).length > 0
+                ? JSON.stringify({ parameters })
+                : null;
+
+            await centralPool.request()
+                .input('UserId', sql.Int, session.userId)
+                .input('ReportId', sql.Int, parseInt(reportId))
+                .input('CompanyId', sql.Int, parseInt(companyId))
+                .input('ActionType', sql.NVarChar(50), 'EXECUTE_REPORT')
+                .input('Details', sql.NVarChar(sql.MAX), `รัน "${reportName}" (${companyLabel}) ได้ ${totalRows.toLocaleString()} แถว${paramSummary}`)
+                .input('ChangeData', sql.NVarChar(sql.MAX), changeData)
+                .query(`INSERT INTO ActivityLogs (UserId, ReportId, CompanyId, ActionType, Details, ChangeData) VALUES (@UserId, @ReportId, @CompanyId, @ActionType, @Details, @ChangeData)`);
         } catch (logErr) {
             // Silently fail — logging should never break execution
             console.warn('Activity log failed (table may not exist):', logErr.message);
