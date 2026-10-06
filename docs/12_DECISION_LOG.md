@@ -1,5 +1,17 @@
 # ReportCenter — Decision log
 
+## 2026-10-06 — พารามิเตอร์ชนิด number ส่งเป็น decimal(18, ทศนิยมที่พิมพ์) และคงปุ่ม Export Excel หน้า Template ไว้ก่อน
+
+**สถานะ:** ผู้ใช้สั่ง "ปุ่ม Export Excel ในหน้า Template เก็บไว้ก่อน และทำเรื่องงานแยกที่เปิดไว้"; แก้บน branch `claude/fix-number-param-decimals` ยังไม่ merge/deploy
+
+- พารามิเตอร์ `InputType = 'number'` ทุกเส้นทาง (execute, export, execute-async, รันกำหนดการด้วยมือ, cron) ผูกด้วย `numberParameterType()` ใน `src/lib/report-run.js`: `decimal(18, s)` โดย s = จำนวนทศนิยมของค่าที่ส่งมา (สูงสุด 8)
+- ค่าจำนวนเต็มยังเป็น `decimal(18, 0)` เท่าเดิม จึงไม่เปลี่ยนผลของ `CAST(@n AS varchar)` หรือการต่อข้อความในรายงานเดิม (ถ้าใช้ scale คงที่ เช่น 6 จะได้ `2026.000000`)
+- ปุ่ม Export Excel ในหน้า Template คงไว้ตามเดิม (ส่งออกจากข้อมูลที่โหลดมาแล้วด้วย SheetJS .xlsx) ยังไม่ตัดสินว่าจะเอาออก
+
+**เหตุผลและหลักฐาน:** อ่าน `node_modules/tedious/lib/data-types/decimal.js`: ไม่มี precision/scale → ประกาศ `decimal(18, 0)` และส่ง `Math.round(value)` จึงได้ 13 จาก 12.5 test ใหม่ตรวจค่าที่ tedious ส่งจริง (125 × 10⁻¹) และมี guard ไม่ให้มี `sql.Decimal,` แบบไม่ระบุ scale ใน `src` อีก
+
+**ขอบเขต:** ไม่ได้ทดสอบกับ SQL Server จริงหรือไล่ดูว่ารายงานใดใช้พารามิเตอร์ number แบบมีทศนิยม; รายงานที่เคยได้ผลจากค่าที่ถูกปัดจะเปลี่ยนผลเมื่อใส่ทศนิยม (ซึ่งเป็นผลที่ถูกต้อง)
+
 ## 2026-10-06 — ส่งออก Excel รายงานทั่วไปแบบ stream ที่ server และไม่เก็บไฟล์
 
 **สถานะ:** ผู้ใช้อนุมัติ spec `docs/superpowers/specs/2026-10-06-streaming-xlsx-export-design.md` และแผน `docs/superpowers/plans/2026-10-06-streaming-xlsx-export.md`; แก้บน branch `claude/export-format-xlsb-xlsx-592f13` ยังไม่ merge/deploy

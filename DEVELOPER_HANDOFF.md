@@ -137,7 +137,7 @@ reportcenter/
 │   │   ├── excel-export.js               # Shared .xlsx write options (ZIP compression + shared strings), file name, MIME, safeFileBase
 │   │   ├── xlsx-stream-writer.js         # Streaming .xlsx writer (Transform: rows in, bytes out; bounded memory, column widths, sheet split)
 │   │   ├── report-export-stream.js       # Stream an mssql query into an .xlsx file with back-pressure (first recordset only)
-│   │   ├── report-run.js                 # Shared report checks (lookup, SQL validation, company, role) + parameter binding
+│   │   ├── report-run.js                 # Shared report checks (lookup, SQL validation, company, role) + parameter binding; numberParameterType(): 'number' params as decimal(18, decimals typed ≤ 8) — never bind a bare sql.Decimal (tedious sends decimal(18,0) and rounds 12.5 → 13)
 │   │   ├── report-columns.js             # Column names in SQL SELECT order from mssql metadata
 │   │   ├── export-files.js               # tmp/exports store for ordinary exports (single download, 15-min sweep)
 │   │   ├── content-disposition.js        # Content-Disposition with RFC 5987 filename* for Thai file names
