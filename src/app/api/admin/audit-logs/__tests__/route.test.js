@@ -24,7 +24,7 @@ beforeEach(() => {
     vi.clearAllMocks();
     queries = [];
     getSession.mockResolvedValue({ userId: 1, roleName: 'Admin' });
-    getCompanyList.mockResolvedValue([{ companyId: 1, label: 'Sonic Interfreight (SNI)', name: 'SNI' }]);
+    getCompanyList.mockResolvedValue([{ companyId: 1, label: 'SNI', name: 'Sonic Interfreight' }]);
     connectToCentralDB.mockResolvedValue({
         request: () => {
             const inputs = {};
@@ -64,7 +64,7 @@ describe('GET /api/admin/audit-logs', () => {
     it('returns the reports and companies the new filters offer', async () => {
         const data = await (await get('page=1')).json();
         expect(data.reports).toEqual([{ ReportId: 12, ReportName: 'AP Aged Balance' }]);
-        expect(data.companies).toEqual([{ companyId: 1, label: 'Sonic Interfreight (SNI)' }]);
+        expect(data.companies).toEqual([{ companyId: 1, label: 'SNI', name: 'Sonic Interfreight' }]);
         expect(data.totalRows).toBe(1);
     });
 });

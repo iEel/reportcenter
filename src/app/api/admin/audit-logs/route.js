@@ -71,7 +71,7 @@ export async function GET(request) {
         const reportsResult = await pool.request().query(`
             SELECT ReportId, ReportName FROM Reports ORDER BY ReportName
         `);
-        const companies = (await getCompanyList()).map(({ companyId, label }) => ({ companyId, label }));
+        const companies = (await getCompanyList()).map(({ companyId, label, name }) => ({ companyId, label, name }));
 
         return NextResponse.json({
             success: true,

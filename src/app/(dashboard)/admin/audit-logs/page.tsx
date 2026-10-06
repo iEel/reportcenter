@@ -47,7 +47,7 @@ export default function AuditLogsPage() {
     const [actionTypes, setActionTypes] = useState<string[]>([]);
     const [users, setUsers] = useState<any[]>([]);
     const [reports, setReports] = useState<{ ReportId: number; ReportName: string }[]>([]);
-    const [companies, setCompanies] = useState<{ companyId: number; label: string }[]>([]);
+    const [companies, setCompanies] = useState<{ companyId: number; label: string; name: string }[]>([]);
     const setFilter = (key: keyof AuditFilters) => (value: string) => setFilters(current => ({ ...current, [key]: value }));
 
     // Bulk delete
@@ -278,7 +278,7 @@ export default function AuditLogsPage() {
                         <span className={labelClass}>บริษัท</span>
                         <select value={filters.companyId} onChange={e => setFilter('companyId')(e.target.value)} className={fieldClass}>
                             <option value="">ทุกบริษัท</option>
-                            {companies.map(c => <option key={c.companyId} value={c.companyId}>{c.label}</option>)}
+                            {companies.map(c => <option key={c.companyId} value={c.companyId}>{c.name && c.name !== c.label ? `${c.label} · ${c.name}` : c.label}</option>)}
                         </select>
                     </label>
                     <label className="block">
