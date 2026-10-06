@@ -8,6 +8,7 @@ function makeReq() {
         input: vi.fn((name, _type, value) => { inputs[name] = value; return req; }),
         query: vi.fn(async text => {
             const s = globalThis.__rolesPut;
+            if (text.includes('SELECT RoleName FROM Roles')) return { recordset: [{ RoleName: 'Reviewers' }] };
             s.statements.push({ text, inputs: { ...inputs } });
             if (s.failOn && text.includes(s.failOn)) throw Object.assign(new Error('statement failed'), { number: s.failNumber });
             return { recordset: [], rowsAffected: [1] };

@@ -97,6 +97,12 @@ export async function POST(request) {
             return NextResponse.json({ success: false, message: 'ชื่อต้องไม่เกิน 150 ตัวอักษร' }, { status: 400 });
         }
 
+        const isLdap = (AuthType || 'local').toLowerCase() === 'ldap';
+        // A Local account needs its own initial password; there is no shared default
+        if (!isLdap && !PasswordHash) {
+            return NextResponse.json({ success: false, message: 'กรุณาตั้งรหัสผ่านเริ่มต้นสำหรับบัญชี Local' }, { status: 400 });
+        }
+
         const pool = await connectToCentralDB();
 
         // Auto-migrate: add new columns if missing
@@ -127,12 +133,11 @@ export async function POST(request) {
             return NextResponse.json({ success: false, message: "Username already exists" }, { status: 400 });
         }
 
-        const isLdap = (AuthType || 'local').toLowerCase() === 'ldap';
         let hashedPassword = null;
 
         if (!isLdap) {
             // Local user: hash password
-            const rawPassword = PasswordHash || 'P@ssw0rd123';
+            const rawPassword = PasswordHash;
             const { valid, errors } = validatePassword(rawPassword);
             if (!valid) {
                 return NextResponse.json(
@@ -212,6 +217,11 @@ export async function PUT(request) {
         // Input length validation
         if (FullName.length > 150) {
             return NextResponse.json({ success: false, message: 'ชื่อต้องไม่เกิน 150 ตัวอักษร' }, { status: 400 });
+        }
+
+        // An admin cannot lock themselves out: no self-suspend, no change of own group
+        if (parseInt(UserId) === session.userId && (!IsActive || parseInt(RoleId) !== session.roleId)) {
+            return NextResponse.json({ success: false, message: 'ระงับหรือเปลี่ยนกลุ่มสิทธิ์ของบัญชีตัวเองไม่ได้' }, { status: 400 });
         }
 
         const pool = await connectToCentralDB();

@@ -39,18 +39,23 @@ vi.mock('mssql', () => {
         return obj;
     }
 
-    const Transaction = vi.fn().mockImplementation(() => ({
-        begin: vi.fn(() => Promise.resolve()),
-        commit: vi.fn(() => Promise.resolve()),
-        rollback: vi.fn(() => Promise.resolve()),
-        request: vi.fn(() => mockReq()),
-    }));
-    const PreparedStatement = vi.fn().mockImplementation(() => ({
-        input: vi.fn(),
-        prepare: vi.fn(() => Promise.resolve()),
-        execute: vi.fn(() => Promise.resolve()),
-        unprepare: vi.fn(() => Promise.resolve()),
-    }));
+    // `new` needs function implementations (arrow functions are not constructible)
+    const Transaction = vi.fn().mockImplementation(function () {
+        return {
+            begin: vi.fn(() => Promise.resolve()),
+            commit: vi.fn(() => Promise.resolve()),
+            rollback: vi.fn(() => Promise.resolve()),
+            request: vi.fn(() => mockReq()),
+        };
+    });
+    const PreparedStatement = vi.fn().mockImplementation(function () {
+        return {
+            input: vi.fn(),
+            prepare: vi.fn(() => Promise.resolve()),
+            execute: vi.fn(() => Promise.resolve()),
+            unprepare: vi.fn(() => Promise.resolve()),
+        };
+    });
     return {
         default: {
             Transaction,
@@ -72,6 +77,7 @@ vi.mock('@/lib/auth', () => ({
 }));
 
 import { POST, GET } from '@/app/api/admin/reports/route';
+import sql from 'mssql';
 import { getSession } from '@/lib/auth';
 import { connectToCentralDB } from '@/lib/db';
 
@@ -123,6 +129,17 @@ describe('admin/reports route', () => {
         // Transaction mocking with vi.mock hoisting makes this complex
         // The route's Transaction-based flow is covered via integration/E2E testing
         it.todo('creates report and returns reportId');
+
+        it('saves the chosen groups even when the old Public flag is sent', async () => {
+            getSession.mockResolvedValue({ userId: 1, roleName: 'Admin' });
+            globalThis.__adminTest.queryResults = [{ recordset: [{ ReportId: 99 }] }];
+            const res = await POST(createRequest({ report: { ReportName: 'T', TSqlQuery: 'SELECT 1', IsPublic: true, Roles: [2, 3] } }));
+            expect(res.status).toBe(200);
+            const statements = sql.PreparedStatement.mock.results.map(result => result.value);
+            const roleStatement = statements.find(statement => statement.prepare.mock.calls.some(([text]) => text.includes('ReportRoleMapping')));
+            expect(roleStatement).toBeTruthy();
+            expect(roleStatement.execute).toHaveBeenCalledTimes(2);
+        });
 
         it('returns 500 on database error', async () => {
             getSession.mockResolvedValue({ userId: 1, roleName: 'Admin' });

@@ -3,6 +3,16 @@ import sql from 'mssql';
 import { connectToCentralDB } from '@/lib/db';
 import { getSession } from '@/lib/auth';
 
+const ADMIN_NAME_RESERVED = 'ชื่อ Admin สงวนไว้สำหรับผู้ดูแลระบบ';
+const isAdminName = name => typeof name === 'string' && name.trim().toLowerCase() === 'admin';
+
+async function findRoleName(pool, roleId) {
+    const result = await pool.request()
+        .input('RoleId', sql.Int, roleId)
+        .query('SELECT RoleName FROM Roles WHERE RoleId = @RoleId');
+    return result.recordset[0]?.RoleName ?? null;
+}
+
 // GET: List all roles with their assigned reports
 export async function GET(request) {
     try {
@@ -73,6 +83,9 @@ export async function POST(request) {
         if (roleName.trim().length > 50) {
             return NextResponse.json({ success: false, message: 'ชื่อ Role ต้องไม่เกิน 50 ตัวอักษร' }, { status: 400 });
         }
+        if (isAdminName(roleName)) {
+            return NextResponse.json({ success: false, message: ADMIN_NAME_RESERVED }, { status: 400 });
+        }
 
         const pool = await connectToCentralDB();
 
@@ -134,9 +147,22 @@ export async function PUT(request) {
         if (!rename && !replace && !addReports.length && !removeReports.length) {
             return NextResponse.json({ success: false, message: 'ไม่มีข้อมูลที่ต้องบันทึก' }, { status: 400 });
         }
+        if (rename && isAdminName(roleName)) {
+            return NextResponse.json({ success: false, message: ADMIN_NAME_RESERVED }, { status: 400 });
+        }
 
         const pool = await connectToCentralDB();
         const id = parseInt(roleId);
+
+        // The Admin group defines who is an administrator; its name and access are fixed
+        const current = await findRoleName(pool, id);
+        if (current === null) {
+            return NextResponse.json({ success: false, message: 'ไม่พบกลุ่มสิทธิ์นี้' }, { status: 404 });
+        }
+        if (isAdminName(current)) {
+            return NextResponse.json({ success: false, message: 'แก้ไขกลุ่ม Admin ไม่ได้' }, { status: 400 });
+        }
+
         transaction = pool.transaction();
         await transaction.begin();
 
@@ -209,6 +235,10 @@ export async function DELETE(request) {
         }
 
         const pool = await connectToCentralDB();
+
+        if (isAdminName(await findRoleName(pool, parseInt(roleId)))) {
+            return NextResponse.json({ success: false, message: 'ลบกลุ่ม Admin ไม่ได้' }, { status: 400 });
+        }
 
         // Check if users are assigned to this role
         const check = await pool.request()

@@ -16,6 +16,9 @@ export async function PUT(request) {
         if (!userIds || !Array.isArray(userIds) || userIds.length === 0) {
             return NextResponse.json({ success: false, message: 'No user IDs provided' }, { status: 400 });
         }
+        if (!isActive && userIds.some(id => parseInt(id) === session.userId)) {
+            return NextResponse.json({ success: false, message: 'ระงับบัญชีของตัวเองไม่ได้' }, { status: 400 });
+        }
 
         const pool = await connectToCentralDB();
 

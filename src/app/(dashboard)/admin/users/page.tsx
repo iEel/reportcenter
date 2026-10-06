@@ -9,6 +9,7 @@ import AccessibleDialog from "@/components/ui/AccessibleDialog";
 import useUnsavedChanges from "@/hooks/useUnsavedChanges";
 import { applyAdProfile, changeAdUsername, getUserAccessSummary, hasUserDraftChanges, isAdAccount, isCurrentUser, type UserAccessRole, type UserAccessReport, type UserAccessCompany } from "@/lib/user-access";
 import { forcePageLeave } from "@/lib/page-leave-guard";
+import { validatePassword } from "@/lib/password-rules";
 
 interface ManagedUser {
     UserId: number; Username: string; FullName: string; RoleId: number | null;
@@ -390,6 +391,13 @@ export default function AdminUsersPage() {
             toast('กรุณากรอก Username', 'error');
             return;
         }
+        if (!editMode && !isAdUser) {
+            const passwordCheck = validatePassword(formData.PasswordHash);
+            if (!passwordCheck.valid) {
+                toast('รหัสผ่านเริ่มต้น: ' + passwordCheck.errors.join(', '), 'error');
+                return;
+            }
+        }
         if (!formData.RoleId) {
             toast('กรุณาเลือกกลุ่มสิทธิ์', 'error');
             return;
@@ -685,9 +693,9 @@ export default function AdminUsersPage() {
                             {editMode && <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">เปลี่ยนข้อมูลบัญชีและรหัสผ่านที่ Active Directory</p>}
                         </div> : <div><label htmlFor="user-full-name" className={labelClass}>ชื่อ-นามสกุล <span className="text-red-500">*</span></label><input id="user-full-name" data-autofocus={editMode || undefined} value={formData.FullName} onChange={event => setFormData({ ...formData, FullName: event.target.value })} className={inputClass} /></div>}
                         {!editMode && !isAdUser && <div>
-                            <label htmlFor="user-password" className={labelClass}>รหัสผ่านเริ่มต้น</label>
+                            <label htmlFor="user-password" className={labelClass}>รหัสผ่านเริ่มต้น <span className="text-red-500">*</span></label>
                             <div className="relative"><input id="user-password" type={showPassword ? 'text' : 'password'} autoComplete="new-password" value={formData.PasswordHash} onChange={event => setFormData({ ...formData, PasswordHash: event.target.value })} className={`${inputClass} pr-11`} /><button type="button" onClick={() => setShowPassword(!showPassword)} aria-label={showPassword ? 'ซ่อนรหัสผ่าน' : 'แสดงรหัสผ่าน'} className="absolute right-2 top-1 rounded p-2 text-slate-500">{showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}</button></div>
-                            <p className="mt-1.5 text-xs text-slate-500 dark:text-slate-400">หากระบุรหัสผ่าน ใช้ขั้นต่ำ 8 ตัว พร้อม A–Z ตัวเลข และอักขระพิเศษ หากเว้นว่าง ระบบใช้ค่าเริ่มต้นเดิม</p>
+                            <p className="mt-1.5 text-xs text-slate-500 dark:text-slate-400">อย่างน้อย 8 ตัว มีตัวพิมพ์ใหญ่ A–Z ตัวเลข และอักขระพิเศษ แจ้งรหัสนี้ให้ผู้ใช้เองโดยตรง</p>
                         </div>}
                     </section>
                     <section className="space-y-4 border-t border-slate-200 pt-5 dark:border-slate-700">

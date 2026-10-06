@@ -17,11 +17,13 @@ interface AccessibleDialogProps {
 /** Native modal semantics keep focus inside the top dialog, including confirmations. */
 export default function AccessibleDialog({ open, onClose, title, description, children, footer, wide, variant = 'dialog' }: AccessibleDialogProps) {
     const ref = useRef<HTMLDialogElement>(null);
+    const wantOpen = useRef(open);
     const titleId = useId();
     const descriptionId = useId();
 
     useEffect(() => {
         const dialog = ref.current;
+        wantOpen.current = open;
         if (!dialog) return;
         if (open && !dialog.open) {
             dialog.showModal();
@@ -32,7 +34,15 @@ export default function AccessibleDialog({ open, onClose, title, description, ch
     }, [open]);
 
     return <dialog ref={ref} aria-labelledby={titleId} aria-describedby={description ? descriptionId : undefined}
-        onCancel={event => { event.preventDefault(); onClose(); }}
+        // Chrome/Edge make a repeated Esc non-cancelable and close the dialog themselves. Then the page still
+        // thinks it is open, so put it back and run the normal (possibly guarded) close instead.
+        onCancel={event => { if (!event.cancelable) return; event.preventDefault(); onClose(); }}
+        onClose={() => {
+            const dialog = ref.current;
+            if (!wantOpen.current || !dialog || dialog.open) return;
+            dialog.showModal();
+            onClose();
+        }}
         onClick={event => { if (event.target === ref.current) onClose(); }}
         className={`rc-dialog overflow-hidden border border-slate-200 bg-white p-0 text-slate-900 shadow-2xl dark:border-slate-700 dark:bg-slate-800 dark:text-white ${variant === 'drawer' ? 'rc-drawer' : `m-auto max-h-[calc(100dvh-2rem)] w-[calc(100%-2rem)] rounded-2xl ${wide ? 'max-w-2xl' : 'max-w-lg'}`}`}>
         <div className={`flex flex-col ${variant === 'drawer' ? 'max-h-full' : 'max-h-[calc(100dvh-2rem-2px)]'}`} onClick={event => event.stopPropagation()}>

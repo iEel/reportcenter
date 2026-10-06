@@ -85,8 +85,8 @@ export async function POST(request) {
                 await paramStmt.unprepare();
             }
 
-            // 3. Insert Roles Mapping if not public
-            if (!report.IsPublic && report.Roles && report.Roles.length > 0) {
+            // 3. Insert Roles Mapping — access always comes from groups; IsPublic grants nothing (decision 2026-10-06)
+            if (report.Roles && report.Roles.length > 0) {
                 const roleStmt = new sql.PreparedStatement(transaction);
                 roleStmt.input('ReportId', sql.Int);
                 roleStmt.input('RoleId', sql.Int);
