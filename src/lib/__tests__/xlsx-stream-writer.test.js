@@ -87,6 +87,32 @@ describe('createXlsxStreamWriter', () => {
         expect(sheet.J2).toBeUndefined();
     });
 
+    it("matches Excel's 1900 serials, where serial 60 is the phantom 1900-02-29", async () => {
+        const buffer = await writeXlsx(['D'], [
+            { D: new Date(Date.UTC(1900, 0, 1)) },   // SQL Server's usual "no date" placeholder
+            { D: new Date(Date.UTC(1900, 1, 28)) },
+            { D: new Date(Date.UTC(1900, 2, 1)) },
+            { D: new Date(Date.UTC(1900, 0, 1, 12)) },
+        ]);
+        const sheet = read(buffer).Sheets['Report Data'];
+        expect(sheet.A2).toMatchObject({ t: 'n', v: 1, z: 'yyyy-mm-dd' });
+        expect(sheet.A3.v).toBe(59);
+        expect(sheet.A4.v).toBe(61);
+        expect(sheet.A5.v).toBeCloseTo(1.5, 9);
+    });
+
+    it('writes dates Excel cannot show (before 1900) as text instead of ####', async () => {
+        const buffer = await writeXlsx(['D'], [
+            { D: new Date(Date.UTC(1753, 0, 1)) },
+            { D: new Date('0001-01-01T10:20:30Z') },
+            { D: new Date(Date.UTC(1899, 11, 31)) },
+        ]);
+        const sheet = read(buffer).Sheets['Report Data'];
+        expect(sheet.A2).toMatchObject({ t: 's', v: '1753-01-01' });
+        expect(sheet.A3).toMatchObject({ t: 's', v: '0001-01-01 10:20:30' });
+        expect(sheet.A4).toMatchObject({ t: 's', v: '1899-12-31' });
+    });
+
     it('cuts text at 32,767 characters', async () => {
         const buffer = await writeXlsx(['T'], [{ T: 'ก'.repeat(40000) }]);
         expect(read(buffer).Sheets['Report Data'].A2.v).toHaveLength(32767);

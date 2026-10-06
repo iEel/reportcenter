@@ -61,7 +61,7 @@ Cell rules:
 | finite number | number |
 | `NaN`, `±Infinity` | omitted |
 | boolean | boolean |
-| `Date` | Excel serial from UTC (`ms / 86400000 + 25569`, matching mssql's default `useUTC`); style `yyyy-mm-dd` when the UTC time is 00:00:00.000, otherwise `yyyy-mm-dd hh:mm:ss` |
+| `Date` | Excel serial from UTC (`ms / 86400000 + 25569`, matching mssql's default `useUTC`), minus 1 below serial 61 because Excel counts a phantom 1900-02-29; style `yyyy-mm-dd` when the UTC time is 00:00:00.000, otherwise `yyyy-mm-dd hh:mm:ss`. Dates before 1900-01-01, which Excel shows as `####`, are written as text in the same format |
 | string | inline string, XML-escaped, characters invalid in XML 1.0 removed, cut to 32,767 characters |
 | `Buffer` | string `0x` + hex, then the string rule |
 | anything else (including `bigint`) | `String(value)`, then the string rule |

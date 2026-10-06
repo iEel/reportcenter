@@ -67,9 +67,18 @@ function cellXml(ref, value) {
         const ms = value.getTime();
         if (Number.isNaN(ms)) return '';
         // mssql reads DATE/DATETIME as UTC (useUTC default), so the UTC fields are the stored value
-        const style = ms % DAY_MS === 0 ? STYLE_DATE : STYLE_DATETIME;
-        return `<c r="${ref}" s="${style}"><v>${ms / DAY_MS + EXCEL_DAYS_TO_1970}</v></c>`;
+        const dateOnly = ms % DAY_MS === 0;
+        let serial = ms / DAY_MS + EXCEL_DAYS_TO_1970;
+        // Excel cannot show dates before 1900 (it would print ####), so keep them as text
+        if (serial < 2) return textCellXml(ref, value.toISOString().slice(0, dateOnly ? 10 : 19).replace('T', ' '));
+        // Excel counts a 1900-02-29 that never existed (serial 60), so earlier serials sit one lower
+        if (serial < 61) serial -= 1;
+        return `<c r="${ref}" s="${dateOnly ? STYLE_DATE : STYLE_DATETIME}"><v>${serial}</v></c>`;
     }
+    return textCellXml(ref, value);
+}
+
+function textCellXml(ref, value) {
     return `<c r="${ref}" t="inlineStr"><is><t xml:space="preserve">${cellText(value)}</t></is></c>`;
 }
 
