@@ -108,7 +108,7 @@ reportcenter/
 │   │           ├── execute/route.js      # POST: run T-SQL on company DB (ROW_NUMBER pagination + client-side fallback + column order from mssql metadata + ORDER BY semicolon auto-strip)
 │   │           ├── parameters/route.js   # GET: report parameters (auto-migrate LookupQuery column)
 │   │           ├── search-param/route.js # GET: typeahead search for parameters with LookupQuery
-│   │           ├── execute-async/route.js # POST: background job — mssql streaming + CSV (constant memory, no OOM on 1M+ rows)
+│   │           ├── execute-async/route.js # POST: queue background job (IsHeavy) → src/lib/report-job.js streams to .xlsx in tmp/jobs (kept 24 h)
 │   │           ├── jobs/[id]/route.js    # GET: poll job status | PATCH: cancel running job
 │   │           ├── jobs/[id]/download/route.js # GET: stream job file from disk | HEAD: check before download
 │   │           ├── export/route.js       # POST: ordinary-report .xlsx export — mssql streaming → tmp/exports (bounded memory), returns downloadId
@@ -136,7 +136,8 @@ reportcenter/
 │   │   ├── email.js                      # Email sender (Microsoft Graph API primary + SMTP password fallback)
 │   │   ├── excel-export.js               # Shared .xlsx write options (ZIP compression + shared strings), file name, MIME, safeFileBase
 │   │   ├── xlsx-stream-writer.js         # Streaming .xlsx writer (Transform: rows in, bytes out; bounded memory, column widths, sheet split)
-│   │   ├── report-export-stream.js       # Stream an mssql query into an .xlsx file with back-pressure (first recordset only)
+│   │   ├── report-export-stream.js       # Stream an mssql query into an .xlsx file with back-pressure (first recordset only); optional onProgress(rows) every N rows
+│   │   ├── report-job.js                 # Background job runner for IsHeavy reports: .xlsx in tmp/jobs, progress/cancel every 10,000 rows, done/failed + bell, 24-h cleanup
 │   │   ├── report-run.js                 # Shared report checks (lookup, SQL validation, company, role) + parameter binding; numberParameterType(): 'number' params as decimal(18, decimals typed ≤ 8) — never bind a bare sql.Decimal (tedious sends decimal(18,0) and rounds 12.5 → 13)
 │   │   ├── report-columns.js             # Column names in SQL SELECT order from mssql metadata
 │   │   ├── export-files.js               # tmp/exports store for ordinary exports (single download, 15-min sweep)
@@ -616,10 +617,10 @@ curl http://localhost:4000/api/cron/execute-schedules?secret=rc-cron-secret-2026
 ### Background Job System (Heavy Reports)
 - Admin ติ๊ก **"รายงานขนาดใหญ่ (Background Job)"** ที่หน้าเพิ่ม/แก้ไขรายงาน → เซ็ต `IsHeavy = 1`
 - Report ปกติ → `POST /api/reports/export` สร้าง .xlsx แบบ stream ที่ server แล้วดาวน์โหลดผ่าน `GET /api/reports/export/[id]` ครั้งเดียว ลบไฟล์ทันที (ไม่เก็บ 24 ชม., ไม่เข้าประวัติ/กระดิ่ง; ไฟล์ค้างกวาดทิ้งเมื่อเกิน 15 นาที) — การเก็บไฟล์ให้ดาวน์โหลดภายหลังมีไว้เฉพาะรายงาน IsHeavy
-- Report IsHeavy → `POST /api/reports/execute-async` → สร้าง Job record → รัน query ใน background (timeout 15 นาที) → สร้าง CSV → disk
+- Report IsHeavy → `POST /api/reports/execute-async` → สร้าง Job record → รัน query ใน background (timeout 15 นาที) → `runReportJob` (`src/lib/report-job.js`) เขียน .xlsx ลง disk (เปลี่ยนจาก CSV 2026-10-06; ไฟล์ .csv เก่ายังดาวน์โหลดได้จนหมดอายุ) เกิน 1,048,575 แถวแยกเป็นชีตถัดไป
 - **Direct Background Export button** 📤: รายงาน IsHeavy แสดงปุ่ม **"Export (Background)"** สีเขียวข้างปุ่ม "ดึงข้อมูล" → กดแล้วส่งตรงไป Background Job **โดยไม่ต้องดึงข้อมูลมาแสดงก่อน** (ประหยัดเวลาและ RAM)
 - **Streaming mode** (`req.stream = true`): ใช้ `mssql` streaming API ประมวลผลทีละแถว → memory คงที่ ~50MB ไม่ว่าจะมีกี่แถว (รองรับ 1M+ rows ไม่ OOM)
-- **Back-pressure handling**: ถ้า file writer เขียนไม่ทัน → หยุด SQL stream รอ → กลับมาเขียนต่อ
+- **Back-pressure handling**: ถ้า xlsx writer เขียนไม่ทัน → หยุด SQL stream รอ → กลับมาเขียนต่อ (ช่วงอัปเดต progress/เช็กยกเลิกก็หยุด stream ไว้เช่นกัน)
 - **Live progress**: อัพเดท `RowCount` ใน DB ทุก 10,000 แถว → frontend แสดง "กำลังประมวลผล 120,000 แถว..." แบบ live (รีเฟรชทุก 10 วินาที)
 - **Concurrent job limit**: จำกัดจำนวน job ที่รันพร้อมกันต่อ user (default 2, ตั้งค่าได้ที่ Admin Settings > ความปลอดภัย)
 - Frontend poll `GET /api/reports/jobs/{id}` ทุก 3 วินาที → แสดง banner: running/done/failed
@@ -887,7 +888,7 @@ npm run test:watch
 - [x] SQL Editor hint — IN() clause usage tip with STRING_SPLIT + Compatibility Level requirement (≥130)
 - [x] Report Categories expandable list — card-style rows (like roles page) showing reports per category as chip/tag badges
 - [x] Manage Reports category filter — dropdown next to search bar (all/none/specific category) with violet accent on active
-- [x] Background Job streaming — mssql streaming API prevents OOM on large datasets (1M+ rows, constant ~50MB memory)
+- [x] Background Job streaming — mssql streaming API prevents OOM on large datasets; output .xlsx since 2026-10-06 (1,000,000 synthetic rows: peak RSS 132 MB at a 48 MB heap)
 - [x] Background Job notifications — bell alert (✅/❌) when job completes/fails + clickable LinkUrl to job history page
 - [x] Notification auto-cleanup — read notifications deleted after 30 days, unread after 90 days (cron)
 - [x] Concurrent job limit — admin-configurable `max_concurrent_jobs` setting (default 2, 0=unlimited) enforced on execute-async
