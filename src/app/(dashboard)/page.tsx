@@ -5,6 +5,7 @@ import Link from "next/link";
 import { ArrowRight, BarChart3, FileText, Database, Users, Shield, Clock, Activity, RefreshCw, Calendar, AlertTriangle, Star, Zap } from "lucide-react";
 import { useAuth } from "@/components/providers/AuthProvider";
 import { timeAgo } from '@/lib/dateUtils';
+import { barHeightPercent, fillDailyUsage, localDateKey } from '@/lib/dashboard-chart';
 
 interface DashboardStats {
   totalReports: number;
@@ -75,6 +76,10 @@ export default function Home() {
       }).catch(() => { });
     }
   }, [isAdmin]);
+
+  // Every one of the last 14 days, including days without activity
+  const usageDays = chartData ? fillDailyUsage(chartData.usagePerDay, localDateKey(new Date())) : [];
+  const usageMax = Math.max(0, ...usageDays.map(d => d.count));
 
   const greeting = (() => {
     const h = new Date().getHours();
@@ -252,21 +257,20 @@ export default function Home() {
           <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700 p-6">
             <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-300 mb-4">📊 การใช้งานรายวัน (14 วัน)</h3>
             {chartData.usagePerDay.length > 0 ? (
-              <div className="flex items-end gap-1 h-32">
-                {chartData.usagePerDay.map((d: any, i: number) => {
-                  const max = Math.max(...chartData.usagePerDay.map((x: any) => x.count));
-                  const pct = max > 0 ? (d.count / max) * 100 : 0;
-                  return (
-                    <div key={i} className="flex-1 flex flex-col items-center gap-1 group">
-                      <span className="text-[10px] text-slate-400 opacity-0 group-hover:opacity-100 transition-opacity">{d.count}</span>
+              <div className="flex gap-1 h-32">
+                {usageDays.map(d => (
+                  // Each column fills the row height so the bar's % height has something to resolve against
+                  <div key={d.date} title={`${d.date}: ${d.count.toLocaleString()} ครั้ง`} className="flex-1 min-w-0 h-full flex flex-col items-center gap-1 group">
+                    <span className="text-[10px] text-slate-400 opacity-0 group-hover:opacity-100 transition-opacity">{d.count}</span>
+                    <div className="w-full flex-1 flex items-end">
                       <div
                         className="w-full bg-gradient-to-t from-blue-600 to-blue-400 rounded-t-sm transition-all duration-500 hover:from-blue-500 hover:to-blue-300"
-                        style={{ height: `${Math.max(pct, 4)}%` }}
+                        style={{ height: `${barHeightPercent(d.count, usageMax)}%` }}
                       />
-                      <span className="text-[9px] text-slate-400 truncate w-full text-center">{d.date?.slice(5)}</span>
                     </div>
-                  );
-                })}
+                    <span className="text-[9px] text-slate-400 truncate w-full text-center">{d.date.slice(5)}</span>
+                  </div>
+                ))}
               </div>
             ) : (
               <p className="text-sm text-slate-400 text-center py-8">ยังไม่มีข้อมูล</p>
