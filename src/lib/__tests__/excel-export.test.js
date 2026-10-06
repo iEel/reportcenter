@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import * as xlsx from 'xlsx';
-import { EXCEL_EXTENSION, EXCEL_MIME, excelFileName, excelWriteOptions } from '@/lib/excel-export';
+import { EXCEL_EXTENSION, EXCEL_MIME, excelFileName, excelWriteOptions, safeFileBase } from '@/lib/excel-export';
 
 const buildWorkbook = (rows) => {
     const workbook = xlsx.utils.book_new();
@@ -48,5 +48,15 @@ describe('excel-export.js', () => {
         const plain = xlsx.write(workbook, { type: 'buffer', bookType: 'xlsx' });
 
         expect(compressed.length).toBeLessThan(plain.length / 2);
+    });
+});
+
+describe('safeFileBase', () => {
+    it('replaces characters Windows and Linux cannot use in file names', () => {
+        expect(safeFileBase('ยอดขาย A/B: "Q" <1>|*?\\')).toBe('ยอดขาย A_B_ _Q_ _1_____');
+    });
+    it('falls back to "report" for empty names', () => {
+        expect(safeFileBase('  ')).toBe('report');
+        expect(safeFileBase(null)).toBe('report');
     });
 });

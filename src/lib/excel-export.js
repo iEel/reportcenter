@@ -21,3 +21,9 @@ export function excelFileName(baseName) {
 export function excelWriteOptions() {
     return { bookType: EXCEL_EXTENSION, compression: true, bookSST: true };
 }
+
+/** A report name made safe for a file name on Windows and Linux. */
+export function safeFileBase(name) {
+    const cleaned = String(name ?? '').replace(/[\\/:*?"<>|\u0000-\u001F]/g, '_').trim();
+    return cleaned || 'report';
+}
