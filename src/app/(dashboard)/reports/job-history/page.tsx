@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { Clock, Download, RefreshCw, CheckCircle2, XCircle, Loader2, FileText, AlertTriangle, StopCircle, Timer } from "lucide-react";
 import { timeAgo } from "@/lib/dateUtils";
 import { useToast } from "@/components/providers/ToastProvider";
+import { downloadJobFile } from "@/lib/file-download";
 
 interface Job {
     JobId: number;
@@ -57,27 +58,10 @@ export default function JobHistoryPage() {
         return () => clearInterval(interval);
     }, []);
 
-    const handleDownload = async (jobId: number, fileName: string) => {
-        try {
-            const res = await fetch(`/api/reports/jobs/${jobId}/download`);
-            if (!res.ok) {
-                const err = await res.json();
-                toast(err.message || 'ไม่สามารถดาวน์โหลดได้', 'error');
-                return;
-            }
-            const blob = await res.blob();
-            const url = window.URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = fileName || `report_${jobId}.csv`;
-            document.body.appendChild(a);
-            a.click();
-            window.URL.revokeObjectURL(url);
-            a.remove();
-            toast('ดาวน์โหลดสำเร็จ', 'success');
-        } catch {
-            toast('เกิดข้อผิดพลาดในการดาวน์โหลด', 'error');
-        }
+    const handleDownload = async (jobId: number) => {
+        const result = await downloadJobFile(jobId);
+        if (result.ok) toast('เริ่มดาวน์โหลดแล้ว', 'success');
+        else toast(result.message, 'error');
     };
 
     const handleCancelJob = async (jobId: number) => {
@@ -222,7 +206,7 @@ export default function JobHistoryPage() {
                                             <td className="px-6 py-4 text-right">
                                                 {job.Status === 'done' && job.FileName ? (
                                                     <button
-                                                        onClick={() => handleDownload(job.JobId, job.FileName!)}
+                                                        onClick={() => handleDownload(job.JobId)}
                                                         className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 text-white text-xs font-medium rounded-lg hover:bg-blue-700 transition-colors shadow-sm"
                                                     >
                                                         <Download className="w-3.5 h-3.5" />
