@@ -38,6 +38,19 @@ export function exportProblem(data: { success?: boolean; message?: string; data?
     return null;
 }
 
+export interface ExportResponse { success?: boolean; message?: string; rowCount?: number; downloadId?: string }
+export type ExportOutcome =
+    | { kind: 'download'; url: string; rowCount: number }
+    | { kind: 'empty' }
+    | { kind: 'error'; message: string };
+
+/** What the page does with the answer of POST /api/reports/export. */
+export function exportOutcome(data: ExportResponse): ExportOutcome {
+    if (!data.success) return { kind: 'error', message: data.message || 'ไม่สามารถส่งออกข้อมูลได้' };
+    if (!data.rowCount || !data.downloadId) return { kind: 'empty' };
+    return { kind: 'download', url: `/api/reports/export/${data.downloadId}`, rowCount: data.rowCount };
+}
+
 const FINISHED = ['done', 'failed', 'cancelled'];
 const MAX_POLL_FAILURES = 3;
 

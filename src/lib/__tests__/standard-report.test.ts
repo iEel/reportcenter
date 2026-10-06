@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
-    exportProblem, getRunBlocker, nextJobPoll, pickReportCompany, shouldConfirmEmptyConditions, startJobPolling,
+    exportOutcome, exportProblem, getRunBlocker, nextJobPoll, pickReportCompany, shouldConfirmEmptyConditions, startJobPolling,
 } from '../standard-report';
 
 describe('startJobPolling', () => {
@@ -118,6 +118,23 @@ describe('export results', () => {
     });
     it('has no problem when rows came back', () => {
         expect(exportProblem({ success: true, data: [{ a: 1 }] })).toBeNull();
+    });
+});
+
+describe('exportOutcome', () => {
+    it('surfaces the server message for a refused export', () => {
+        expect(exportOutcome({ success: false, message: 'คุณไม่มีสิทธิ์เข้าถึงข้อมูลบริษัทนี้' }))
+            .toEqual({ kind: 'error', message: 'คุณไม่มีสิทธิ์เข้าถึงข้อมูลบริษัทนี้' });
+    });
+    it('falls back to a generic error message', () => {
+        expect(exportOutcome({ success: false })).toEqual({ kind: 'error', message: 'ไม่สามารถส่งออกข้อมูลได้' });
+    });
+    it('reports an empty result separately from an error', () => {
+        expect(exportOutcome({ success: true, rowCount: 0 })).toEqual({ kind: 'empty' });
+    });
+    it('points at the one-time download for an export with rows', () => {
+        expect(exportOutcome({ success: true, rowCount: 3, downloadId: 'abc' }))
+            .toEqual({ kind: 'download', url: '/api/reports/export/abc', rowCount: 3 });
     });
 });
 
