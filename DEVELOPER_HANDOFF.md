@@ -1,5 +1,7 @@
 # ReportCenter — Developer Handoff
 
+> P2 fix 2026-10-06 (worktree, ยังไม่ commit): [ผลการแก้ P2](docs/audits/2026-10-06-implementation-review/README.md#ผลการแก้-p2-6-ตค-2026) — `PUT /api/admin/roles` เปลี่ยน contract (transaction + `addReports`/`removeReports`, `roleName` ไม่บังคับ, `assignedReports` เดิมยังใช้ได้); `search-param`/`available` ใช้ `getSession`; logic หน้า Standard ย้ายไป `src/lib/standard-report.ts` (รวม `startJobPolling`) ผลตรวจเป็น unit test/tsc/build ไม่ใช่ live DB หรือ UAT
+
 > P0 fix 2026-10-06 (branch `claude/ui-ux-report-permissions-users-9850aa`, ยังไม่ merge/deploy): [ผลการแก้ P0](docs/audits/2026-10-06-implementation-review/README.md#ผลการแก้-p0-6-ตค-2026) — `GET /api/admin/reports`, `DELETE`/`PATCH /api/admin/reports/[id]` ตรวจ Admin แล้ว (ก่อนหน้านี้ข้อ “Admin role checks ครบทุก admin route” ด้านล่างไม่จริงสำหรับสาม handler นี้); DELETE เป็น transaction และตอบ 409 เมื่อติด FK (รายงานที่มีประวัติใช้งานให้ปิดใช้งานแทน ตาม decision log 2026-10-06); `execute`/`execute-async` ตรวจ `allowedCompanies` ทุก role ก่อนเชื่อมฐานบริษัท ผลตรวจเป็น unit test แบบ mock ไม่ใช่ live DB/deployment
 
 > Follow-up ล่าสุด 2026-10-02: [แก้แนวและขนาดช่องเงื่อนไข Standard พร้อมผลตรวจรวมก่อน commit/push](docs/audits/2026-10-02-standard-field-alignment/README.md) — controls สูง44pxและใช้ subgrid; วัด DOM/ภาพ AP, GL, Statement และมือถือแล้ว รัน tests ใหม่หลังแก้ CSS ผ่าน160/1 todo (15 files), build50pages และ ESLint source28ไฟล์ผ่าน ยังคงเป็นผลในเครื่อง ไม่ใช่ deployment/UAT
@@ -329,7 +331,7 @@ CreatedAt DATETIME DEFAULT GETDATE()
 | DELETE | `/api/admin/audit-logs`      | Bulk delete logs before date (`?before=YYYY-MM-DD`) |
 | GET    | `/api/admin/roles`           | List roles + user count + assigned reports |
 | POST   | `/api/admin/roles`           | Create role + report mappings    |
-| PUT    | `/api/admin/roles`           | Update role name + report mappings |
+| PUT    | `/api/admin/roles`           | One transaction: `roleName` renames (optional); `addReports`/`removeReports` apply only those changes (used by the roles page so concurrent edits survive); legacy `assignedReports` still replaces the full set |
 | DELETE | `/api/admin/roles?roleId=`   | Delete role (blocked if users assigned) |
 | GET    | `/api/admin/categories`      | List categories + report counts + reportsByCategory map |
 | POST   | `/api/admin/categories`      | Create category (name + colorTag)       |
@@ -681,6 +683,7 @@ curl http://localhost:4000/api/cron/execute-schedules?secret=rc-cron-secret-2026
   - `GET /api/reports/search-param`
 - ป้องกัน user แก้ URL เดา reportId เพื่อเรียกใช้รายงานที่ไม่มีสิทธิ์
 - **Company access:** `execute`, `execute-async` และ `search-param` ตรวจ `companyId` กับ `session.allowedCompanies` สำหรับทุก role รวม Admin → ไม่อยู่ในรายการได้ **403** (execute/execute-async เพิ่ม 2026-10-06)
+- **Session revocation:** `search-param` และ `available` ใช้ `getSession` (ตรวจ TokenVersion + IsActive) แทนการตรวจลายเซ็น JWT อย่างเดียว ผู้ใช้ที่ถูกระงับหรือถูกแก้สิทธิ์จึงใช้ไม่ได้ทันที (2026-10-06)
 
 ### Security Hardening
 - **ลบ hardcoded credentials** — `db.js` ไม่มี default password/server แล้ว → บังคับ `.env`
