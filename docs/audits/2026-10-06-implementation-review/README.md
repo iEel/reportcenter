@@ -1,6 +1,6 @@
 # ReportCenter — รีวิว implementation ใน commit 06ec60a
 
-วันที่ 6 ต.ค. 2026 · **สถานะ: ผลตรวจ — แก้ P0 ข้อ 1–2 แล้ว (commit บน branch ยังไม่ merge/deploy) ดู [ผลการแก้ P0](#ผลการแก้-p0-6-ตค-2026) · แก้ P2 แล้วใน worktree ยังไม่ commit ดู [ผลการแก้ P2](#ผลการแก้-p2-6-ตค-2026)**
+วันที่ 6 ต.ค. 2026 · **สถานะ: ผลตรวจ — แก้ P0 ข้อ 1–2 แล้ว (commit บน branch ยังไม่ merge/deploy) ดู [ผลการแก้ P0](#ผลการแก้-p0-6-ตค-2026) · แก้ P2 แล้ว (commit `bd1e63a`) ดู [ผลการแก้ P2](#ผลการแก้-p2-6-ตค-2026) · แก้ P1 ที่ค้างและข้อ 23 แล้ว (branch `claude/review-p2-p1-fixes` ยังไม่ merge/deploy) ดู [ผลการแก้ P1](#ผลการแก้-p1-ที่ค้างและข้อ-23-6-ตค-2026)**
 
 ผู้ใช้ขอให้ “ลองดูให้ใหม่” หลังนำแบบ v3 ไปแก้ระบบจริงใน commit `06ec60a` (feat: refine report and access management interfaces) รอบนี้ตรวจสองทาง: อ่านโค้ดทั้ง commit แบบหลายมุมพร้อมให้ผู้ตรวจอีกชุดพยายามหักล้างทุกข้อ และเปิดหน้าจริงที่ localhost:4000 ด้วย session Admin ของผู้ใช้
 
@@ -18,10 +18,10 @@
 
 | ข้อ | สถานะ | หลักฐาน |
 |---|---|---|
-| (a) เปลี่ยนชื่อกลุ่ม Admin แล้วผู้ดูแลเสียสิทธิ์ | กันเฉพาะหน้าเว็บ API ยังเปิด | UI กันแก้/ลบ/ตั้งชื่อ admin (`src/app/(dashboard)/admin/roles/page.tsx`); `PUT /api/admin/roles` ยังเปลี่ยนชื่อได้ (`src/app/api/admin/roles/route.js:115-153`) ตามที่เอกสารระบุว่าเป็น UI guard โดยเจตนา |
-| (b) ระงับ/เปลี่ยนกลุ่มบัญชีตัวเอง | กันเฉพาะหน้าเว็บ API ยังเปิด | UI ปิดปุ่มสถานะ/ลบและกลุ่มของตัวเอง; `PUT /api/admin/users` ไม่ตรวจ `UserId === session.userId` (`src/app/api/admin/users/route.js:198-231`) |
-| (c) รีเซ็ตรหัสผู้ใช้ AD | กันเฉพาะหน้าเว็บ | ซ่อนปุ่มสำหรับ AD แล้ว; `reset-password/route.js` ยังไม่ตรวจ AuthType |
-| (d) รหัสผ่านเริ่มต้นร่วม | แก้บางส่วน | เอาค่าออกจาก placeholder แล้ว แต่ฟอร์มยังบอกให้เว้นว่างได้และ API ยังใช้ค่าตายตัว (`src/app/api/admin/users/route.js:135`) |
+| (a) เปลี่ยนชื่อกลุ่ม Admin แล้วผู้ดูแลเสียสิทธิ์ | กันทั้งหน้าเว็บและ API แล้ว (รอบ P1 6 ต.ค.) | UI กันแก้/ลบ/ตั้งชื่อ admin (`src/app/(dashboard)/admin/roles/page.tsx`); `PUT /api/admin/roles` ยังเปลี่ยนชื่อได้ (`src/app/api/admin/roles/route.js:115-153`) ตามที่เอกสารระบุว่าเป็น UI guard โดยเจตนา |
+| (b) ระงับ/เปลี่ยนกลุ่มบัญชีตัวเอง | กันทั้งหน้าเว็บและ API แล้ว รวม bulk (รอบ P1 6 ต.ค.) | UI ปิดปุ่มสถานะ/ลบและกลุ่มของตัวเอง; `PUT /api/admin/users` ไม่ตรวจ `UserId === session.userId` (`src/app/api/admin/users/route.js:198-231`) |
+| (c) รีเซ็ตรหัสผู้ใช้ AD | กันทั้งหน้าเว็บและ API แล้ว (รอบ P1 6 ต.ค.) | ซ่อนปุ่มสำหรับ AD แล้ว; `reset-password/route.js` ยังไม่ตรวจ AuthType |
+| (d) รหัสผ่านเริ่มต้นร่วม | แก้แล้ว: บังคับตั้งรหัสผ่านสำหรับบัญชี Local ทั้งหน้าเว็บและ API ไม่มีค่าเริ่มต้นร่วม (รอบ P1 6 ต.ค.) | เอาค่าออกจาก placeholder แล้ว แต่ฟอร์มยังบอกให้เว้นว่างได้และ API ยังใช้ค่าตายตัว (`src/app/api/admin/users/route.js:135`) |
 | (e) โหมดมืดตัวขาวบนพื้นขาว | แก้แล้ว | `@custom-variant dark` ใน `src/app/globals.css:3`; หน้าจริงเมื่อ OS มืดแต่แอปสว่าง แสดงสว่างทั้งหน้าและอ่านได้ |
 | (f) คำยืนยันลบหมวดนับเฉพาะใช้งาน | แก้แล้ว | หน้าจริงแสดง “รายงานทั้งหมด 13 · ใช้งาน 13 · ปิดใช้งาน 0” และย้ำว่ารายงานกับสิทธิ์ยังอยู่ |
 
@@ -29,7 +29,7 @@
 
 | ระดับ | ปัญหา | หลักฐาน |
 |---|---|---|
-| P1 | ปุ่มหลักของหน้ากลุ่มสิทธิ์ (“แก้ไขรายงานที่อนุญาต”, “เพิ่มกลุ่ม”, “บันทึก”) เป็นตัวขาวบนพื้นเกือบขาวขณะเอาเมาส์ชี้ | `primary` รวม class ของ `button` ที่มี `hover:bg-slate-50` แล้วชนะ `hover:bg-blue-700` (`src/app/(dashboard)/admin/roles/page.tsx:23-24`); วัด computed style ขณะ hover ได้พื้น slate-50 ตัวอักษรขาว |
+| P1 → **แก้แล้ว** | ปุ่มหลักของหน้ากลุ่มสิทธิ์ (“แก้ไขรายงานที่อนุญาต”, “เพิ่มกลุ่ม”, “บันทึก”) เป็นตัวขาวบนพื้นเกือบขาวขณะเอาเมาส์ชี้ | `primary` รวม class ของ `button` ที่มี `hover:bg-slate-50` แล้วชนะ `hover:bg-blue-700` (`src/app/(dashboard)/admin/roles/page.tsx:23-24`); วัด computed style ขณะ hover ได้พื้น slate-50 ตัวอักษรขาว |
 | P2 → **แก้แล้ว** | พิมพ์ค้นรายงานแล้วกด Enter ไม่เลือกอะไร ต้องกดลูกศรลงก่อน ทั้งที่ท้ายรายการเขียน “Enter เปิดรายงาน” | หลังพิมพ์ “aged” ไม่มี `aria-activedescendant` จนกด ↓ (`src/components/ReportSelector.tsx`) |
 | P2 → **แก้แล้ว** | ป้าย “ใช้งาน” ในตารางผู้ใช้ยังเป็นปุ่มระงับ (ตรงกับข้อ 8 ด้านล่าง) | ชื่อที่อ่านคือ “ระงับ …” แต่ข้อความที่เห็นคือ “ใช้งาน” |
 | P2 → **แก้แล้ว** | `?categoryId` ที่ไม่มีอยู่ ป้ายขึ้น “ยังไม่จัดหมวด” แต่ dropdown ขึ้น “ทุกหมวด” และแสดง 0 รายการ (ตรงกับข้อ 22) | เปิด `/admin/reports?categoryId=999` |
@@ -45,33 +45,33 @@ P0 = ข้อมูลรั่ว/สูญหายหรือช่อง�
 |---|---|---|---|---|
 | 1 | P0 | ผู้ใช้ทุกคนที่ล็อกอินแล้วลบรายงานถาวรหรือเปิด/ปิดรายงานได้ เพราะ DELETE และ PATCH /api/admin/reports/[id] ไม่ตรวจสิทธิ์ | `src/app/api/admin/reports/[id]/route.js:327`<br>`src/app/api/admin/reports/[id]/route.js:365` | ยืนยันแล้ว → **แก้แล้ว** (branch, ยังไม่ merge/deploy) |
 | 2 | P0 | รันรายงานกับบริษัทที่ไม่ได้รับสิทธิ์ได้ เพราะ /api/reports/execute และ execute-async ไม่ตรวจ allowedCompanies | `src/app/api/reports/execute/route.js:82`<br>`src/app/api/reports/execute-async/route.js:171` | ยืนยันแล้ว → **แก้แล้ว** (branch, ยังไม่ merge/deploy) |
-| 3 | P1 | เว้นรหัสผ่านว่างตอนสร้างผู้ใช้ Local แล้วยังได้รหัสเริ่มต้นตายตัวที่อยู่ในซอร์สโค้ดและเอกสาร (ปัญหาเดิม d แก้แค่บางส่วน) | `src/app/api/admin/users/route.js:135`<br>`src/app/(dashboard)/admin/users/page.tsx:679` | ยืนยันแล้ว |
+| 3 | P1 | เว้นรหัสผ่านว่างตอนสร้างผู้ใช้ Local แล้วยังได้รหัสเริ่มต้นตายตัวที่อยู่ในซอร์สโค้ดและเอกสาร (ปัญหาเดิม d แก้แค่บางส่วน) | `src/app/api/admin/users/route.js:135`<br>`src/app/(dashboard)/admin/users/page.tsx:679` | ยืนยันแล้ว → **แก้แล้ว** (รอบ P1 6 ต.ค. ยังไม่ merge) |
 | 4 | P1 | ลบรายงานทีละรายการโดยไม่มี transaction ทำให้รายงานที่มีตารางส่งอัตโนมัติถูกลบไปแค่ครึ่งเดียว | `src/app/api/admin/reports/[id]/route.js:336`<br>`src/app/api/admin/schedules/route.js:32` | ยืนยันแล้ว → **แก้แล้ว**: ลบใน transaction เดียว ถ้ามีข้อมูลอ้างอิงจะตอบ 409 และไม่ลบอะไร (ยังไม่แก้ bulk) |
-| 5 | P1 | ข้อความแจ้งข้อผิดพลาด (toast) ถูก dialog/drawer แบบใหม่บังจนมองไม่เห็น กดบันทึกผู้ใช้ไม่ผ่านแล้วดูเหมือนไม่มีอะไรเกิดขึ้น | `src/components/providers/ToastProvider.tsx:57`<br>`src/components/ui/AccessibleDialog.tsx:27` | ยืนยันแล้ว |
-| 6 | P1 | dialog ค้าง: กด Esc ซ้ำแล้วเบราว์เซอร์ปิด dialog เอง แต่ React ยังคิดว่าเปิดอยู่ จึงเปิดฟอร์มแก้ไขอีกไม่ได้จนกว่าจะรีโหลดหน้า | `src/components/ui/AccessibleDialog.tsx:35`<br>`src/components/ui/AccessibleDialog.tsx:23` | ยืนยันแล้ว |
-| 7 | P1 | เปลี่ยน “จำนวนแถวต่อหน้า” แล้วคำขอยังใช้ขนาดเดิม บางแถวจึงไม่เคยแสดงหรือแสดงซ้ำ | `src/app/(dashboard)/reports/standard/page.tsx:563`<br>`src/app/(dashboard)/reports/standard/page.tsx:190` | ยืนยันแล้ว → **แก้แล้ว** (P2 รอบ 6 ต.ค. ยังไม่ commit) |
-| 8 | P1 | ปุ่มสถานะในตารางผู้ใช้: ชื่อที่โปรแกรมอ่านหน้าจออ่าน ไม่มีคำที่แสดงบนปุ่ม (WCAG 2.5.3 ระดับ A) | `src/app/(dashboard)/admin/users/page.tsx:629` | ยืนยันแล้ว → **แก้แล้ว** (P2 รอบ 6 ต.ค. ยังไม่ commit) |
+| 5 | P1 | ข้อความแจ้งข้อผิดพลาด (toast) ถูก dialog/drawer แบบใหม่บังจนมองไม่เห็น กดบันทึกผู้ใช้ไม่ผ่านแล้วดูเหมือนไม่มีอะไรเกิดขึ้น | `src/components/providers/ToastProvider.tsx:57`<br>`src/components/ui/AccessibleDialog.tsx:27` | ยืนยันแล้ว → **แก้แล้ว** (รอบ P1 6 ต.ค. ยังไม่ merge) |
+| 6 | P1 | dialog ค้าง: กด Esc ซ้ำแล้วเบราว์เซอร์ปิด dialog เอง แต่ React ยังคิดว่าเปิดอยู่ จึงเปิดฟอร์มแก้ไขอีกไม่ได้จนกว่าจะรีโหลดหน้า | `src/components/ui/AccessibleDialog.tsx:35`<br>`src/components/ui/AccessibleDialog.tsx:23` | ยืนยันแล้ว → **แก้แล้ว** (รอบ P1 6 ต.ค. ยังไม่ merge) |
+| 7 | P1 | เปลี่ยน “จำนวนแถวต่อหน้า” แล้วคำขอยังใช้ขนาดเดิม บางแถวจึงไม่เคยแสดงหรือแสดงซ้ำ | `src/app/(dashboard)/reports/standard/page.tsx:563`<br>`src/app/(dashboard)/reports/standard/page.tsx:190` | ยืนยันแล้ว → **แก้แล้ว** (P2 รอบ 6 ต.ค. commit `bd1e63a` ยังไม่ merge) |
+| 8 | P1 | ปุ่มสถานะในตารางผู้ใช้: ชื่อที่โปรแกรมอ่านหน้าจออ่าน ไม่มีคำที่แสดงบนปุ่ม (WCAG 2.5.3 ระดับ A) | `src/app/(dashboard)/admin/users/page.tsx:629` | ยืนยันแล้ว → **แก้แล้ว** (P2 รอบ 6 ต.ค. commit `bd1e63a` ยังไม่ merge) |
 | 9 | P1 | ระหว่างมีร่างค้าง หน้า roles ปฏิเสธการกดปุ่มอื่นแบบเงียบๆ เหตุผลแสดงเป็น toast ที่โปรแกรมอ่านหน้าจอไม่อ่าน (WCAG 4.1.3) | `src/app/(dashboard)/admin/roles/page.tsx:106`<br>`src/components/providers/ToastProvider.tsx:57` | ยืนยันแล้ว |
 | 10 | P1 | ปุ่ม “ทิ้งการแก้ไข” ตัวอักษรขาวบนพื้นส้ม (amber-600) คอนทราสต์ราว 3.2:1 ต่ำกว่าเกณฑ์ AA | `src/components/providers/ConfirmProvider.tsx:54`<br>`src/components/providers/ConfirmProvider.tsx:64` | ยืนยันแล้ว |
-| 11 | P2 | บันทึกหรือเปลี่ยนชื่อกลุ่มสิทธิ์จะส่งรายการรายงานชุดที่โหลดไว้ตอนเปิดหน้า และ API ลบแล้วใส่ใหม่ทั้งหมดโดยไม่มี transaction สิทธิ์จึงหายหรือถูกล้างไปบางส่วนได้ | `src/app/api/admin/roles/route.js:135`<br>`src/app/(dashboard)/admin/roles/page.tsx:180` | ยืนยันแล้ว → **แก้แล้ว** (P2 รอบ 6 ต.ค. ยังไม่ commit) |
-| 12 | P2 | ถ้ามีฟอร์มที่ยังไม่บันทึก การออกจากระบบอัตโนมัติเมื่อไม่มีการใช้งาน (idle timeout) จะถูกกล่อง “Leave site?” ขวาง ข้อมูล admin จึงค้างอยู่บนจอ | `src/hooks/useUnsavedChanges.ts:25`<br>`src/components/providers/IdleTimeoutProvider.tsx:75` | ยืนยันแล้ว → **แก้แล้ว** (P2 รอบ 6 ต.ค. ยังไม่ commit) |
-| 13 | P2 | รายการรายงานและช่องค้นหาค่าเงื่อนไขตรวจแค่ลายเซ็น JWT ผู้ใช้ที่ถูกระงับหรือถูกถอนบริษัทจึงยังใช้ได้ต่ออีกถึง 8 ชั่วโมง | `src/app/api/reports/search-param/route.js:13`<br>`src/app/api/reports/available/route.js:17` | ยืนยันแล้ว → **แก้แล้ว** (P2 รอบ 6 ต.ค. ยังไม่ commit) |
-| 14 | P2 | ข้อมูลจาก AD ไม่ได้ผูกกับ username ถ้าแก้ username หลังเลือกคนไปแล้ว ระบบจะบันทึกข้อมูลของคนก่อนหน้าไปด้วย | `src/app/(dashboard)/admin/users/page.tsx:337`<br>`src/app/(dashboard)/admin/users/page.tsx:326` | ยืนยันแล้ว → **แก้แล้ว** (P2 รอบ 6 ต.ค. ยังไม่ commit) |
-| 15 | P2 | คลิกการแจ้งเตือนที่ Header แล้วออกจากหน้าทันที โดยไม่ถามเรื่องการแก้ไขที่ยังไม่บันทึก | `src/components/layout/Header.tsx:81`<br>`src/hooks/useUnsavedChanges.ts:28` | ยืนยันแล้ว → **แก้แล้ว** (P2 รอบ 6 ต.ค. ยังไม่ commit) |
-| 16 | P2 | admin แก้ชื่อหรือบริษัทของบัญชีตัวเองแล้วถูกออกจากระบบทันทีหลังขึ้นว่าสำเร็จ และหน้าจอแสดงข้อผิดพลาดที่ชี้ผิดสาเหตุ | `src/app/api/admin/users/route.js:229`<br>`src/app/(dashboard)/admin/users/page.tsx:418` | ยืนยันแล้ว → **แก้แล้ว** (P2 รอบ 6 ต.ค. ยังไม่ commit) |
-| 17 | P2 | โหลดเงื่อนไขรายงานไม่สำเร็จแต่ยังกด “ดึงข้อมูล” ได้ รายงานจะรันโดยทุกเงื่อนไขเป็นค่าว่าง และข้อความผิดพลาดหายไป | `src/app/(dashboard)/reports/standard/page.tsx:171`<br>`src/app/(dashboard)/reports/standard/page.tsx:134` | ยืนยันแล้ว → **แก้แล้ว** (P2 รอบ 6 ต.ค. ยังไม่ commit) |
-| 18 | P2 | บริษัทเริ่มต้นอาจไม่อยู่ในรายการให้เลือก และปุ่ม “ดึงข้อมูล” ไม่กันกรณีที่ไม่มีบริษัท | `src/app/(dashboard)/reports/standard/page.tsx:60`<br>`src/app/(dashboard)/reports/standard/page.tsx:430` | ยืนยันแล้ว → **แก้แล้ว** (P2 รอบ 6 ต.ค. ยังไม่ commit) |
-| 19 | P2 | polling ผิดพลาดครั้งเดียว แถบงานเบื้องหลังก็ค้างที่ “กำลังทำงาน” และยังไม่รู้จักสถานะยกเลิก | `src/app/(dashboard)/reports/standard/page.tsx:263`<br>`src/app/(dashboard)/reports/standard/page.tsx:326` | ยืนยันแล้ว → **แก้แล้ว** (P2 รอบ 6 ต.ค. ยังไม่ commit) |
-| 20 | P2 | ปุ่ม “ส่งออก CSV” ในแถบผลลัพธ์เริ่มงานเบื้องหลังซ้ำได้ ขณะที่งานแรกยังไม่เสร็จ | `src/app/(dashboard)/reports/standard/page.tsx:297`<br>`src/app/(dashboard)/reports/standard/page.tsx:507` | ยืนยันแล้ว → **แก้แล้ว** (P2 รอบ 6 ต.ค. ยังไม่ commit) |
-| 21 | P2 | ส่งออกแบบปกติแจ้ง “ไม่มีข้อมูลให้ส่งออก” ทั้งที่เซิร์ฟเวอร์ผิดพลาด | `src/app/(dashboard)/reports/standard/page.tsx:352` | ยืนยันแล้ว → **แก้แล้ว** (P2 รอบ 6 ต.ค. ยังไม่ commit) |
-| 22 | P2 | categoryId ใน URL ผิด หรือโหลดหมวดไม่สำเร็จ ทำให้ chip ขึ้น “ยังไม่จัดหมวด” ขัดกับ dropdown และตาราง | `src/app/(dashboard)/admin/reports/page.tsx:77`<br>`src/app/(dashboard)/admin/reports/page.tsx:27` | ยืนยันแล้ว → **แก้แล้ว** (P2 รอบ 6 ต.ค. ยังไม่ commit) |
-| 23 | P2 | ทะเบียนแสดงว่า “เฉพาะผู้ดูแลระบบ” แต่หน้าแก้ไขบอกว่า “ทุกคน (Public)” สำหรับรายงานเดียวกัน | `src/app/(dashboard)/admin/reports/new/page.tsx:254`<br>`src/app/(dashboard)/admin/reports/[id]/edit/page.tsx:373` | ยืนยันแล้ว → รอผู้ใช้ตัดสินความหมาย Public ก่อนแก้ |
-| 24 | P2 | กล่องยืนยัน “ยังไม่ได้กรอกเงื่อนไขบางช่อง” ขึ้นทุกครั้งที่เปลี่ยนหน้าผลลัพธ์ | `src/app/(dashboard)/reports/standard/page.tsx:171`<br>`src/app/(dashboard)/reports/standard/page.tsx:564` | ยืนยันแล้ว → **แก้แล้ว** (P2 รอบ 6 ต.ค. ยังไม่ commit) |
+| 11 | P2 | บันทึกหรือเปลี่ยนชื่อกลุ่มสิทธิ์จะส่งรายการรายงานชุดที่โหลดไว้ตอนเปิดหน้า และ API ลบแล้วใส่ใหม่ทั้งหมดโดยไม่มี transaction สิทธิ์จึงหายหรือถูกล้างไปบางส่วนได้ | `src/app/api/admin/roles/route.js:135`<br>`src/app/(dashboard)/admin/roles/page.tsx:180` | ยืนยันแล้ว → **แก้แล้ว** (P2 รอบ 6 ต.ค. commit `bd1e63a` ยังไม่ merge) |
+| 12 | P2 | ถ้ามีฟอร์มที่ยังไม่บันทึก การออกจากระบบอัตโนมัติเมื่อไม่มีการใช้งาน (idle timeout) จะถูกกล่อง “Leave site?” ขวาง ข้อมูล admin จึงค้างอยู่บนจอ | `src/hooks/useUnsavedChanges.ts:25`<br>`src/components/providers/IdleTimeoutProvider.tsx:75` | ยืนยันแล้ว → **แก้แล้ว** (P2 รอบ 6 ต.ค. commit `bd1e63a` ยังไม่ merge) |
+| 13 | P2 | รายการรายงานและช่องค้นหาค่าเงื่อนไขตรวจแค่ลายเซ็น JWT ผู้ใช้ที่ถูกระงับหรือถูกถอนบริษัทจึงยังใช้ได้ต่ออีกถึง 8 ชั่วโมง | `src/app/api/reports/search-param/route.js:13`<br>`src/app/api/reports/available/route.js:17` | ยืนยันแล้ว → **แก้แล้ว** (P2 รอบ 6 ต.ค. commit `bd1e63a` ยังไม่ merge) |
+| 14 | P2 | ข้อมูลจาก AD ไม่ได้ผูกกับ username ถ้าแก้ username หลังเลือกคนไปแล้ว ระบบจะบันทึกข้อมูลของคนก่อนหน้าไปด้วย | `src/app/(dashboard)/admin/users/page.tsx:337`<br>`src/app/(dashboard)/admin/users/page.tsx:326` | ยืนยันแล้ว → **แก้แล้ว** (P2 รอบ 6 ต.ค. commit `bd1e63a` ยังไม่ merge) |
+| 15 | P2 | คลิกการแจ้งเตือนที่ Header แล้วออกจากหน้าทันที โดยไม่ถามเรื่องการแก้ไขที่ยังไม่บันทึก | `src/components/layout/Header.tsx:81`<br>`src/hooks/useUnsavedChanges.ts:28` | ยืนยันแล้ว → **แก้แล้ว** (P2 รอบ 6 ต.ค. commit `bd1e63a` ยังไม่ merge) |
+| 16 | P2 | admin แก้ชื่อหรือบริษัทของบัญชีตัวเองแล้วถูกออกจากระบบทันทีหลังขึ้นว่าสำเร็จ และหน้าจอแสดงข้อผิดพลาดที่ชี้ผิดสาเหตุ | `src/app/api/admin/users/route.js:229`<br>`src/app/(dashboard)/admin/users/page.tsx:418` | ยืนยันแล้ว → **แก้แล้ว** (P2 รอบ 6 ต.ค. commit `bd1e63a` ยังไม่ merge) |
+| 17 | P2 | โหลดเงื่อนไขรายงานไม่สำเร็จแต่ยังกด “ดึงข้อมูล” ได้ รายงานจะรันโดยทุกเงื่อนไขเป็นค่าว่าง และข้อความผิดพลาดหายไป | `src/app/(dashboard)/reports/standard/page.tsx:171`<br>`src/app/(dashboard)/reports/standard/page.tsx:134` | ยืนยันแล้ว → **แก้แล้ว** (P2 รอบ 6 ต.ค. commit `bd1e63a` ยังไม่ merge) |
+| 18 | P2 | บริษัทเริ่มต้นอาจไม่อยู่ในรายการให้เลือก และปุ่ม “ดึงข้อมูล” ไม่กันกรณีที่ไม่มีบริษัท | `src/app/(dashboard)/reports/standard/page.tsx:60`<br>`src/app/(dashboard)/reports/standard/page.tsx:430` | ยืนยันแล้ว → **แก้แล้ว** (P2 รอบ 6 ต.ค. commit `bd1e63a` ยังไม่ merge) |
+| 19 | P2 | polling ผิดพลาดครั้งเดียว แถบงานเบื้องหลังก็ค้างที่ “กำลังทำงาน” และยังไม่รู้จักสถานะยกเลิก | `src/app/(dashboard)/reports/standard/page.tsx:263`<br>`src/app/(dashboard)/reports/standard/page.tsx:326` | ยืนยันแล้ว → **แก้แล้ว** (P2 รอบ 6 ต.ค. commit `bd1e63a` ยังไม่ merge) |
+| 20 | P2 | ปุ่ม “ส่งออก CSV” ในแถบผลลัพธ์เริ่มงานเบื้องหลังซ้ำได้ ขณะที่งานแรกยังไม่เสร็จ | `src/app/(dashboard)/reports/standard/page.tsx:297`<br>`src/app/(dashboard)/reports/standard/page.tsx:507` | ยืนยันแล้ว → **แก้แล้ว** (P2 รอบ 6 ต.ค. commit `bd1e63a` ยังไม่ merge) |
+| 21 | P2 | ส่งออกแบบปกติแจ้ง “ไม่มีข้อมูลให้ส่งออก” ทั้งที่เซิร์ฟเวอร์ผิดพลาด | `src/app/(dashboard)/reports/standard/page.tsx:352` | ยืนยันแล้ว → **แก้แล้ว** (P2 รอบ 6 ต.ค. commit `bd1e63a` ยังไม่ merge) |
+| 22 | P2 | categoryId ใน URL ผิด หรือโหลดหมวดไม่สำเร็จ ทำให้ chip ขึ้น “ยังไม่จัดหมวด” ขัดกับ dropdown และตาราง | `src/app/(dashboard)/admin/reports/page.tsx:77`<br>`src/app/(dashboard)/admin/reports/page.tsx:27` | ยืนยันแล้ว → **แก้แล้ว** (P2 รอบ 6 ต.ค. commit `bd1e63a` ยังไม่ merge) |
+| 23 | P2 | ทะเบียนแสดงว่า “เฉพาะผู้ดูแลระบบ” แต่หน้าแก้ไขบอกว่า “ทุกคน (Public)” สำหรับรายงานเดียวกัน | `src/app/(dashboard)/admin/reports/new/page.tsx:254`<br>`src/app/(dashboard)/admin/reports/[id]/edit/page.tsx:373` | ยืนยันแล้ว → **แก้แล้ว** ตามแบบ ก. สิทธิ์มาจากกลุ่มอย่างเดียว (รอบ P1 6 ต.ค. ยังไม่ merge) |
+| 24 | P2 | กล่องยืนยัน “ยังไม่ได้กรอกเงื่อนไขบางช่อง” ขึ้นทุกครั้งที่เปลี่ยนหน้าผลลัพธ์ | `src/app/(dashboard)/reports/standard/page.tsx:171`<br>`src/app/(dashboard)/reports/standard/page.tsx:564` | ยืนยันแล้ว → **แก้แล้ว** (P2 รอบ 6 ต.ค. commit `bd1e63a` ยังไม่ merge) |
 | 25 | P2 | โฟกัสคีย์บอร์ดหลุดกลับไปต้นหน้าหลังบันทึก ยกเลิก ลบ หรือเปิด/ปิดรายงาน (หน้าหมวด ทะเบียน และกลุ่มสิทธิ์) | `src/app/(dashboard)/admin/categories/page.tsx:177`<br>`src/app/(dashboard)/admin/reports/page.tsx:89` | ยืนยันแล้ว |
 | 26 | P2 | ข้อความในกล่องยืนยันไม่ได้ผูกเป็นคำอธิบายของ dialog โปรแกรมอ่านหน้าจอจึงอ่านแค่หัวข้อกับปุ่ม | `src/components/providers/ConfirmProvider.tsx:61`<br>`src/components/ui/AccessibleDialog.tsx:34` | ยืนยันแล้ว |
 | 27 | P2 | หน้าต่างกำลังส่งออกประกาศซ้ำทุกวินาที และไม่กันคีย์บอร์ดไปกดปุ่มด้านหลัง | `src/app/(dashboard)/reports/standard/page.tsx:573`<br>`src/app/(dashboard)/reports/standard/page.tsx:454` | ยืนยันแล้ว |
 | 28 | P2 | ช่องเงื่อนไขแบบค้นหา (typeahead) ไม่มีความหมายแบบ combobox และปุ่มล้างค่าไม่มีชื่อ | `src/components/TypeaheadInput.tsx:146`<br>`src/components/TypeaheadInput.tsx:132` | ยืนยันแล้ว |
-| 29 | P2 | โหมดมืด: รายการคำแนะนำที่ไฮไลต์ด้วยคีย์บอร์ดเป็นตัวอักษรเกือบขาวบนพื้นเกือบขาว อ่านไม่ออก | `src/components/TypeaheadInput.tsx:162`<br>`src/app/globals.css:122` | ยืนยันแล้ว → **แก้แล้ว** (P2 รอบ 6 ต.ค. ยังไม่ commit) |
+| 29 | P2 | โหมดมืด: รายการคำแนะนำที่ไฮไลต์ด้วยคีย์บอร์ดเป็นตัวอักษรเกือบขาวบนพื้นเกือบขาว อ่านไม่ออก | `src/components/TypeaheadInput.tsx:162`<br>`src/app/globals.css:122` | ยืนยันแล้ว → **แก้แล้ว** (P2 รอบ 6 ต.ค. commit `bd1e63a` ยังไม่ merge) |
 | 30 | P2 | บรรทัดจำนวนสมาชิก/รายงานของกลุ่มที่ถูกเลือก คอนทราสต์ต่ำกว่าเกณฑ์ AA เล็กน้อย | `src/app/(dashboard)/admin/roles/page.tsx:226` | ยืนยันแล้ว |
 | 31 | P2 | ปุ่ม “+N” ในคอลัมน์กลุ่มสิทธิ์: ชื่อที่โปรแกรมอ่านหน้าจออ่าน ไม่มีข้อความที่แสดงบนปุ่ม | `src/app/(dashboard)/admin/reports/page.tsx:135` | ยืนยันแล้ว |
 | 32 | P3 | ชื่อหมวดซ้ำถูกตรวจแค่ในเบราว์เซอร์ จากรายการที่โหลดไว้ตอนเปิดหน้า API รับชื่อซ้ำได้ แต่คอมเมนต์ในโค้ดอ้างว่า API ตรวจให้ | `src/app/api/admin/categories/route.js:97`<br>`src/app/api/admin/categories/route.js:125` | ยืนยันแล้ว |
@@ -163,7 +163,7 @@ Sources: commit `06ec60a`, [UI implementation](../../design/2026-10-02-ui-implem
 
 ## ผลการแก้ P2 (6 ต.ค. 2026)
 
-ผู้ใช้สั่ง “ต่อไปทำเรื่อง P2 ต่อ” แก้ใน worktree เดียวกัน **ยังไม่ commit** ต่อยอดจาก commit P0 ทดสอบด้วย unit test, `tsc`, ESLint และ `next build` ไม่ได้เปิดหน้าเว็บจริง ไม่ได้ต่อฐานข้อมูล และไม่ได้กดบันทึกหรือรันรายงานในระบบจริง
+ผู้ใช้สั่ง “ต่อไปทำเรื่อง P2 ต่อ” commit `bd1e63a` บน branch `claude/review-p2-p1-fixes` **ยังไม่ merge/deploy** ต่อยอดจาก commit P0 ทดสอบด้วย unit test, `tsc`, ESLint และ `next build` ไม่ได้เปิดหน้าเว็บจริง ไม่ได้ต่อฐานข้อมูล และไม่ได้กดบันทึกหรือรันรายงานในระบบจริง
 
 ### สิ่งที่แก้
 
@@ -200,3 +200,29 @@ Sources: commit `06ec60a`, [UI implementation](../../design/2026-10-02-ui-implem
 
 - หน้า Template มีโค้ด polling/ส่งออกแบบเดิมซึ่งน่าจะมีปัญหาแบบข้อ 19–21 แต่ไม่ได้อยู่ในรีวิวรอบนี้
 - P1 ที่ยังค้าง: ข้อ 3 (รหัสผ่านเริ่มต้นตายตัว), 5 (toast ถูก dialog บัง), 6 (dialog ค้างหลัง Esc ซ้ำ), ปุ่มหลักหน้ากลุ่มสิทธิ์หายตอน hover และกลุ่ม API ที่หน้าเว็บกันแต่ API เปิด (a)(b)(c)
+
+## ผลการแก้ P1 ที่ค้างและข้อ 23 (6 ต.ค. 2026)
+
+ผู้ใช้สั่ง “เอาแบบ ก. แล้วแยก branch ใหม่ commit ได้เลย และแก้เรื่อง P1 ที่ยังค้างอยู่ด้วย” งาน P2 commit แล้วบน branch `claude/review-p2-p1-fixes` (`bd1e63a`, `83796ff`) ส่วนนี้แก้ต่อบน branch เดียวกัน ไม่ได้เปิดหน้าเว็บจริงหรือต่อฐานข้อมูล
+
+### สิ่งที่แก้
+
+| ข้อ | การแก้ |
+|---|---|
+| 3 / (d) | สร้างบัญชี Local ต้องตั้งรหัสผ่านเริ่มต้นเอง ทั้งหน้าเว็บ (ช่องบังคับ + ตรวจเกณฑ์ก่อนส่ง) และ `POST /api/admin/users` (400 ถ้าเว้นว่าง) ไม่มีรหัสร่วมในซอร์สโค้ดแล้ว |
+| 5 | toast อยู่ใน top layer ของเบราว์เซอร์ผ่าน Popover API และแสดงใหม่ทุกครั้งที่มีข้อความ จึงอยู่เหนือ dialog/drawer ที่เปิดอยู่ |
+| 6 | Esc ซ้ำที่ Chrome/Edge บังคับปิด dialog เอง: `AccessibleDialog` เปิด dialog กลับและเรียกการปิดตามปกติ (รวมคำถามเรื่องร่าง) state หน้าเว็บกับ dialog จึงตรงกัน |
+| ปุ่ม hover | ปุ่มหน้ากลุ่มสิทธิ์แยกสีตามชนิด (หลัก/ปกติ/ลบ/เล็ก) ไม่ถูกสี hover ของปุ่มปกติทับ |
+| (a) | `PUT`/`DELETE /api/admin/roles` แก้หรือลบกลุ่ม Admin ไม่ได้ และ `POST`/`PUT` ตั้งชื่อกลุ่มอื่นเป็น admin ไม่ได้ (400); กลุ่มที่ไม่มีอยู่ตอบ 404 |
+| (b) | `PUT /api/admin/users` ระงับหรือเปลี่ยนกลุ่มของบัญชีตัวเองไม่ได้; `PUT /api/admin/users/bulk` ระงับรายการที่มีบัญชีตัวเองไม่ได้ |
+| (c) | `POST /api/admin/users/reset-password` ปฏิเสธบัญชี AD (เปลี่ยนรหัสที่ Active Directory) |
+| 23 | ตามแบบ ก. ที่ผู้ใช้เลือก: ตัดตัวเลือก “ทุกคน (Public)” ในหน้าสร้าง/แก้รายงาน แสดงกลุ่มสิทธิ์ให้เลือกเสมอ (ไม่รวม Admin ซึ่งเห็นทุกรายงานอยู่แล้ว); `POST /api/admin/reports` บันทึกกลุ่มเสมอ; รายงานเดิมที่เคยตั้ง Public มีคำแนะนำในหน้าแก้ บันทึกใน [decision log](../../12_DECISION_LOG.md) |
+
+ข้อ 4 แก้ไปแล้วรอบ P0, ข้อ 7 แก้พร้อม P2, ข้อ 8 แก้ในรอบ P2 (ส่วนที่กระทบผู้ใช้ทุกคน) ส่วนข้อ 9 ตัดออกและข้อ 10 ลดเป็น P3 ตามคำชี้แจงเรื่องเทคโนโลยีช่วยเหลือ
+
+### ผลตรวจ
+
+- test API ใหม่เขียนก่อนและเห็นล้มด้วยเหตุผลที่ถูก: `src/app/api/admin/users/__tests__/guards.test.js`, `src/app/api/admin/roles/__tests__/admin-role-guard.test.js` และ test บันทึกกลุ่มเมื่อส่ง Public ใน `src/app/api/admin/reports/__tests__/route.test.js` (แก้ mock `Transaction`/`PreparedStatement` ให้ใช้กับ `new` ได้ใน Vitest 4 เดิมจึงเป็น todo)
+- `npm test -- --exclude "**/.claude/**"`: 22 files / 252 passed / 1 todo; `npx tsc --noEmit` ผ่าน; `next build` ผ่าน; ESLint ไม่มีปัญหาเพิ่มในไฟล์ใดเลย
+- ข้อ 5 และ 6 ไม่มี test ระดับหน้า จึงทวนในหน้าทดสอบแยกที่ localhost (ไม่ใช่แอป ไม่แตะข้อมูล) ที่ทำตามโค้ดเดียวกัน: toast แสดงเหนือ backdrop ของ dialog; กด Esc สองครั้ง ครั้งแรก cancelable ครั้งที่สองเบราว์เซอร์ปิดเอง แล้วโค้ดเปิดกลับและเรียกการปิดตามปกติ สุดท้าย dialog เปิดอยู่ตรงกับ state; ยืนยันลำดับ class ตำแหน่ง toast ใน CSS ที่ build แล้ว
+- ข้อจำกัด: Popover API ต้องใช้ Chrome/Edge 114+, Firefox 125+ หรือ Safari 17+ (เบราว์เซอร์เก่าจะแสดง toast แบบเดิม); ระหว่าง dialog เปิด toast มองเห็นได้แต่กดปุ่มปิดบน toast ไม่ได้ (หายเองใน 3.5 วินาที)

@@ -1,6 +1,8 @@
 # ReportCenter — Developer Handoff
 
-> P2 fix 2026-10-06 (worktree, ยังไม่ commit): [ผลการแก้ P2](docs/audits/2026-10-06-implementation-review/README.md#ผลการแก้-p2-6-ตค-2026) — `PUT /api/admin/roles` เปลี่ยน contract (transaction + `addReports`/`removeReports`, `roleName` ไม่บังคับ, `assignedReports` เดิมยังใช้ได้); `search-param`/`available` ใช้ `getSession`; logic หน้า Standard ย้ายไป `src/lib/standard-report.ts` (รวม `startJobPolling`) ผลตรวจเป็น unit test/tsc/build ไม่ใช่ live DB หรือ UAT
+> P1 fix 2026-10-06 (branch `claude/review-p2-p1-fixes`, ยังไม่ merge/deploy): [ผลการแก้ P1](docs/audits/2026-10-06-implementation-review/README.md#ผลการแก้-p1-ที่ค้างและข้อ-23-6-ตค-2026) — API กัน Admin group/บัญชีตัวเอง/รีเซ็ตรหัส AD, บัญชี Local ต้องตั้งรหัสผ่าน, toast อยู่ใน top layer (Popover), `AccessibleDialog` ไม่ค้างหลัง Esc ซ้ำ, สิทธิ์รายงานมาจากกลุ่มอย่างเดียว (เลิกใช้ Public)
+
+> P2 fix 2026-10-06 (branch `claude/review-p2-p1-fixes`, commit `bd1e63a`): [ผลการแก้ P2](docs/audits/2026-10-06-implementation-review/README.md#ผลการแก้-p2-6-ตค-2026) — `PUT /api/admin/roles` เปลี่ยน contract (transaction + `addReports`/`removeReports`, `roleName` ไม่บังคับ, `assignedReports` เดิมยังใช้ได้); `search-param`/`available` ใช้ `getSession`; logic หน้า Standard ย้ายไป `src/lib/standard-report.ts` (รวม `startJobPolling`) ผลตรวจเป็น unit test/tsc/build ไม่ใช่ live DB หรือ UAT
 
 > P0 fix 2026-10-06 (branch `claude/ui-ux-report-permissions-users-9850aa`, ยังไม่ merge/deploy): [ผลการแก้ P0](docs/audits/2026-10-06-implementation-review/README.md#ผลการแก้-p0-6-ตค-2026) — `GET /api/admin/reports`, `DELETE`/`PATCH /api/admin/reports/[id]` ตรวจ Admin แล้ว (ก่อนหน้านี้ข้อ “Admin role checks ครบทุก admin route” ด้านล่างไม่จริงสำหรับสาม handler นี้); DELETE เป็น transaction และตอบ 409 เมื่อติด FK (รายงานที่มีประวัติใช้งานให้ปิดใช้งานแทน ตาม decision log 2026-10-06); `execute`/`execute-async` ตรวจ `allowedCompanies` ทุก role ก่อนเชื่อมฐานบริษัท ผลตรวจเป็น unit test แบบ mock ไม่ใช่ live DB/deployment
 
@@ -314,7 +316,7 @@ CreatedAt DATETIME DEFAULT GETDATE()
 | Method | Path                         | Description                       |
 |--------|------------------------------|-----------------------------------|
 | GET    | `/api/admin/reports`         | List all reports                  |
-| POST   | `/api/admin/reports`         | Create report + params            |
+| POST   | `/api/admin/reports`         | Create report + params + group mappings (`Roles` saved always; `IsPublic` grants no access — decision 2026-10-06) |
 | GET    | `/api/admin/reports/[id]`    | Get single report + roles         |
 | PUT    | `/api/admin/reports/[id]`    | Update report + roles (auto-creates version snapshot) |
 | GET    | `/api/admin/reports/[id]/versions` | Get version history / single snapshot |
@@ -322,17 +324,17 @@ CreatedAt DATETIME DEFAULT GETDATE()
 | DELETE | `/api/admin/reports/[id]`    | **Hard-delete** in one transaction (params + roles + favorites + report); 409 if another table still references the report (e.g. schedules, ActivityLogs) |
 | PATCH  | `/api/admin/reports/[id]`    | Toggle IsActive (enable/disable)  |
 | GET    | `/api/admin/users`           | List users + roles + allowedCompanies + AD info |
-| POST   | `/api/admin/users`           | Create user (local bcrypt / AD LDAP_AUTH) + company mappings + logs CREATE_USER |
-| PUT    | `/api/admin/users`           | Update user + company mappings + logs UPDATE_USER |
+| POST   | `/api/admin/users`           | Create user (local bcrypt, password required — no shared default / AD LDAP_AUTH) + company mappings + logs CREATE_USER |
+| PUT    | `/api/admin/users`           | Update user + company mappings + logs UPDATE_USER; 400 if an admin suspends or changes the group of their own account |
 | DELETE | `/api/admin/users`           | Delete user + cleanup mappings/favorites/ActivityLogs(nullify) + logs DELETE_USER |
 | GET    | `/api/admin/users/lookup-ad` | AD lookup (`?username=exact`) or search (`?search=wildcard`) — filters out computer accounts ($) |
-| POST   | `/api/admin/users/reset-password` | Admin reset user password (no old pw required) + logs RESET_PASSWORD |
+| POST   | `/api/admin/users/reset-password` | Admin reset user password (no old pw required) + logs RESET_PASSWORD; 400 for AD accounts |
 | GET    | `/api/admin/audit-logs`      | Paginated audit logs + ChangeData JSON (?page=&limit=) |
 | DELETE | `/api/admin/audit-logs`      | Bulk delete logs before date (`?before=YYYY-MM-DD`) |
 | GET    | `/api/admin/roles`           | List roles + user count + assigned reports |
-| POST   | `/api/admin/roles`           | Create role + report mappings    |
+| POST   | `/api/admin/roles`           | Create role + report mappings (name "admin" reserved) |
 | PUT    | `/api/admin/roles`           | One transaction: `roleName` renames (optional); `addReports`/`removeReports` apply only those changes (used by the roles page so concurrent edits survive); legacy `assignedReports` still replaces the full set |
-| DELETE | `/api/admin/roles?roleId=`   | Delete role (blocked if users assigned) |
+| DELETE | `/api/admin/roles?roleId=`   | Delete role (blocked if users assigned; Admin group cannot be deleted) |
 | GET    | `/api/admin/categories`      | List categories + report counts + reportsByCategory map |
 | POST   | `/api/admin/categories`      | Create category (name + colorTag)       |
 | PUT    | `/api/admin/categories`      | Update category name/color              |
@@ -665,7 +667,7 @@ curl http://localhost:4000/api/cron/execute-schedules?secret=rc-cron-secret-2026
 
 ### Bulk Actions (Admin)
 - **หน้าจัดการรายงาน:** checkbox select-all + bulk delete → `DELETE /api/admin/reports/bulk` (transaction-safe)
-- **API จัดการผู้ใช้:** bulk toggle active/inactive → `PUT /api/admin/users/bulk`
+- **API จัดการผู้ใช้:** bulk toggle active/inactive → `PUT /api/admin/users/bulk` (ระงับรายการที่มีบัญชีตัวเองไม่ได้)
 
 ### Schedule Failure Notifications
 - เมื่อ cron schedule ล้มเหลว → auto-insert `Notification` ให้ทุก Admin user
