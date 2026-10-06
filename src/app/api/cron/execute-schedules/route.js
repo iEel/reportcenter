@@ -4,6 +4,7 @@ import { connectToCentralDB, connectToCompanyDB, getCompanyLabelAsync } from '@/
 import { sendMail } from '@/lib/email';
 import { validateQuery } from '@/lib/sql-validator';
 import { EXCEL_MIME, excelFileName, excelWriteOptions } from '@/lib/excel-export';
+import { sweepExportFiles } from '@/lib/export-files';
 import * as xlsx from 'xlsx';
 import fs from 'fs';
 import path from 'path';
@@ -11,6 +12,8 @@ import path from 'path';
 // Cleanup old job files (>24h)
 async function cleanupOldJobs() {
     try {
+        // Ordinary-report exports are deleted after download; remove any left behind (> 15 min)
+        await sweepExportFiles();
         const jobsDir = path.join(process.cwd(), 'tmp', 'jobs');
         if (fs.existsSync(jobsDir)) {
             const files = fs.readdirSync(jobsDir);
